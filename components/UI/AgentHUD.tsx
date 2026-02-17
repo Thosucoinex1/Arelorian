@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useStore } from '../../store';
-import { AgentState } from '../../types';
+import { AgentState, AXIOMS } from '../../types';
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
@@ -29,16 +29,46 @@ export const AgentHUD = () => {
                 </button>
                 
                 <h2 className="text-lg md:text-xl font-serif text-white mb-1">{agent.name}</h2>
-                <div className="flex items-center space-x-2 text-xs mb-3">
-                    <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan">Lvl {agent.level}</span>
-                    <span className={`px-2 py-0.5 rounded border ${
-                        agent.state === 'COMBAT' ? 'border-red-500 text-red-500' : 'border-gray-500 text-gray-400'
-                    }`}>
+                <div className="flex items-center space-x-2 text-[10px] mb-3">
+                    <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan uppercase">Level {agent.level}</span>
+                    <span className={`px-2 py-0.5 rounded border border-axiom-purple/30 text-axiom-purple uppercase font-bold tracking-tighter`}>
                         {agent.state}
                     </span>
+                    {agent.isAwakened && <span className="text-axiom-gold text-[10px] animate-pulse">AWAKENED</span>}
                 </div>
 
-                <div className="space-y-2 mb-4">
+                <div className="space-y-3 mb-4">
+                    {/* Reality Integrity / Coherence */}
+                    <div>
+                        <div className="flex justify-between text-[10px] text-gray-500 uppercase font-bold">
+                            <span title={AXIOMS.EROSION}>Reality Integrity</span>
+                            <span className={agent.integrity < 0.3 ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}>
+                                {(agent.integrity * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div className="h-1 w-full bg-gray-800 rounded-full mt-1 overflow-hidden">
+                            <div 
+                                className="h-full bg-axiom-gold transition-all duration-500"
+                                style={{ width: `${agent.integrity * 100}%` }}
+                            ></div>
+                        </div>
+                    </div>
+
+                    {/* Neurologic Energy */}
+                    <div>
+                        <div className="flex justify-between text-[10px] text-gray-500 uppercase font-bold">
+                            <span title={AXIOMS.ENERGY}>Axiomatic Energy</span>
+                            <span className="text-axiom-cyan">{(agent.energy).toFixed(0)} / {agent.maxEnergy}</span>
+                        </div>
+                        <div className="h-1 w-full bg-gray-800 rounded-full mt-1 overflow-hidden">
+                            <div 
+                                className="h-full bg-axiom-cyan transition-all duration-300 shadow-[0_0_5px_#06b6d4]"
+                                style={{ width: `${(agent.energy / agent.maxEnergy) * 100}%` }}
+                            ></div>
+                        </div>
+                    </div>
+
+                    {/* Soul Density */}
                     <div>
                         <div className="flex justify-between text-[10px] text-gray-400 uppercase">
                             <span>Soul Density</span>
@@ -56,29 +86,29 @@ export const AgentHUD = () => {
                 <div className="flex space-x-2">
                     <button 
                         onClick={() => toggleCharacterSheet(true)}
-                        className="flex-1 bg-axiom-purple/20 hover:bg-axiom-purple/40 border border-axiom-purple/50 text-axiom-purple text-xs font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95"
+                        className="flex-1 bg-axiom-purple/20 hover:bg-axiom-purple/40 border border-axiom-purple/50 text-axiom-purple text-[10px] font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95"
                     >
                         Inspect Gear
                     </button>
                     {agent.faction === 'PLAYER' && (
                         <button 
                             onClick={() => toggleMount(agent.id)}
-                            className={`flex-1 border text-xs font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95 ${
+                            className={`flex-1 border text-[10px] font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95 ${
                                 agent.state === AgentState.MOUNTED 
                                 ? 'bg-red-900/20 border-red-500 text-red-500 hover:bg-red-900/40' 
                                 : 'bg-axiom-gold/20 border-axiom-gold/50 text-axiom-gold hover:bg-axiom-gold/40'
                             }`}
                         >
-                            {agent.state === AgentState.MOUNTED ? 'Dismount' : 'Summon Horse'}
+                            {agent.state === AgentState.MOUNTED ? 'Dismount' : 'Summon Mount'}
                         </button>
                     )}
                 </div>
 
             </div>
             
-            <div className="bg-white/5 p-2 flex justify-between items-center text-[10px] text-gray-500">
-                <span>ID: {agent.id.slice(0,8)}...</span>
-                <span>[{agent.position[0].toFixed(0)}, {agent.position[2].toFixed(0)}]</span>
+            <div className="bg-white/5 p-2 flex justify-between items-center text-[9px] text-gray-600 font-mono">
+                <span>DNA: {agent.dna.hash.slice(0,12)}...</span>
+                <span>COORD: [{agent.position[0].toFixed(0)}, {agent.position[2].toFixed(0)}]</span>
             </div>
         </div>
     </div>

@@ -16,6 +16,14 @@ export enum AgentState {
   ALLIANCE_FORMING = 'ALLIANCE_FORMING'
 }
 
+export const AXIOMS = {
+  ENERGY: 'Verbrauch = ΔRealität / Kapazität',
+  EROSION: 'Aktion + Zeit = ↑Korruption',
+  OBSERVER: 'Ereignis ∝ System-Gegenmaßnahme',
+  RECURSION: 'Ausgang(t₀) = Eingang(t₁) + DNA',
+  DUALITY: 'Physis ≡ Digital'
+};
+
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'AXIOMATIC';
 export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE';
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
@@ -58,7 +66,10 @@ export interface Agent {
   state: AgentState;
   soulDensity: number;
   gold: number;
-  stabilityIndex: number;
+  stabilityIndex: number; // Integrity/Stability
+  energy: number;
+  maxEnergy: number;
+  integrity: number; // Reality coherence (0.0 to 1.0)
   dna: AxiomaticDNA;
   loreSnippet?: string;
   isAwakened?: boolean;
@@ -107,7 +118,7 @@ export interface WorldEvent {
   active: boolean;
   startTime: number;
   endTime: number;
-  position?: [number, number, number]; // Added for jump-to-event
+  position?: [number, number, number];
 }
 
 export type StructureType = 'HOUSE' | 'BANK' | 'SMITH' | 'MARKET' | 'OUTPOST' | 'CAVE_ENTRANCE' | 'DARK_CHURCH' | 'ADMIN_TERMINAL';
@@ -156,7 +167,7 @@ export interface ChatMessage {
   message: string;
   channel: ChatChannel;
   timestamp: number;
-  eventPosition?: [number, number, number]; // Added for jump-to-event from chat
+  eventPosition?: [number, number, number];
 }
 
 export interface Quest {
@@ -166,7 +177,7 @@ export interface Quest {
   rewardGold: number;
   timestamp: number;
   issuerId: string;
-  position?: [number, number, number]; // Objective position
+  position?: [number, number, number];
 }
 
 export interface ResourceNode {

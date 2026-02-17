@@ -1,13 +1,24 @@
 
-import { Agent, Item, ItemEffectType, ItemEffect, LandParcel, ResourceNode, ResourceType, AgentState, Chunk } from './types';
+import { Agent, Item, ItemEffectType, ItemEffect, LandParcel, ResourceNode, ResourceType, AgentState, Chunk, AXIOMS } from './types';
 
-// --- AXIOMATIC NEUROLOGIC ENGINE (ANE) ---
+// --- AXIOMATIC NEUROLOGIC ENGINE (ANE) v4.0 ---
 
 export interface AxiomaticSummary {
     choice: AgentState;
     utility: number;
     logic: string;
 }
+
+/**
+ * Validates action against the Ouroboros Axioms.
+ * Return false if logical corrosion is too high.
+ */
+export const validateAxiom = (agent: Agent, cost: number): boolean => {
+    const energyCheck = agent.energy >= cost;
+    const erosionCheck = agent.integrity > 0.1; // Minimal coherence required
+    const recursionCheck = !!agent.dna.hash; // Must have DNA to manifest
+    return energyCheck && erosionCheck && recursionCheck;
+};
 
 /**
  * Calculates the "Desire Weight" for an agent using neurologic mathematical grounding.
@@ -19,74 +30,62 @@ export const calculateAxiomaticWeight = (
     nearbyAgents: Agent[], 
     nearbyResources: ResourceNode[]
 ): number => {
-    // Fundamental Constants of the Ouroboros Simulation
-    const K_STABILITY = agent.stabilityIndex || 1.0;
-    const K_SOUL = agent.soulDensity || 0.5;
-    // Chaotic vibration constant based on DNA hash and time
-    const K_ENTROPY = (Math.sin(Date.now() * 0.0005 + agent.position[0]) + 1.2) * 0.5; // range [0.1, 1.1]
+    // AXIOM 1: ENERGY - Capacity to manifest intent
+    const K_ENERGY = agent.energy / (agent.maxEnergy || 100);
+    // AXIOM 2: EROSION - Action + Time = ↑Korruption
+    const K_INTEGRITY = agent.integrity || 1.0;
+    // AXIOM 4: RECURSION - Outcome(t) depends on DNA
+    const K_RECURSION = (Math.sin(Date.now() * 0.0005 + agent.position[0]) + 1.2) * 0.5;
 
     let baseUtility = 0;
 
     switch (action) {
         case AgentState.GATHERING:
-            // U_gather = Sum(Skill_bonus / Dist^1.2) * (1 - Inventory_Fullness)
+            // U_gather = Sum(Skill / Dist) * Energy * Integrity
             const activeInv = agent.inventory.filter(i => i).length;
             const invRatio = activeInv / (agent.inventory.length || 1);
             nearbyResources.forEach(res => {
                 const dist = Math.hypot(res.position[0] - agent.position[0], res.position[2] - agent.position[2]);
-                const skillName = res.type.toLowerCase();
-                const skillBonus = (agent.skills[skillName] || 1);
+                const skillBonus = (agent.skills[res.type.toLowerCase()] || 1);
                 if (dist < 60) {
-                    // Non-linear utility dropoff by distance
-                    baseUtility += (Math.pow(60 - dist, 1.2) * skillBonus * (1.1 - invRatio));
+                    baseUtility += (Math.pow(60 - dist, 1.1) * skillBonus * (1.1 - invRatio) * K_ENERGY);
                 }
             });
             break;
 
         case AgentState.ALLIANCE_FORMING:
-            // U_social = (1 - K_Soul) * Nearby_Density * Alignment_Force
+            // U_social = Density * (1 - SoulDensity) * Integrity
             const socialDensity = nearbyAgents.filter(a => a.id !== agent.id && a.faction === 'PLAYER').length;
             if (socialDensity > 0) {
-                // Agents seek others when soul density is low or alignment is neutral/positive
                 const alignmentForce = 1.0 - Math.abs(agent.thinkingMatrix.alignment);
-                baseUtility += (socialDensity * 30 * (1.1 - K_SOUL) * alignmentForce);
-            }
-            break;
-
-        case AgentState.TRADING:
-            // U_trade = (Inv_Count * 15) + (Gold_Pressure)
-            const count = agent.inventory.filter(i => i).length;
-            const goldNeed = agent.gold < 150 ? 60 : 0;
-            baseUtility += (count * 15) + goldNeed;
-            break;
-
-        case AgentState.ASCENDING:
-            // High level requirement + Soul maturity requirement
-            if (agent.level >= 5) {
-                baseUtility += (agent.level * 5) + (K_SOUL * 50);
+                baseUtility += (socialDensity * 40 * (1.1 - agent.soulDensity) * alignmentForce * K_INTEGRITY);
             }
             break;
 
         case AgentState.THINKING:
-            // Neurologic routine: evaluate world logic when stability is fluctuating or internal entropy is high
-            baseUtility += (1.1 - K_STABILITY) * 70;
+            // Recursive routine to restore integrity/stability
+            // U_think = (1 - Integrity) * 100
+            baseUtility += (1.1 - K_INTEGRITY) * 90;
             break;
 
         case AgentState.IDLE:
-            baseUtility = 20; // Natural baseline noise
+            // Restore energy while idle
+            baseUtility = (1.1 - K_ENERGY) * 50 + 10;
             break;
             
+        case AgentState.TRADING:
+            const count = agent.inventory.filter(i => i).length;
+            baseUtility += (count * 20) + (agent.gold < 150 ? 50 : 0);
+            break;
+
         default:
             baseUtility = 0;
     }
 
-    // Mathematical Grounding: Final Utility = (Base * Entropy) + Stochastic Variance
-    return (baseUtility * K_ENTROPY) + (Math.random() * 8);
+    // Mathematical Grounding: Final Utility = (Base * Recursion) + Entropy
+    return (baseUtility * K_RECURSION) + (Math.random() * 5);
 };
 
-/**
- * Generates a summary of why a choice was made based on axiomatic values.
- */
 export const summarizeNeurologicChoice = (
     agent: Agent,
     nearbyAgents: Agent[],
@@ -108,9 +107,8 @@ export const summarizeNeurologicChoice = (
     const best = results[0];
     const second = results[1];
     
-    // Mathematical logic summary string for "Logic with Plexity" reporting
     const diff = (best.utility - second.utility).toFixed(2);
-    const logic = `U(${best.choice})=${best.utility.toFixed(1)} >> U(${second.choice}) | Δ=${diff} | Ω:${agent.stabilityIndex.toFixed(3)}`;
+    const logic = `AUE:${best.choice} | U=${best.utility.toFixed(1)} | Δ=${diff} | E:${(agent.energy).toFixed(0)} I:${agent.integrity.toFixed(2)}`;
 
     return { ...best, logic };
 };
@@ -177,7 +175,6 @@ export const generateResourcesForChunk = (chunk: Chunk): ResourceNode[] => {
     return resources;
 };
 
-// FIX: Added missing stats and closed function body properly
 export const generateCreaturesForChunk = (chunk: Chunk): Agent[] => {
     const creatures: Agent[] = [];
     const creatureRules = BIOME_CREATURES[chunk.biome as Biome];
@@ -203,6 +200,9 @@ export const generateCreaturesForChunk = (chunk: Chunk): Agent[] => {
                 soulDensity: 0,
                 gold: Math.floor(Math.random() * 5),
                 stabilityIndex: 1.0,
+                energy: 100,
+                maxEnergy: 100,
+                integrity: 1.0,
                 dna: { hash: `creature-${Math.random().toString(36).slice(2)}`, generation: 0, corruption: 0 },
                 isAwakened: false,
                 memoryCache: [],
@@ -226,10 +226,86 @@ export const generateCreaturesForChunk = (chunk: Chunk): Agent[] => {
     return creatures;
 };
 
-// FIX: Exported ITEM_SETS to be used in CharacterSheet component
 export const ITEM_SETS: Record<string, Record<number, ItemEffect[]>> = {
     'Axiomatic': {
         2: [{ type: 'PASSIVE_REGEN', value: 5, description: 'Axiomatic Resonance: +5 HP Regen' }],
         4: [{ type: 'CRIT_CHANCE', value: 0.1, description: 'Axiomatic Focus: +10% Crit Chance' }]
     }
+};
+
+export const isAgentInSafeZone = (agent: Agent, parcels: LandParcel[], notaryId: string | null): boolean => {
+    if (!notaryId) return false;
+    const PARCEL_SIZE = 20;
+    const ownedParcels = parcels.filter(p => p.ownerId === notaryId && p.isCertified);
+    for (const parcel of ownedParcels) {
+        const [px, pz] = parcel.coordinates;
+        const [ax, _, az] = agent.position;
+        const x_min = px - (PARCEL_SIZE / 2);
+        const x_max = px + (PARCEL_SIZE / 2);
+        const z_min = pz - (PARCEL_SIZE / 2);
+        const z_max = pz + (PARCEL_SIZE / 2);
+        if (ax >= x_min && ax <= x_max && az >= z_min && az <= z_max) return true;
+    }
+    return false;
+};
+
+export const aggregateActiveEffects = (agent: Agent, includeInventory: boolean = false): Record<ItemEffectType, number> => {
+  const totals: Record<ItemEffectType, number> = {
+    'ON_HIT_SLOW': 0, 'ON_HIT_STUN': 0, 'PASSIVE_REGEN': 0, 'THORNS': 0, 'CRIT_CHANCE': 0, 'LIFESTEAL': 0
+  };
+  const setCounts: Record<string, number> = {};
+  const processItem = (item: Item | null) => {
+    if (!item) return;
+    if (item.effects) {
+        item.effects.forEach(effect => { totals[effect.type] += effect.value; });
+    }
+    if (item.setName) setCounts[item.setName] = (setCounts[item.setName] || 0) + 1;
+  };
+  Object.values(agent.equipment).forEach(item => processItem(item));
+  Object.entries(setCounts).forEach(([setName, count]) => {
+      const setDef = ITEM_SETS[setName];
+      if (!setDef) return;
+      Object.entries(setDef).forEach(([thresholdStr, effects]) => {
+          const threshold = parseInt(thresholdStr);
+          if (count >= threshold) {
+              effects.forEach(effect => { totals[effect.type] += effect.value; });
+          }
+      });
+  });
+  if (includeInventory) agent.inventory.forEach(item => processItem(item));
+  return totals;
+};
+
+export const calculateItemRating = (item: Item | null | undefined): number => {
+    if (!item) return 0;
+    let rating = (item.stats.str || 0) + (item.stats.agi || 0) + (item.stats.int || 0) + (item.stats.vit || 0);
+    rating += (item.stats.dmg || 0) * 2;
+    rating += (item.experience || 0) * 0.1;
+    if (item.effects) {
+        item.effects.forEach(effect => {
+            switch(effect.type) {
+                case 'CRIT_CHANCE': rating += effect.value * 20; break;
+                case 'LIFESTEAL': rating += effect.value * 10; break;
+                case 'THORNS': rating += effect.value * 5; break;
+                case 'PASSIVE_REGEN': rating += effect.value * 5; break;
+                case 'ON_HIT_STUN': rating += effect.value * 15; break;
+                case 'ON_HIT_SLOW': rating += effect.value * 5; break;
+            }
+        });
+    }
+    if (item.setName) rating += 10;
+    return Math.floor(rating);
+};
+
+export const calculateCombatRating = (agent: Agent): number => {
+    const effects = aggregateActiveEffects(agent);
+    let rating = agent.stats.str + agent.stats.agi + agent.stats.int + agent.stats.vit;
+    rating += (agent.equipment.mainHand?.stats?.dmg || 0) * 2;
+    rating += (effects.CRIT_CHANCE || 0) * 20;
+    rating += (effects.LIFESTEAL || 0) * 10;
+    rating += (effects.THORNS || 0) * 5;
+    rating += (effects.PASSIVE_REGEN || 0) * 5;
+    rating += (effects.ON_HIT_STUN || 0) * 15;
+    rating += (effects.ON_HIT_SLOW || 0) * 5;
+    return Math.floor(rating);
 };
