@@ -134,12 +134,23 @@ export interface LogEntry {
   type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT';
 }
 
+export type StructureType = 'HOUSE' | 'BANK';
+
+export interface Structure {
+  id: string;
+  type: StructureType;
+  name: string;
+  builtAt: number;
+}
+
 export interface LandParcel {
   id: string;
   name: string;
   coordinates: [number, number];
   value: number;
   ownerId: string | null;
+  structures?: Structure[];
+  isCertified?: boolean;
 }
 
 export interface Quest {

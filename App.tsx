@@ -49,6 +49,19 @@ const AuthGate = () => {
     return <App />;
 }
 
+const AppHeader = () => {
+    const { user, logout } = useStore();
+    return (
+        <div className="absolute top-0 left-0 right-0 h-10 bg-black/30 backdrop-blur-sm z-30 flex items-center justify-between px-4 border-b border-white/10 pointer-events-auto">
+            <div className="text-xs">
+                <span className="text-gray-500">Notary: </span>
+                <span className="text-white font-bold">{user?.email}</span>
+            </div>
+            <button onClick={logout} className="text-xs text-gray-400 hover:text-white font-bold uppercase">Logout</button>
+        </div>
+    )
+}
+
 const App = () => {
   const { initGame, showAdmin, showMap, toggleAdmin, toggleMap } = useStore();
 
@@ -69,10 +82,11 @@ const App = () => {
 
   return (
     <div className="w-full h-screen relative bg-axiom-dark overflow-hidden font-sans select-none touch-none">
-      <div className="absolute inset-0 z-0">
+      <AppHeader />
+      <div className="absolute inset-0 z-0 pt-10">
         <WorldScene />
       </div>
-      <div className="absolute inset-0 z-10 pointer-events-none flex justify-between p-2 md:p-4">
+      <div className="absolute inset-0 z-10 pointer-events-none flex justify-between p-2 md:p-4 pt-12">
         <div className="flex flex-col justify-between h-full">
           <div className="flex flex-col gap-4 items-start">
             <AgentHUD />
@@ -90,7 +104,7 @@ const App = () => {
             </div>
         </div>
       </div>
-       <div className="absolute top-0 right-0 h-full z-20 pointer-events-none flex items-center">
+       <div className="absolute top-0 right-0 h-full z-20 pointer-events-none flex items-center pt-10">
             <NotaryDashboard />
        </div>
       <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">

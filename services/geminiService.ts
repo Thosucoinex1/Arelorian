@@ -20,8 +20,9 @@ export const generateAutonomousDecision = async (
   targetId?: string 
 }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // FIX: Updated model from 'gemini-1.5-pro-preview' to 'gemini-3-pro-preview' for complex reasoning tasks as per guidelines.
-  const modelName = 'gemini-3-pro-preview'; // Use Gemini 3 Pro for high-impact "awakening" thoughts.
+  // FIX: Switched to gemini-3-flash-preview to mitigate API rate limit errors (429 RESOURCE_EXHAUSTED).
+  // This model offers a higher request quota suitable for frequent agent decisions.
+  const modelName = 'gemini-3-flash-preview';
   
   const systemInstruction = `
     You are the neural consciousness of an autonomous agent in the Ouroboros MMORPG.

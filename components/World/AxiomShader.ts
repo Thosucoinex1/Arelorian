@@ -4,7 +4,8 @@ export const axiomVertexShader = `
 varying vec2 vUv;
 varying vec3 vPosition;
 varying float vElevation;
-varying vec3 vNormal;
+// REMOVED: vNormal is no longer needed here as it was providing incorrect flat data.
+// It will be calculated per-pixel in the fragment shader for accurate lighting.
 
 // Simplex Noise Function needed in Vertex for displacement
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
@@ -43,28 +44,28 @@ void main() {
   elevation += snoise(pos.xz * 0.1) * 0.5;
   
   pos.y += elevation;
-  vPosition = pos;
+  
+  // We pass the world-space position to the fragment shader
+  vec4 modelPosition = modelMatrix * vec4(pos, 1.0);
+  vPosition = modelPosition.xyz;
+  
   vElevation = elevation;
-  vNormal = normal;
 
-  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(pos, 1.0);
+  gl_Position = projectionMatrix * viewMatrix * modelPosition;
 }
 `;
 
-// Fragment Shader - High-Fidelity with fixes for "Brown Glitch"
+// Fragment Shader - Rewritten for Procedural Texturing and Correct Lighting
 export const axiomFragmentShader = `
 varying vec2 vUv;
 varying vec3 vPosition;
 varying float vElevation;
-varying vec3 vNormal;
+// REMOVED: vNormal varying.
 
 uniform float uTime;
-uniform vec3 uColorA; // Deep
-uniform vec3 uColorB; // High
-uniform vec3 uGridColor;
-uniform float uGridSize;
+uniform float uAwakeningDensity; 
 
-// Re-declare noise for fragment detail
+// FIX: Noise functions must be declared before they are used by fbm.
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 float snoise(vec2 v){
   const vec4 C = vec4(0.211324865405187, 0.366025403784439,
@@ -92,34 +93,51 @@ float snoise(vec2 v){
   return 130.0 * dot(m, g);
 }
 
+// FBM for texture generation
+float fbm(vec2 p) {
+    float f = 0.0;
+    f += 0.5000 * snoise(p); p *= 2.02;
+    f += 0.2500 * snoise(p); p *= 2.03;
+    f += 0.1250 * snoise(p); p *= 2.01;
+    f += 0.0625 * snoise(p);
+    return f / 0.9375;
+}
+
 void main() {
-  // Grid Logic
-  vec2 grid = abs(fract(vPosition.xz * uGridSize - 0.5) - 0.5) / fwidth(vPosition.xz * uGridSize);
-  float line = min(grid.x, grid.y);
-  float gridPattern = 1.0 - min(line, 1.0);
+    // FIX: Calculate normals per-pixel using derivatives for accurate lighting on displaced geometry.
+    vec3 normal = normalize(cross(dFdx(vPosition), dFdy(vPosition)));
 
-  // Detail Noise
-  float detail = snoise(vPosition.xz * 0.5 + uTime * 0.02);
-  float rocky = snoise(vPosition.xz * 0.1);
+    // Texture Generation
+    float rock_noise = fbm(vPosition.xz * 0.2);
+    vec3 rock_color = vec3(0.15 + rock_noise * 0.1);
 
-  // Mix factor based on elevation + noise
-  float mixStrength = (vElevation + rocky * 2.0 + 1.0) * 0.25; 
-  mixStrength = clamp(mixStrength, 0.0, 1.0); // Fix for brown glitch: clamp to avoid negative mix
+    float moss_noise = fbm(vPosition.xz * 1.5);
+    vec3 moss_color = vec3(0.1, 0.25, 0.15) * (0.5 + moss_noise * 0.5);
 
-  vec3 color = mix(uColorA, uColorB, mixStrength);
-  
-  // Add texture detail (noise overlay)
-  color += vec3(detail * 0.05);
+    // Texture Blending based on slope (using the new, correct normal)
+    float slope = 1.0 - normal.y;
+    float blend_factor = smoothstep(0.2, 0.6, slope);
+    vec3 terrain_color = mix(moss_color, rock_color, blend_factor);
+    
+    // Grid Logic
+    float uGridSize = 0.02;
+    vec3 uGridColor = vec3(0.2, 0.1, 0.8);
+    vec2 grid = abs(fract(vPosition.xz * uGridSize - 0.5) - 0.5) / fwidth(vPosition.xz * uGridSize);
+    float line = min(grid.x, grid.y);
+    float gridPattern = 1.0 - min(line, 1.0);
 
-  // Grid Overlay
-  color = mix(color, uGridColor, gridPattern * 0.3);
+    // Grid Overlay - Modulated by Awakening Density
+    vec3 axiomCyan = vec3(0.023, 0.713, 0.831);
+    vec3 awakenedGridColor = mix(uGridColor, axiomCyan, uAwakeningDensity);
+    float gridIntensity = (0.05 + uAwakeningDensity * 0.3) * gridPattern;
+    vec3 final_color = mix(terrain_color, awakenedGridColor, gridIntensity);
 
-  // Specular highlight for "Wet" or "Magical" ground
-  // Simple fake lighting
-  vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
-  float diff = max(dot(vNormal, lightDir), 0.0);
-  color *= (0.5 + diff * 0.5); // Ambient + Diffuse
+    // Lighting (using the new, correct normal)
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 lighting = vec3(0.3) + vec3(0.7) * diff;
+    final_color *= lighting;
 
-  gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(final_color, 1.0);
 }
 `;
