@@ -1,12 +1,14 @@
 
 import React from 'react';
 import { useStore } from '../../store';
+import { AgentState } from '../../types';
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
   const agents = useStore(state => state.agents);
   const selectAgent = useStore(state => state.selectAgent);
   const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
+  const toggleMount = useStore(state => state.toggleMount);
   const isOpen = useStore(state => state.showCharacterSheet);
   const isMobile = useStore(state => state.device.isMobile);
 
@@ -58,6 +60,18 @@ export const AgentHUD = () => {
                     >
                         Inspect Gear
                     </button>
+                    {agent.faction === 'PLAYER' && (
+                        <button 
+                            onClick={() => toggleMount(agent.id)}
+                            className={`flex-1 border text-xs font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95 ${
+                                agent.state === AgentState.MOUNTED 
+                                ? 'bg-red-900/20 border-red-500 text-red-500 hover:bg-red-900/40' 
+                                : 'bg-axiom-gold/20 border-axiom-gold/50 text-axiom-gold hover:bg-axiom-gold/40'
+                            }`}
+                        >
+                            {agent.state === AgentState.MOUNTED ? 'Dismount' : 'Summon Horse'}
+                        </button>
+                    )}
                 </div>
 
             </div>

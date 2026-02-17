@@ -1,5 +1,5 @@
-import { Agent, Item, ItemEffectType, ItemEffect, LandParcel, ResourceNode, ResourceType, AgentState } from './types';
-import { Chunk } from './store';
+
+import { Agent, Item, ItemEffectType, ItemEffect, LandParcel, ResourceNode, ResourceType, AgentState, Chunk } from './types';
 
 // --- WORLD GENERATION ---
 
@@ -84,9 +84,12 @@ export const generateCreaturesForChunk = (chunk: Chunk): Agent[] => {
                 position: [pos_x, 0, pos_z],
                 rotationY: Math.random() * Math.PI * 2,
                 level: rule.classType === 'Goblin' ? 2 : 1,
+                xp: 0,
                 state: AgentState.IDLE,
                 soulDensity: 0,
                 gold: Math.floor(Math.random() * 5),
+                stabilityIndex: 1.0,
+                dna: { hash: `creature-${Math.random().toString(36).slice(2)}`, generation: 0, corruption: 0 },
                 isAwakened: false,
                 memoryCache: [],
                 thinkingMatrix: { personality: "Hostile, territorial", currentLongTermGoal: "Patrol area", alignment: -0.5, languagePreference: 'MIXED' },

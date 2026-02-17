@@ -1,53 +1,28 @@
 
 import { create } from 'zustand';
-import { Agent, AgentState, ResourceNode, AuctionListing, LogEntry, ChatMessage, ChatChannel, MemoryEntry, Item, ItemType, ResourceType, LandParcel, Quest, ProductType, Structure, StructureType, WorldEvent } from './types';
+import { 
+  Agent, AgentState, ResourceNode, AuctionListing, LogEntry, 
+  ChatMessage, ChatChannel, Item, ResourceType, LandParcel, 
+  Structure, StructureType, WorldEvent, Chunk, Quest 
+} from './types';
 import { generateAutonomousDecision } from './services/geminiService';
-import { isAgentInSafeZone, getBiomeForChunk, generateResourcesForChunk, generateCreaturesForChunk } from './utils';
+import { getBiomeForChunk, generateResourcesForChunk, generateCreaturesForChunk } from './utils';
+import { soundManager } from './services/SoundManager';
 
-export interface Chunk { id: string; x: number; z: number; biome: string; }
-export interface Vegetation { id: string; type: 'TREE' | 'ROCK'; position: [number, number, number]; scale: number; rotation: number; }
 export type User = { id: string; email: string };
 
-const generateViking = (pos: [number, number, number]): Agent => ({
-  id: `viking-${Math.random().toString(16).slice(2)}`,
-  name: "Dark Viking Marauder",
-  classType: "Berserker",
-  faction: 'VIKING',
-  position: pos,
-  rotationY: 0,
-  level: 12 + Math.floor(Math.random() * 5),
-  state: AgentState.COMBAT,
-  soulDensity: 0.8,
-  gold: 50,
-  memoryCache: [],
-  thinkingMatrix: { personality: "Ruthless conqueror", currentLongTermGoal: "Raid Sanctuary", alignment: -1, languagePreference: 'EN' },
-  skills: { mining: 0, woodcutting: 0, herbalism: 0, crafting: 0, negotiation: 0 },
-  inventory: Array(16).fill(null),
-  equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
-  stats: { str: 30, agi: 15, int: 5, vit: 40, hp: 500, maxHp: 500 }
-});
-
-const generateNPC = (id: string, name: string, classType: string, pos: [number, number, number]): Agent => ({
-  id, name, classType,
-  faction: 'NPC',
-  position: pos,
-  rotationY: 0,
-  level: 99,
-  state: AgentState.IDLE,
-  soulDensity: 1.0,
-  gold: 99999,
-  memoryCache: [],
-  thinkingMatrix: { personality: "Helpful trade master", currentLongTermGoal: "Manage world economy", alignment: 1, languagePreference: 'EN' },
-  skills: { mining: 0, woodcutting: 0, herbalism: 0, crafting: 10, negotiation: 10 },
-  inventory: Array(16).fill(null),
-  equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
-  stats: { str: 50, agi: 50, int: 50, vit: 50, hp: 9999, maxHp: 9999 }
-});
+// Static obstacles for simple avoidance
+const WORLD_STRUCTURES = [
+    { name: 'SMITH', pos: [12, -12], radius: 4 },
+    { name: 'MARKET', pos: [-12, -12], radius: 4 },
+    { name: 'BANK', pos: [0, -18], radius: 4 },
+    { name: 'CAVE', pos: [-45, 45], radius: 6 },
+    { name: 'CHURCH', pos: [60, -60], radius: 8 },
+];
 
 interface GameState {
   user: User | null;
   agents: Agent[];
-  lastAnomalySpawn: number;
   lastRaidTime: number;
   resourceNodes: ResourceNode[];
   auctionHouse: AuctionListing[];
@@ -57,181 +32,373 @@ interface GameState {
   device: { isMobile: boolean; width: number; height: number };
   loadedChunks: Chunk[];
   activeEvents: WorldEvent[];
-  vegetation: Vegetation[];
-  showCharacterSheet: boolean;
-  notaryBalance: number;
-  landParcels: LandParcel[];
-  showAdmin: boolean;
-  showMap: boolean;
-  serverStats: { uptime: number; tickRate: number; memoryUsage: number; threatLevel: number };
-  graphicPacks: string[];
-  quests: Quest[];
+  globalJackpot: number;
+  stability: number;
   lastThoughtTime: number;
+  gridSize: number;
+  quests: Quest[];
   hasNotaryLicense: boolean;
   agentSlots: number;
-  leftStick: { x: number; y: number };
-  rightStick: { x: number; y: number };
-  setJoystick: (stick: 'left' | 'right', value: { x: number; y: number }) => void;
+  serverStats: { uptime: number; tickRate: number; memoryUsage: number; threatLevel: number };
+  graphicPacks: string[];
+  landParcels: LandParcel[];
+  showCharacterSheet: boolean;
+  showAdmin: boolean;
+  showMap: boolean;
+  
+  // Mobile Controls
+  joystickData: { 
+    left: { x: number; y: number }; 
+    right: { x: number; y: number }; 
+  };
+
+  // Actions
   login: (email: string) => void;
-  logout: () => void;
   initGame: () => void;
   updateAgents: (delta: number) => void;
   addChatMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   selectAgent: (id: string | null) => void;
-  toggleCharacterSheet: (show: boolean) => void;
-  postAuction: (listing: Omit<AuctionListing, 'id' | 'expiresAt'>) => void;
   addLog: (message: string, type: LogEntry['type']) => void;
-  updateAgentLore: (id: string, lore: string) => void;
+  expandGrid: (x: number, z: number) => void;
+  toggleCharacterSheet: (show: boolean) => void;
   toggleAdmin: (show: boolean) => void;
   toggleMap: (show: boolean) => void;
-  uploadGraphicPack: (name: string) => void;
-  purchaseProduct: (productType: ProductType) => void;
-  equipItem: (agentId: string, item: Item, itemIndex: number) => void;
-  unequipItem: (agentId: string, slot: keyof Agent['equipment']) => void;
-  moveInventoryItem: (agentId: string, fromIndex: number, toIndex: number) => void;
-  buildStructure: (parcelId: string, structureType: StructureType) => void;
+  toggleMount: (agentId: string) => void;
+  buildStructure: (parcelId: string, type: StructureType) => void;
   certifyParcel: (parcelId: string) => void;
+  purchaseProduct: (productId: string) => void;
+  uploadGraphicPack: (name: string) => void;
+  setJoystick: (side: 'left' | 'right', data: { x: number, y: number }) => void;
+  
+  // Inventory Actions
+  equipItem: (agentId: string, item: Item, inventoryIndex: number) => void;
+  unequipItem: (agentId: string, slot: string) => void;
+  moveInventoryItem: (agentId: string, fromIndex: number, toIndex: number) => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
   user: null, agents: [], resourceNodes: [], auctionHouse: [], logs: [], chatMessages: [], activeEvents: [],
   selectedAgentId: null, device: { isMobile: /Mobi/i.test(navigator.userAgent), width: window.innerWidth, height: window.innerHeight },
-  loadedChunks: [], vegetation: [], showCharacterSheet: false,
-  notaryBalance: 5000,
-  landParcels: [
-    { id: 'p1', name: 'Sanctuary Central', coordinates: [0, 0], value: 0, ownerId: 'SYSTEM', structures: [
-        { id: 's1', type: 'SMITH', name: 'Sanctuary Forge', builtAt: 0 },
-        { id: 's2', type: 'MARKET', name: 'Sanctuary Exchange', builtAt: 0 }
-    ], isCertified: true },
-    { id: 'p2', name: 'The Iron Fields', coordinates: [10, 10], value: 1200, ownerId: null, structures: [] },
-  ],
-  showAdmin: false, showMap: false, serverStats: { uptime: 3600, tickRate: 20, memoryUsage: 128, threatLevel: 0 },
-  graphicPacks: ['Base v1', 'Axiom Shaders', 'Viking Texture Pack'],
-  quests: [],
-  lastThoughtTime: 0, hasNotaryLicense: false, agentSlots: 10, lastAnomalySpawn: Date.now(), lastRaidTime: Date.now(),
-  leftStick: { x: 0, y: 0 }, rightStick: { x: 0, y: 0 },
+  loadedChunks: [], globalJackpot: 10000, stability: 1.0, lastThoughtTime: 0, lastRaidTime: Date.now(),
+  gridSize: 35, quests: [], hasNotaryLicense: false, agentSlots: 50,
+  serverStats: { uptime: 0, tickRate: 20, memoryUsage: 12.5, threatLevel: 0.1 },
+  graphicPacks: ['Singularity v3.0'], landParcels: [],
+  showCharacterSheet: false, showAdmin: false, showMap: false,
+  joystickData: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } },
 
-  setJoystick: (stick, value) => set({ [stick === 'left' ? 'leftStick' : 'rightStick']: value }),
-  login: (email) => set({ user: { id: `notary-id-${Math.random().toString(36).slice(2, 9)}`, email } }),
-  logout: () => set({ user: null }),
+  login: (email) => {
+    const isSpecial = email.includes('notary') || email.includes('admin');
+    set({ 
+        user: { id: `notary-${Math.random().toString(36).slice(2)}`, email },
+        hasNotaryLicense: isSpecial
+    });
+  },
+  
+  toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
+  toggleAdmin: (show) => set({ showAdmin: show }),
+  toggleMap: (show) => set({ showMap: show }),
+  setJoystick: (side, data) => set(state => ({
+    joystickData: { ...state.joystickData, [side]: data }
+  })),
+
+  uploadGraphicPack: (name) => set(state => ({
+      graphicPacks: [...state.graphicPacks, name],
+      logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: `Graphic Pack '${name}' synchronized.`, type: 'SYSTEM' }, ...state.logs]
+  })),
+
+  equipItem: (agentId, item, inventoryIndex) => set(state => {
+      const agent = state.agents.find(a => a.id === agentId);
+      if (!agent) return {};
+
+      const slot = item.type === 'WEAPON' ? 'mainHand' : 
+                   item.type === 'OFFHAND' ? 'offHand' : 
+                   item.type === 'HELM' ? 'head' : 
+                   item.type === 'CHEST' ? 'chest' : 'legs';
+      
+      const prevItem = (agent.equipment as any)[slot];
+      const newInventory = [...agent.inventory];
+      newInventory[inventoryIndex] = prevItem || null;
+
+      const newEquipment = { ...agent.equipment, [slot]: item };
+      
+      soundManager.playUI('CLICK');
+      return {
+          agents: state.agents.map(a => a.id === agentId ? { ...a, equipment: newEquipment, inventory: newInventory } : a)
+      };
+  }),
+
+  unequipItem: (agentId, slot) => set(state => {
+      const agent = state.agents.find(a => a.id === agentId);
+      if (!agent) return {};
+
+      const item = (agent.equipment as any)[slot];
+      if (!item) return {};
+
+      const firstEmpty = agent.inventory.indexOf(null);
+      if (firstEmpty === -1) {
+          state.addLog("Inventory full!", 'SYSTEM');
+          return {};
+      }
+
+      const newInventory = [...agent.inventory];
+      newInventory[firstEmpty] = item;
+      const newEquipment = { ...agent.equipment, [slot]: null };
+
+      soundManager.playUI('CLICK');
+      return {
+          agents: state.agents.map(a => a.id === agentId ? { ...a, equipment: newEquipment, inventory: newInventory } : a)
+      };
+  }),
+
+  moveInventoryItem: (agentId, from, to) => set(state => {
+      const agent = state.agents.find(a => a.id === agentId);
+      if (!agent) return {};
+      const newInv = [...agent.inventory];
+      [newInv[from], newInv[to]] = [newInv[to], newInv[from]];
+      return {
+          agents: state.agents.map(a => a.id === agentId ? { ...a, inventory: newInv } : a)
+      };
+  }),
+
+  toggleMount: (agentId) => set(state => {
+      const agent = state.agents.find(a => a.id === agentId);
+      if (!agent) return {};
+      const isMounted = agent.state === AgentState.MOUNTED;
+      const newState = isMounted ? AgentState.IDLE : AgentState.MOUNTED;
+      soundManager.playUI('CLICK');
+      return {
+          agents: state.agents.map(a => a.id === agentId ? { ...a, state: newState } : a),
+          logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: isMounted ? 'Dismounted.' : 'Mounted horse. Speed 4x.', type: 'SYSTEM' }, ...state.logs]
+      };
+  }),
+
+  buildStructure: (parcelId, type) => set(state => {
+      return {
+          logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: `Construction of ${type} started on parcel ${parcelId}.`, type: 'SYSTEM' }, ...state.logs]
+      };
+  }),
+
+  certifyParcel: (parcelId) => set(state => {
+      return {
+          logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: `Parcel ${parcelId} certified.`, type: 'AXIOM' }, ...state.logs]
+      };
+  }),
+  
+  purchaseProduct: (productId) => set(state => {
+      if (productId === 'NOTARY_LICENSE') return { hasNotaryLicense: true };
+      return {};
+  }),
+
   initGame: () => {
-    if (get().agents.length > 0) return;
+    const { gridSize } = get();
     const newChunks: Chunk[] = [];
-    const newResources: ResourceNode[] = [];
-    const newCreatures: Agent[] = [];
-    for (let x = -2; x <= 2; x++) {
-      for (let z = -2; z <= 2; z++) {
+    const radius = Math.floor(gridSize / 2);
+    
+    for (let x = -radius; x <= radius; x++) {
+      for (let z = -radius; z <= radius; z++) {
         const biome = getBiomeForChunk(x, z);
-        const chunk: Chunk = { id: `${x},${z}`, x, z, biome };
-        newChunks.push(chunk);
-        newResources.push(...generateResourcesForChunk(chunk));
-        newCreatures.push(...generateCreaturesForChunk(chunk));
+        newChunks.push({ id: `${x},${z}`, x, z, biome, depth: 0, entropy: Math.random() });
       }
     }
-    const npcs = [
-      generateNPC('npc-smith', 'Master Smith Kaelen', 'Smith', [5, 0, 5]),
-      generateNPC('npc-market', 'Merchant Valerius', 'Merchant', [-5, 0, 5])
-    ];
-    set({ agents: [...npcs, ...newCreatures], resourceNodes: newResources, loadedChunks: newChunks });
+
+    const startPlayer: Agent = {
+      id: 'player-1',
+      name: 'RRA-Architect',
+      classType: 'Novice',
+      faction: 'PLAYER',
+      position: [0, 0, 0],
+      rotationY: 0,
+      level: 1,
+      xp: 0,
+      state: AgentState.IDLE,
+      soulDensity: 0.8,
+      gold: 500,
+      stabilityIndex: 1.0,
+      dna: { hash: 'axiom-001', generation: 1, corruption: 0 },
+      memoryCache: [],
+      thinkingMatrix: { personality: 'Recursive', currentLongTermGoal: 'Build City', alignment: 1, languagePreference: 'MIXED' },
+      skills: { woodcutting: 1, mining: 1, leadership: 1, charisma: 1 },
+      inventory: Array(32).fill(null),
+      equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
+      stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 },
+      stuckTicks: 0
+    };
+
+    set({ loadedChunks: newChunks, agents: [startPlayer] });
+  },
+
+  expandGrid: (targetX, targetZ) => {
+    set(state => {
+      const existingIds = new Set(state.loadedChunks.map(c => c.id));
+      const newChunks: Chunk[] = [];
+      for (let x = targetX - 1; x <= targetX + 1; x++) {
+        for (let z = targetZ - 1; z <= targetZ + 1; z++) {
+          const id = `${x},${z}`;
+          if (!existingIds.has(id)) {
+            newChunks.push({ id, x, z, biome: getBiomeForChunk(x, z), depth: 0, entropy: Math.random() });
+          }
+        }
+      }
+      if (newChunks.length > 0) return { loadedChunks: [...state.loadedChunks, ...newChunks] };
+      return {};
+    });
   },
 
   addChatMessage: (msg) => set(state => ({ chatMessages: [...state.chatMessages, { ...msg, id: Math.random().toString(), timestamp: Date.now() }].slice(-100) })),
   selectAgent: (id) => set({ selectedAgentId: id }),
-  toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
   addLog: (message, type) => set(state => ({ logs: [{ id: Math.random().toString(), timestamp: Date.now(), message, type }, ...state.logs].slice(0, 50) })),
-  postAuction: (listing) => set(state => ({ auctionHouse: [...state.auctionHouse, { ...listing, id: Math.random().toString(), expiresAt: Date.now() + 3600000 }] })),
-  updateAgentLore: (id, lore) => set(state => ({ agents: state.agents.map(a => a.id === id ? { ...a, loreSnippet: lore } : a) })),
-  toggleAdmin: (show) => set({ showAdmin: show }),
-  toggleMap: (show) => set({ showMap: show }),
-  uploadGraphicPack: (name) => set(state => ({ graphicPacks: [...state.graphicPacks, name] })),
-  purchaseProduct: (type) => {},
-  equipItem: (agentId, item, index) => {},
-  unequipItem: (agentId, slot) => {},
-  moveInventoryItem: (aId, from, to) => {},
-  buildStructure: (pId, type) => {},
-  certifyParcel: (pId) => {},
 
   updateAgents: async (delta) => {
     const state = get();
     const now = Date.now();
-    
-    // Raid Cycle (Every 5 Minutes)
-    if (now - state.lastRaidTime > 300000) {
-        const vikings: Agent[] = [];
-        for (let i = 0; i < 5; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            vikings.push(generateViking([Math.cos(angle) * 100, 0, Math.sin(angle) * 100]));
+    const xpForLevel = (lvl: number) => Math.floor(1000 * Math.pow(1.025, lvl - 1));
+
+    // Async AI Cognition Loop
+    if (now - state.lastThoughtTime > 15000) {
+      set({ lastThoughtTime: now });
+      const activeAgents = state.agents.filter(a => a.faction === 'PLAYER' || a.faction === 'NPC');
+      if (activeAgents.length > 0) {
+        const agent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
+        const nearbyA = state.agents.filter(a => a.id !== agent.id && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 60);
+        const nearbyR = state.resourceNodes.filter(r => Math.hypot(r.position[0]-agent.position[0], r.position[2]-agent.position[2]) < 80);
+        
+        try {
+          const decision = await generateAutonomousDecision(agent, nearbyA, nearbyR, state.logs.slice(0, 5), false);
+          
+          if (decision.message) {
+            state.addChatMessage({ senderId: agent.id, senderName: agent.name, message: decision.message, channel: 'THOUGHT' });
+          }
+
+          if (decision.quest) {
+            const newQuest: Quest = {
+                id: `quest-${Math.random().toString(36).slice(2)}`,
+                timestamp: Date.now(),
+                issuerId: agent.id,
+                ...decision.quest
+            } as Quest;
+            set(s => ({ quests: [...s.quests, newQuest] }));
+            state.addLog(`New Organic Quest Spawned by ${agent.name}: ${newQuest.title}`, 'EVENT');
+          }
+
+          set(s => ({
+            agents: s.agents.map(a => a.id === agent.id ? { 
+              ...a, 
+              state: decision.newState, 
+              targetId: decision.targetId || a.targetId,
+              alliedId: decision.alliedId || a.alliedId,
+              stabilityIndex: Math.max(0, a.stabilityIndex - 0.001)
+            } : a)
+          }));
+        } catch (e) {
+          console.error("AI Update Failed", e);
         }
-        set({ 
-            agents: [...state.agents, ...vikings], 
-            lastRaidTime: now,
-            activeEvents: [{ id: 'raid-1', type: 'RAID', title: 'The Midnight Raid', description: 'Dark Vikings are approaching Sanctuary!', startTime: now, endTime: now + 120000, active: true }]
-        });
-        state.addLog("[WORLD EVENT] The Midnight Raid has begun! Defensive protocols active.", 'EVENT');
-        state.addChatMessage({ senderId: 'SYSTEM', senderName: 'Sanctuary Bell', message: "The Dark Vikings are coming! Man the walls!", channel: 'EVENT' });
+      }
     }
 
-    // Agent Intelligence Cycle - Increased stability and error handling
-    if (now - state.lastThoughtTime > 5000) {
-        set({ lastThoughtTime: now });
-        const players = state.agents.filter(a => a.faction === 'PLAYER');
-        if (players.length > 0) {
-            const agent = players[Math.floor(Math.random() * players.length)];
-            const nearbyRes = state.resourceNodes.filter(r => Math.hypot(r.position[0]-agent.position[0], r.position[2]-agent.position[2]) < 40);
-            
-            try {
-              const decision = await generateAutonomousDecision(agent, players.filter(p => p.id !== agent.id), state.agents.filter(a => a.faction !== 'PLAYER'), nearbyRes, state.logs.slice(0,5), false);
-              
-              set(s => ({
-                  agents: s.agents.map(a => a.id === agent.id ? { ...a, state: decision.newState, targetId: decision.targetId, isAwakened: true } : a)
-              }));
-              state.addLog(`${agent.name}: ${decision.thought}`, 'THOUGHT');
-            } catch (err) {
-              // Penalty delay: if AI fails, wait longer before next attempt
-              set({ lastThoughtTime: now + 10000 });
-              console.error("AI cycle failed, adding penalty delay.");
-            }
-        }
-    }
-
-    // Movement & Collision Logic
+    // Physical Movement and Interaction Loop
     set(s => ({
         agents: s.agents.map(agent => {
             let nextPos = [...agent.position] as [number, number, number];
-            let nextRot = agent.rotationY;
+            let nextRotation = agent.rotationY;
+            let nextXP = agent.xp;
+            let nextLvl = agent.level;
+            let nextStuck = agent.stuckTicks || 0;
+            
+            const speedBase = 4.0;
+            const speedMultiplier = agent.state === AgentState.MOUNTED ? 4.0 : 1.0;
+            const currentSpeed = speedBase * speedMultiplier * delta;
+            
+            const joystick = agent.id === 'player-1' ? s.joystickData.left : { x: 0, y: 0 };
+            
+            if (agent.id === 'player-1' && (joystick.x !== 0 || joystick.y !== 0)) {
+                // Manual Player Control
+                nextPos[0] += joystick.x * 12 * speedMultiplier * delta;
+                nextPos[2] += joystick.y * 12 * speedMultiplier * delta;
+                nextRotation = Math.atan2(joystick.x, joystick.y);
+                agent.targetId = null;
+                nextStuck = 0;
+            } else if (agent.targetId) {
+                // Autonomous Movement
+                const targetNode = s.resourceNodes.find(r => r.id === agent.targetId) || s.agents.find(a => a.id === agent.targetId);
+                if (targetNode) {
+                    const dx = targetNode.position[0] - agent.position[0];
+                    const dz = targetNode.position[2] - agent.position[2];
+                    const dist = Math.hypot(dx, dz);
+                    
+                    if (dist > 2.0) {
+                        let desiredDx = dx / dist;
+                        let desiredDz = dz / dist;
 
-            // VIKING Logic: Move toward City Center (0,0)
-            if (agent.faction === 'VIKING') {
-                const distToCenter = Math.hypot(agent.position[0], agent.position[2]);
-                if (distToCenter > 10) {
-                    nextRot = Math.atan2(-agent.position[2], -agent.position[0]);
-                    nextPos[0] += Math.cos(nextRot) * 2.0 * delta;
-                    nextPos[2] += Math.sin(nextRot) * 2.0 * delta;
-                } else {
-                    agent.state = AgentState.COMBAT;
-                }
-            } else if (agent.faction === 'PLAYER') {
-                // Proactive Resource Hunting
-                if (agent.state === AgentState.GATHERING && !agent.targetId) {
-                    const nearest = s.resourceNodes.find(r => Math.hypot(r.position[0]-agent.position[0], r.position[2]-agent.position[2]) < 30);
-                    if (nearest) agent.targetId = nearest.id;
-                }
+                        // --- INTELLIGENT OBSTACLE AVOIDANCE ---
+                        WORLD_STRUCTURES.forEach(struct => {
+                            const sdx = agent.position[0] - struct.pos[0];
+                            const sdz = agent.position[2] - struct.pos[1];
+                            const sdist = Math.hypot(sdx, sdz);
+                            if (sdist < struct.radius + 2) {
+                                // Add repulsion force
+                                const force = (struct.radius + 2 - sdist) / (struct.radius + 2);
+                                desiredDx += (sdx / sdist) * force * 2.0;
+                                desiredDz += (sdz / sdist) * force * 2.0;
+                            }
+                        });
 
-                if (agent.targetId) {
-                    const target = [...s.agents, ...s.resourceNodes].find(e => e.id === agent.targetId);
-                    if (target) {
-                        const dx = target.position[0] - agent.position[0];
-                        const dz = target.position[2] - agent.position[2];
-                        nextRot = Math.atan2(dz, dx);
-                        if (Math.hypot(dx, dz) > 1.5) {
-                            nextPos[0] += Math.cos(nextRot) * 1.5 * delta;
-                            nextPos[2] += Math.sin(nextRot) * 1.5 * delta;
+                        // Re-normalize desired vector
+                        const finalDist = Math.hypot(desiredDx, desiredDz);
+                        desiredDx /= finalDist;
+                        desiredDz /= finalDist;
+
+                        // --- SMOOTH TURNING (Steering) ---
+                        const targetAngle = Math.atan2(desiredDx, desiredDz);
+                        let angleDiff = targetAngle - nextRotation;
+                        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                        
+                        nextRotation += angleDiff * 5.0 * delta; // Turn smoothing
+                        
+                        // Move forward in current rotation
+                        const vx = Math.sin(nextRotation) * currentSpeed;
+                        const vz = Math.cos(nextRotation) * currentSpeed;
+                        
+                        nextPos[0] += vx;
+                        nextPos[2] += vz;
+
+                        // --- STUCK DETECTION ---
+                        // If we didn't move much closer to target, increment stuckTicks
+                        const newDist = Math.hypot(targetNode.position[0] - nextPos[0], targetNode.position[2] - nextPos[2]);
+                        if (dist - newDist < currentSpeed * 0.1) {
+                            nextStuck++;
+                        } else {
+                            nextStuck = 0;
                         }
+
+                        if (nextStuck > 120) { // Stuck for ~2 seconds at 60fps
+                            // Re-route nudge
+                            nextRotation += Math.PI / 2; 
+                            nextStuck = 0;
+                        }
+
+                    } else if (agent.state === AgentState.GATHERING) {
+                        nextXP += 25 * delta; 
+                        if (nextXP >= xpForLevel(nextLvl)) {
+                           nextLvl++;
+                           soundManager.playCombat('MAGIC');
+                           s.addLog(`${agent.name} reached level ${nextLvl}! Consciousness expanding.`, 'SYSTEM');
+                        }
+                        nextStuck = 0;
                     }
                 }
+            } else {
+                nextStuck = 0;
             }
-
-            return { ...agent, position: nextPos, rotationY: nextRot };
+            
+            return { 
+                ...agent, 
+                position: nextPos, 
+                rotationY: nextRotation, 
+                xp: nextXP, 
+                level: nextLvl,
+                stuckTicks: nextStuck
+            };
         })
     }));
   }
