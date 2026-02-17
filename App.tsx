@@ -1,95 +1,108 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import WorldScene from './components/World/WorldScene';
-import { NotaryDashboard } from './components/UI/NotaryDashboard';
 import { AgentHUD } from './components/UI/AgentHUD';
-import { CharacterSheet } from './components/UI/CharacterSheet';
 import { ChatConsole } from './components/UI/ChatConsole';
-import { QuestLog } from './components/UI/QuestLog';
-import { PayPalModal } from './components/UI/PayPalModal';
+import { AuctionHouse } from './components/UI/AuctionHouse';
+import { CharacterSheet } from './components/UI/CharacterSheet';
+import { useStore } from './store';
+import { NotaryDashboard } from './components/UI/NotaryDashboard';
 import { AdminDashboard } from './components/UI/AdminDashboard';
 import { WorldMap } from './components/UI/WorldMap';
-import { useStore } from './store';
+import { QuestLog } from './components/UI/QuestLog';
 import { soundManager } from './services/SoundManager';
 
+const AuthGate = () => {
+    const { user, login } = useStore();
+    const [email, setEmail] = useState('');
+
+    const handleLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if(email) login(email);
+    };
+
+    if (!user) {
+        return (
+            <div className="w-full h-screen bg-axiom-dark flex items-center justify-center font-sans">
+                <div className="w-96 bg-black/30 border border-axiom-purple/50 rounded-lg p-8 shadow-2xl backdrop-blur-lg text-center">
+                    <h1 className="text-3xl font-serif text-white tracking-widest mb-2">OUROBOROS</h1>
+                    <p className="text-sm text-gray-400 mb-6">Axiom Engine - Notary Authentication</p>
+                    <form onSubmit={handleLogin}>
+                        <input
+                            type="email"
+                            placeholder="notary_email@axiom.dev"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full bg-white/5 border border-white/20 p-3 text-sm text-white rounded mb-4 focus:outline-none focus:ring-2 focus:ring-axiom-cyan"
+                            required
+                        />
+                        <button type="submit" className="w-full bg-axiom-purple hover:bg-axiom-purple/80 text-white py-3 rounded font-bold uppercase tracking-wider transition-colors">
+                            Assume Notary Role
+                        </button>
+                    </form>
+                    <p className="text-xs text-gray-600 mt-6">System Notice: Authentication is mocked. Any email will grant access to the Notary Dashboard.</p>
+                </div>
+            </div>
+        );
+    }
+
+    return <App />;
+}
+
 const App = () => {
-  const [isPayModalOpen, setPayModalOpen] = useState(false);
-  const toggleViewMode = useStore(state => state.toggleViewMode);
-  const viewMode = useStore(state => state.viewMode);
-  const toggleAdmin = useStore(state => state.toggleAdmin);
-  const toggleMap = useStore(state => state.toggleMap);
+  const { initGame, showAdmin, showMap, toggleAdmin, toggleMap } = useStore();
+
+  useEffect(() => {
+    initGame();
+    const resumeAudio = () => {
+        soundManager.playUI('CLICK');
+        window.removeEventListener('click', resumeAudio);
+    };
+    window.addEventListener('click', resumeAudio);
+    return () => window.removeEventListener('click', resumeAudio);
+  }, [initGame]);
+
+  const handleToggle = (setter: (show: boolean) => void, current: boolean) => {
+    setter(!current);
+    soundManager.playUI('CLICK');
+  }
 
   return (
-    <div className="w-full h-screen relative bg-axiom-dark overflow-hidden font-sans select-none">
-      
-      {/* 3D Background */}
+    <div className="w-full h-screen relative bg-axiom-dark overflow-hidden font-sans select-none touch-none">
       <div className="absolute inset-0 z-0">
         <WorldScene />
       </div>
-
-      {/* Main UI Layout */}
-      <div className="absolute inset-0 z-10 flex pointer-events-none">
-        
-        {/* Left Side / HUD Area */}
-        <div className="flex-1 relative">
+      <div className="absolute inset-0 z-10 pointer-events-none flex justify-between p-2 md:p-4">
+        <div className="flex flex-col justify-between h-full">
+          <div className="flex flex-col gap-4 items-start">
             <AgentHUD />
-            <ChatConsole />
-            
-            {/* Center Popups */}
-            <div className="absolute inset-0 pointer-events-auto flex items-center justify-center z-50 pointer-events-none">
-                 <div className="pointer-events-auto">
-                    <CharacterSheet />
+            <AuctionHouse />
+          </div>
+          <ChatConsole />
+        </div>
+        <div className="h-full flex flex-col items-end justify-between">
+            <div className="flex flex-col items-end gap-2">
+                 <div className="flex gap-2 pointer-events-auto">
+                     <button onClick={() => handleToggle(toggleMap, showMap)} title="World Map" className="w-10 h-10 bg-black/50 border border-white/20 rounded text-gray-300 hover:bg-axiom-purple text-xs font-bold backdrop-blur-sm">MAP</button>
+                     <button onClick={() => handleToggle(toggleAdmin, showAdmin)} title="Admin Console" className="w-10 h-10 bg-black/50 border border-white/20 rounded text-gray-300 hover:bg-axiom-purple text-xs font-bold backdrop-blur-sm">ADM</button>
                  </div>
-            </div>
-
-            {/* Bottom Controls */}
-            <div className="absolute bottom-6 left-6 pointer-events-auto flex space-x-2">
-                <button 
-                    onClick={() => { setPayModalOpen(true); soundManager.playUI('CLICK'); }}
-                    className="bg-axiom-gold hover:bg-yellow-500 text-black px-4 py-2 rounded font-bold shadow-lg text-sm border border-yellow-600"
-                >
-                    + FUNDS
-                </button>
-                <button 
-                    onClick={() => { toggleViewMode(); soundManager.playUI('CLICK'); }}
-                    className="bg-black/40 hover:bg-black/60 text-white border border-white/20 px-4 py-2 rounded font-bold backdrop-blur-md text-sm"
-                >
-                    {viewMode === 'ORBIT' ? 'TACTICAL' : 'ORBIT'}
-                </button>
-                <button 
-                    onClick={() => { toggleMap(true); soundManager.playUI('CLICK'); }}
-                    className="bg-black/40 hover:bg-black/60 text-white border border-white/20 px-4 py-2 rounded font-bold backdrop-blur-md text-sm"
-                >
-                    MAP
-                </button>
-                <button 
-                    onClick={() => { toggleAdmin(true); soundManager.playUI('CLICK'); }}
-                    className="bg-axiom-purple/40 hover:bg-axiom-purple/60 text-white border border-axiom-purple/50 px-4 py-2 rounded font-bold backdrop-blur-md text-sm"
-                >
-                    ADMIN
-                </button>
+                <QuestLog />
             </div>
         </div>
-
-        {/* Right Side */}
-        <div className="relative flex">
-            <QuestLog />
-            <NotaryDashboard />
-        </div>
-
       </div>
-
-      {/* Modals & Overlays */}
-      <PayPalModal isOpen={isPayModalOpen} onClose={() => setPayModalOpen(false)} />
+       <div className="absolute top-0 right-0 h-full z-20 pointer-events-none flex items-center">
+            <NotaryDashboard />
+       </div>
+      <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
+        <CharacterSheet />
+      </div>
       <AdminDashboard />
       <WorldMap />
-      
-      {/* Axiom Watermark */}
-      <div className="absolute bottom-2 right-84 text-white/5 text-[100px] font-serif font-bold pointer-events-none select-none z-0">
+      <div className="absolute bottom-4 right-4 text-white/10 text-6xl font-serif pointer-events-none">
         OUROBOROS
       </div>
     </div>
   );
 };
 
-export default App;
+export default AuthGate;

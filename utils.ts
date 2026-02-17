@@ -1,4 +1,5 @@
-import { Agent, Item, ItemEffectType, ItemEffect } from './types';
+
+import { Agent, Item, ItemEffectType, ItemEffect, LandParcel } from './types';
 
 export const ITEM_SETS: Record<string, { [count: number]: ItemEffect[] }> = {
     'Voidstalker': {
@@ -20,14 +21,36 @@ export const ITEM_SETS: Record<string, { [count: number]: ItemEffect[] }> = {
 };
 
 /**
+ * Checks if an agent is within the boundaries of a Notary-owned land parcel.
+ * This defines a "Safe Zone" where PvP is disabled.
+ */
+export const isAgentInSafeZone = (agent: Agent, parcels: LandParcel[], notaryId: string | null): boolean => {
+    if (!notaryId) return false;
+
+    const PARCEL_SIZE = 20; // Each parcel is a 20x20 unit square
+    const ownedParcels = parcels.filter(p => p.ownerId === notaryId);
+
+    for (const parcel of ownedParcels) {
+        const [px, pz] = parcel.coordinates;
+        const [ax, _, az] = agent.position;
+
+        const x_min = px - (PARCEL_SIZE / 2);
+        const x_max = px + (PARCEL_SIZE / 2);
+        const z_min = pz - (PARCEL_SIZE / 2);
+        const z_max = pz + (PARCEL_SIZE / 2);
+
+        if (ax >= x_min && ax <= x_max && az >= z_min && az <= z_max) {
+            return true;
+        }
+    }
+    return false;
+};
+
+/**
  * Processes and aggregates all active item effects from an agent's equipment.
  * Returns a structured object mapping Effect Types to their total calculated values.
- * 
- * @param agent The agent to evaluate
- * @param includeInventory Whether to include passive effects from inventory items (e.g. Charms) - defaults to false
  */
 export const aggregateActiveEffects = (agent: Agent, includeInventory: boolean = false): Record<ItemEffectType, number> => {
-  // Initialize with defaults to ensure all keys exist
   const totals: Record<ItemEffectType, number> = {
     'ON_HIT_SLOW': 0,
     'ON_HIT_STUN': 0,
@@ -76,8 +99,6 @@ export const aggregateActiveEffects = (agent: Agent, includeInventory: boolean =
       });
   });
 
-  // Process Inventory if requested (e.g. for Charms or carrying effects)
-  // Note: Set bonuses typically don't count inventory items unless specified, assumed equipment only above.
   if (includeInventory) {
     agent.inventory.forEach(item => processItem(item));
   }
@@ -93,6 +114,7 @@ export const calculateItemRating = (item: Item | null | undefined): number => {
 
     let rating = (item.stats.str || 0) + (item.stats.agi || 0) + (item.stats.int || 0) + (item.stats.vit || 0);
     rating += (item.stats.dmg || 0) * 2;
+    rating += (item.experience || 0) * 0.1; // Add experience to rating
 
     if (item.effects) {
         item.effects.forEach(effect => {
@@ -107,7 +129,6 @@ export const calculateItemRating = (item: Item | null | undefined): number => {
         });
     }
     
-    // Slight bump for being part of a set to encourage collecting
     if (item.setName) rating += 10;
 
     return Math.floor(rating);
@@ -122,12 +143,11 @@ export const calculateCombatRating = (agent: Agent): number => {
     let rating = agent.stats.str + agent.stats.agi + agent.stats.int + agent.stats.vit;
     rating += (agent.equipment.mainHand?.stats?.dmg || 0) * 2;
     
-    // Add weighted value from effects
-    rating += (effects.CRIT_CHANCE || 0) * 20;   // High value
-    rating += (effects.LIFESTEAL || 0) * 10;     // Medium value
-    rating += (effects.THORNS || 0) * 5;         // Low value
-    rating += (effects.PASSIVE_REGEN || 0) * 5;  // Low value
-    rating += (effects.ON_HIT_STUN || 0) * 15;   // High value
+    rating += (effects.CRIT_CHANCE || 0) * 20;
+    rating += (effects.LIFESTEAL || 0) * 10;
+    rating += (effects.THORNS || 0) * 5;
+    rating += (effects.PASSIVE_REGEN || 0) * 5;
+    rating += (effects.ON_HIT_STUN || 0) * 15;
     rating += (effects.ON_HIT_SLOW || 0) * 5;
     
     return Math.floor(rating);

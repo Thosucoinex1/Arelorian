@@ -5,155 +5,157 @@ export enum AgentState {
   COMBAT = 'COMBAT',
   CRAFTING = 'CRAFTING',
   ASCENDING = 'ASCENDING',
-  QUESTING = 'QUESTING'
+  QUESTING = 'QUESTING',
+  THINKING = 'THINKING',
+  TRADING = 'TRADING',
+  BUILDING = 'BUILDING'
 }
 
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'NECK' | 'WAIST' | 'FINGER' | 'RESOURCE';
+export type ResourceType = 'WOOD' | 'ORE' | 'FOOD' | 'SOUL_SHARD';
 
-export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'NECK' | 'WAIST' | 'FINGER';
+export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT';
 
-export type ItemSubtype = 
-  // Weapons
-  | 'SWORD_1H' | 'AXE_1H' | 'MACE_1H' | 'DAGGER' 
-  | 'SWORD_2H' | 'AXE_2H' | 'STAFF_2H' | 'BOW' | 'CROSSBOW'
-  // Offhand
-  | 'SHIELD' | 'TOME' | 'ARTIFACT'
-  // Armor
-  | 'PLATE' | 'CHAIN' | 'LEATHER' | 'CLOTH'
-  // Accessories
-  | 'RING' | 'AMULET' | 'BELT'
-  | 'NONE';
-
-export type AbilityType = 'CONSECRATE' | 'SHIELD_DRONE' | 'VOID_STEP' | 'ARCANE_WARD';
 export type ItemEffectType = 'ON_HIT_SLOW' | 'ON_HIT_STUN' | 'PASSIVE_REGEN' | 'THORNS' | 'CRIT_CHANCE' | 'LIFESTEAL';
-
-export interface ItemStats {
-  str?: number;
-  agi?: number;
-  int?: number;
-  vit?: number;
-  dmg?: number;
-}
 
 export interface ItemEffect {
   type: ItemEffectType;
   value: number;
-  chance?: number;
-  duration?: number;
   description: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  message: string;
+  channel: ChatChannel;
+  timestamp: number;
+}
+
+export interface MemoryEntry {
+  id: string;
+  timestamp: number;
+  description: string;
+  importance: number; // 0.0 - 1.0
+}
+
+export interface ThinkingMatrix {
+  personality: string;
+  currentLongTermGoal: string;
+  alignment: number; // -1 (Chaos) bis 1 (Ordnung)
+  languagePreference: 'EN' | 'DE' | 'MIXED';
+}
+
+export interface AgentSkills {
+  mining: number;
+  woodcutting: number;
+  farming: number;
+  crafting: number;
+  negotiation: number;
+}
+
+export interface ItemStats {
+  dmg?: number;
+  str?: number;
+  agi?: number;
+  int?: number;
+  vit?: number;
 }
 
 export interface Item {
   id: string;
   name: string;
   type: ItemType;
-  subtype: ItemSubtype;
+  subtype: string;
   rarity: ItemRarity;
   stats: ItemStats;
   effects?: ItemEffect[];
-  setName?: string;
+  quantity?: number;
+  description: string;
   color: string;
   iconColor: string;
-  description: string;
+  setName?: string;
+  experience?: number;
 }
 
-export interface AgentStats {
-  str: number;
-  agi: number;
-  int: number;
-  vit: number;
-  hp: number;
-  maxHp: number;
-}
-
-export interface Quest {
+export interface AuctionListing {
   id: string;
-  title: string;
-  description: string;
-  issuerId: string; // NPC or Agent ID
-  rewardGold: number;
-  status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED';
-}
-
-export interface ActiveEffect {
-  type: AbilityType;
-  duration: number; // Seconds remaining
+  itemId: string;
+  sellerId: string;
+  price: number;
+  item: Item;
+  expiresAt: number;
 }
 
 export interface Agent {
   id: string;
   name: string;
-  classType: 'Paladin' | 'Technomancer' | 'Scribe' | 'Voidwalker' | 'NPC_Smith' | 'NPC_Trader' | 'NPC_Quester';
+  classType: string;
   position: [number, number, number];
   rotationY: number;
   level: number;
   state: AgentState;
   soulDensity: number;
-  guildId?: string;
-  targetPosition?: [number, number, number];
-  loreSnippet?: string;
+  gold: number;
+  isAwakened?: boolean;
   
-  // RPG Data
-  baseStats: AgentStats; // Intrinsic stats without gear
-  stats: AgentStats;     // Effective stats (Base + Gear)
+  // Cognitive Systems
+  memoryCache: MemoryEntry[];
+  thinkingMatrix: ThinkingMatrix;
+  skills: AgentSkills;
+  
+  // Inventory & Equipment
+  inventory: (Item | null)[];
   equipment: {
     mainHand: Item | null;
     offHand: Item | null;
     head: Item | null;
     chest: Item | null;
     legs: Item | null;
-    neck: Item | null;
-    waist: Item | null;
-    finger1: Item | null;
-    finger2: Item | null;
   };
-  inventory: (Item | null)[];
-  activeQuestId?: string;
   
-  // Ability System
-  cooldowns: Partial<Record<AbilityType, number>>; // Seconds remaining
-  activeEffects: ActiveEffect[];
-  
-  // Item Passive System
-  activeItemEffects: ItemEffect[]; // Aggregated passives from gear
+  loreSnippet?: string;
+  stats: { str: number; agi: number; int: number; vit: number; hp: number; maxHp: number };
 }
 
-export interface LandParcel {
+export interface ResourceNode {
   id: string;
-  ownerId: string | null;
-  coordinates: [number, number];
-  value: number;
-  entropy: number;
-  name: string;
-}
-
-export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'SYSTEM' | 'GUILD';
-
-export interface ChatMessage {
-  id: string;
-  timestamp: number;
-  senderId: string;
-  senderName: string;
-  message: string;
-  channel: ChatChannel;
+  type: ResourceType;
+  position: [number, number, number];
+  amount: number;
 }
 
 export interface LogEntry {
   id: string;
   timestamp: number;
   message: string;
-  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM';
+  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT';
 }
 
-export interface Vegetation {
+export interface LandParcel {
   id: string;
-  type: 'TREE' | 'ROCK' | 'GRASS';
-  position: [number, number, number];
-  scale: number;
-  rotation: number;
+  name: string;
+  coordinates: [number, number];
+  value: number;
+  ownerId: string | null;
 }
 
-export enum ViewMode {
-  ORBIT = 'ORBIT',
-  TACTICAL = 'TACTICAL'
+export interface Quest {
+  id: string;
+  timestamp: number;
+  title: string;
+  description: string;
+  rewardGold: number;
+}
+
+// Types for Notary Store
+export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';
+
+export interface StoreProduct {
+  id: ProductType;
+  name: string;
+  description: string;
+  priceEUR: number;
 }

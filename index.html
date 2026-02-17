@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Ouroboros: Axiom Engine</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
@@ -21,17 +22,25 @@
               sans: ['Rajdhani', 'sans-serif'],
               serif: ['Cinzel', 'serif'],
             },
+            screens: {
+              'xs': '480px',
+              'landscape': {'raw': '(orientation: landscape)'},
+              'portrait': {'raw': '(orientation: portrait)'}
+            }
           }
         }
       }
     </script>
     <style>
-      body { margin: 0; background-color: #050505; color: white; overflow: hidden; }
+      body { margin: 0; background-color: #050505; color: white; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
       /* Custom Scrollbar */
-      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: #0f0f15; }
       ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+      
+      /* Mobile Optimizations */
+      .touch-scroll { -webkit-overflow-scrolling: touch; }
     </style>
   <script type="importmap">
 {
