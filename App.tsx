@@ -10,6 +10,7 @@ import { NotaryDashboard } from './components/UI/NotaryDashboard';
 import { AdminDashboard } from './components/UI/AdminDashboard';
 import { WorldMap } from './components/UI/WorldMap';
 import { QuestLog } from './components/UI/QuestLog';
+import { EventOverlay } from './components/UI/EventOverlay';
 import { soundManager } from './services/SoundManager';
 import { VirtualJoysticks } from './components/UI/VirtualJoysticks';
 
@@ -41,7 +42,6 @@ const AuthGate = () => {
                             Assume Notary Role
                         </button>
                     </form>
-                    <p className="text-xs text-gray-600 mt-6">System Notice: Authentication is mocked. Any email will grant access to the Notary Dashboard.</p>
                 </div>
             </div>
         );
@@ -50,31 +50,12 @@ const AuthGate = () => {
     return <App />;
 }
 
-const AppHeader = () => {
-    const { user, logout } = useStore();
-    return (
-        <div className="absolute top-0 left-0 right-0 h-10 bg-black/30 backdrop-blur-sm z-30 flex items-center justify-between px-4 border-b border-white/10 pointer-events-auto">
-            <div className="text-xs">
-                <span className="text-gray-500">Notary: </span>
-                <span className="text-white font-bold">{user?.email}</span>
-            </div>
-            <button onClick={logout} className="text-xs text-gray-400 hover:text-white font-bold uppercase">Logout</button>
-        </div>
-    )
-}
-
 const App = () => {
   const { initGame, showAdmin, showMap, toggleAdmin, toggleMap, device } = useStore();
   const isMobile = device.isMobile;
 
   useEffect(() => {
     initGame();
-    const resumeAudio = () => {
-        soundManager.playUI('CLICK');
-        window.removeEventListener('click', resumeAudio);
-    };
-    window.addEventListener('click', resumeAudio);
-    return () => window.removeEventListener('click', resumeAudio);
   }, [initGame]);
 
   const handleToggle = (setter: (show: boolean) => void, current: boolean) => {
@@ -84,8 +65,8 @@ const App = () => {
 
   return (
     <div className="w-full h-screen relative bg-axiom-dark overflow-hidden font-sans select-none touch-none">
-      <AppHeader />
-      <div className="absolute inset-0 z-0 pt-10">
+      <EventOverlay />
+      <div className="absolute inset-0 z-0">
         <WorldScene />
       </div>
       <div className="absolute inset-0 z-10 pointer-events-none flex justify-between p-2 md:p-4 pt-12">
@@ -97,10 +78,10 @@ const App = () => {
           <ChatConsole />
         </div>
         <div className="h-full flex flex-col items-end justify-between">
-            <div className="flex flex-col items-end gap-2">
-                 <div className="flex gap-2 pointer-events-auto">
-                     <button onClick={() => handleToggle(toggleMap, showMap)} title="World Map" className="w-10 h-10 bg-black/50 border border-white/20 rounded text-gray-300 hover:bg-axiom-purple text-xs font-bold backdrop-blur-sm">MAP</button>
-                     <button onClick={() => handleToggle(toggleAdmin, showAdmin)} title="Admin Console" className="w-10 h-10 bg-black/50 border border-white/20 rounded text-gray-300 hover:bg-axiom-purple text-xs font-bold backdrop-blur-sm">ADM</button>
+            <div className="flex flex-col items-end gap-2 pointer-events-auto">
+                 <div className="flex gap-2">
+                     <button onClick={() => handleToggle(toggleMap, showMap)} className="w-10 h-10 bg-black/50 border border-white/20 rounded text-gray-300 hover:bg-axiom-purple text-xs font-bold">MAP</button>
+                     <button onClick={() => handleToggle(toggleAdmin, showAdmin)} className="w-10 h-10 bg-black/50 border border-white/20 rounded text-gray-300 hover:bg-axiom-purple text-xs font-bold">ADM</button>
                  </div>
                 <QuestLog />
             </div>
@@ -115,9 +96,6 @@ const App = () => {
       <AdminDashboard />
       <WorldMap />
       {isMobile && <VirtualJoysticks />}
-      <div className="absolute bottom-4 right-4 text-white/10 text-6xl font-serif pointer-events-none">
-        OUROBOROS
-      </div>
     </div>
   );
 };

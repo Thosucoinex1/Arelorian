@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useStore } from '../../store';
 
@@ -39,17 +38,26 @@ export const WorldMap = () => {
                     ))}
 
                     {/* Render Agents */}
-                    {agents.map(agent => (
-                        <div
-                            key={agent.id}
-                            className={`absolute w-2 h-2 rounded-full ${agent.classType.startsWith('NPC') ? 'bg-yellow-400' : 'bg-red-500'} border border-black`}
-                            style={{
-                                left: (mapSize / 2) + (agent.position[0] * scale),
-                                top: (mapSize / 2) + (agent.position[2] * scale),
-                                transform: 'translate(-50%, -50%)'
-                            }}
-                        />
-                    ))}
+                    {agents.map(agent => {
+                        const agentColor = agent.faction === 'PLAYER' 
+                            ? 'bg-axiom-cyan' 
+                            : agent.faction === 'CREATURE' 
+                                ? 'bg-red-500' 
+                                : 'bg-soul-fire'; // ANOMALY
+
+                        return (
+                            <div
+                                key={agent.id}
+                                className={`absolute w-2 h-2 rounded-full ${agentColor} border border-black`}
+                                style={{
+                                    left: (mapSize / 2) + (agent.position[0] * scale),
+                                    top: (mapSize / 2) + (agent.position[2] * scale),
+                                    transform: 'translate(-50%, -50%)'
+                                }}
+                                title={`${agent.name} (${agent.faction})`}
+                            />
+                        );
+                    })}
 
                     {/* Crosshair Center */}
                     <div className="absolute top-1/2 left-1/2 w-4 h-0.5 bg-white/20 -translate-x-1/2 -translate-y-1/2" />

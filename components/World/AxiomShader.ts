@@ -1,13 +1,14 @@
 
-// Vertex Shader - Improved for terrain displacement
+// Vertex Shader - High Detail Displacement & Glitch Support
 export const axiomVertexShader = `
 varying vec2 vUv;
 varying vec3 vPosition;
 varying float vElevation;
-// REMOVED: vNormal is no longer needed here as it was providing incorrect flat data.
-// It will be calculated per-pixel in the fragment shader for accurate lighting.
+varying float vGlitch;
 
-// Simplex Noise Function needed in Vertex for displacement
+uniform float uTime;
+uniform float uAwakeningDensity;
+
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 float snoise(vec2 v){
   const vec4 C = vec4(0.211324865405187, 0.366025403784439,
@@ -39,34 +40,38 @@ void main() {
   vUv = uv;
   vec3 pos = position;
   
-  // Gentle displacement
-  float elevation = snoise(pos.xz * 0.02) * 2.0;
-  elevation += snoise(pos.xz * 0.1) * 0.5;
+  // High detail terrain displacement
+  float elevation = snoise(pos.xz * 0.015) * 3.5;
+  elevation += snoise(pos.xz * 0.08) * 0.8;
+  elevation += snoise(pos.xz * 0.4) * 0.15;
   
+  // Dynamic Glitch effect for system instability
+  float glitchFactor = step(0.95, sin(uTime * 2.0 + pos.x * 10.0)) * uAwakeningDensity;
+  pos.x += glitchFactor * 0.5 * snoise(pos.xz + uTime);
+  pos.z += glitchFactor * 0.5 * snoise(pos.zx - uTime);
+  vGlitch = glitchFactor;
+
   pos.y += elevation;
   
-  // We pass the world-space position to the fragment shader
   vec4 modelPosition = modelMatrix * vec4(pos, 1.0);
   vPosition = modelPosition.xyz;
-  
   vElevation = elevation;
 
   gl_Position = projectionMatrix * viewMatrix * modelPosition;
 }
 `;
 
-// Fragment Shader - Rewritten for Procedural Texturing and Correct Lighting
+// Fragment Shader - Advanced Procedural Texturing & Chromatic Aberration
 export const axiomFragmentShader = `
 varying vec2 vUv;
 varying vec3 vPosition;
 varying float vElevation;
-// REMOVED: vNormal varying.
+varying float vGlitch;
 
 uniform float uTime;
 uniform float uAwakeningDensity; 
-uniform float uBiome; // 0: City, 1: Forest, 2: Mountain, 3: Plains
+uniform float uBiome;
 
-// FIX: Noise functions must be declared before they are used by fbm.
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 float snoise(vec2 v){
   const vec4 C = vec4(0.211324865405187, 0.366025403784439,
@@ -94,7 +99,6 @@ float snoise(vec2 v){
   return 130.0 * dot(m, g);
 }
 
-// FBM for texture generation
 float fbm(vec2 p) {
     float f = 0.0;
     f += 0.5000 * snoise(p); p *= 2.02;
@@ -105,48 +109,53 @@ float fbm(vec2 p) {
 }
 
 void main() {
-    // FIX: Calculate normals per-pixel using derivatives for accurate lighting on displaced geometry.
     vec3 normal = normalize(cross(dFdx(vPosition), dFdy(vPosition)));
 
-    // Texture Generation
-    float rock_noise = fbm(vPosition.xz * 0.2);
-    vec3 rock_color = vec3(0.15 + rock_noise * 0.1);
+    // Micro-texture detail
+    float grain = snoise(vPosition.xz * 15.0) * 0.05;
+    
+    // High-fidelity terrain materials
+    float stone_fbm = fbm(vPosition.xz * 0.15);
+    vec3 stone_color = vec3(0.12 + stone_fbm * 0.1) + grain;
 
-    float dirt_noise = fbm(vPosition.xz * 1.5);
-    vec3 dirt_color = vec3(0.2, 0.1, 0.05) * (0.5 + dirt_noise * 0.5);
+    float moss_fbm = fbm(vPosition.xz * 2.5);
+    vec3 moss_color = vec3(0.05, 0.15, 0.05) * (0.6 + moss_fbm * 0.4);
 
-    // Texture Blending based on slope (using the new, correct normal)
     float slope = 1.0 - normal.y;
-    float blend_factor = smoothstep(0.2, 0.6, slope);
-    vec3 terrain_color = mix(dirt_color, rock_color, blend_factor);
+    float blend = smoothstep(0.15, 0.55, slope);
+    vec3 terrain_color = mix(moss_color, stone_color, blend);
     
-    // Biome Coloring
-    if (uBiome == 1.0) { // Forest
-        terrain_color = mix(terrain_color, vec3(0.1, 0.25, 0.1), 0.5);
-    } else if (uBiome == 2.0) { // Mountain
-        terrain_color = mix(terrain_color, vec3(0.3, 0.3, 0.35), 0.6);
-    } else if (uBiome == 3.0) { // Plains
-        terrain_color = mix(terrain_color, vec3(0.3, 0.25, 0.1), 0.4);
+    // Biome Specific Adjustments
+    if (uBiome == 0.0) terrain_color = mix(terrain_color, vec3(0.05), 0.7); // City - Dark asphalt
+    if (uBiome == 2.0) terrain_color = mix(terrain_color, vec3(0.4), 0.5); // Mountain - Snow/Grey
+
+    // Grid System (Axiom Projection)
+    float grid_scale = 0.025;
+    vec2 grid_uv = vPosition.xz * grid_scale;
+    vec2 grid_lines = abs(fract(grid_uv - 0.5) - 0.5) / fwidth(grid_uv);
+    float grid_pattern = 1.0 - min(min(grid_lines.x, grid_lines.y), 1.0);
+    
+    vec3 axiom_cyan = vec3(0.02, 0.8, 1.0);
+    vec3 warning_red = vec3(1.0, 0.1, 0.1);
+    
+    // Glitch Visuals
+    vec3 grid_color = mix(axiom_cyan, warning_red, uAwakeningDensity);
+    if(vGlitch > 0.0) grid_color = mix(grid_color, vec3(1.0), 0.5);
+
+    float grid_alpha = (0.1 + uAwakeningDensity * 0.5) * grid_pattern;
+    vec3 base_with_grid = mix(terrain_color, grid_color, grid_alpha);
+
+    // Final Lighting
+    vec3 sun_dir = normalize(vec3(0.5, 1.0, 0.3));
+    float diff = max(dot(normal, sun_dir), 0.0);
+    vec3 ambient = vec3(0.2);
+    vec3 final_color = base_with_grid * (ambient + diff * 0.8);
+
+    // Chromatic Aberration / Glitch Flash
+    if(vGlitch > 0.5) {
+        final_color.r *= 1.5;
+        final_color.b *= 0.5;
     }
-    
-    // Grid Logic
-    float uGridSize = 0.02;
-    vec3 uGridColor = vec3(0.2, 0.1, 0.8);
-    vec2 grid = abs(fract(vPosition.xz * uGridSize - 0.5) - 0.5) / fwidth(vPosition.xz * uGridSize);
-    float line = min(grid.x, grid.y);
-    float gridPattern = 1.0 - min(line, 1.0);
-
-    // Grid Overlay - Modulated by Awakening Density
-    vec3 axiomCyan = vec3(0.023, 0.713, 0.831);
-    vec3 awakenedGridColor = mix(uGridColor, axiomCyan, uAwakeningDensity);
-    float gridIntensity = (0.05 + uAwakeningDensity * 0.3) * gridPattern;
-    vec3 final_grid_color = mix(terrain_color, awakenedGridColor, gridIntensity);
-
-    // Lighting (using the new, correct normal)
-    vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
-    float diff = max(dot(normal, lightDir), 0.0);
-    vec3 lighting = vec3(0.3) + vec3(0.7) * diff;
-    vec3 final_color = final_grid_color * lighting;
 
     gl_FragColor = vec4(final_color, 1.0);
 }

@@ -9,14 +9,16 @@ export enum AgentState {
   THINKING = 'THINKING',
   TRADING = 'TRADING',
   BUILDING = 'BUILDING',
-  HUNTING = 'HUNTING'
+  HUNTING = 'HUNTING',
+  DUNGEONEERING = 'DUNGEONEERING',
+  DEFENDING = 'DEFENDING'
 }
 
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'NECK' | 'WAIST' | 'FINGER' | 'MATERIAL' | 'CONSUMABLE';
-export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'SUNLEAF_HERB';
+export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'SUNLEAF_HERB' | 'ANCIENT_RELIC';
 
-export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT';
+export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT' | 'EVENT';
 
 export type ItemEffectType = 'ON_HIT_SLOW' | 'ON_HIT_STUN' | 'PASSIVE_REGEN' | 'THORNS' | 'CRIT_CHANCE' | 'LIFESTEAL';
 
@@ -95,7 +97,7 @@ export interface Agent {
   id: string;
   name: string;
   classType: string;
-  faction: 'PLAYER' | 'ANOMALY' | 'CREATURE';
+  faction: 'PLAYER' | 'ANOMALY' | 'CREATURE' | 'SYSTEM' | 'NPC' | 'VIKING';
   position: [number, number, number];
   rotationY: number;
   level: number;
@@ -130,22 +132,25 @@ export interface ResourceNode {
   type: ResourceType;
   position: [number, number, number];
   amount: number;
+  isChest?: boolean;
 }
 
 export interface LogEntry {
   id: string;
   timestamp: number;
   message: string;
-  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'GUILD';
+  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'GUILD' | 'WATCHDOG' | 'EVENT';
 }
 
-export type StructureType = 'HOUSE' | 'BANK';
+export type StructureType = 'HOUSE' | 'BANK' | 'SMITH' | 'MARKET' | 'OUTPOST' | 'CAVE_ENTRANCE' | 'DARK_CHURCH';
 
 export interface Structure {
   id: string;
   type: StructureType;
   name: string;
   builtAt: number;
+  ownerId?: string | null;
+  position?: [number, number, number];
 }
 
 export interface LandParcel {
@@ -167,7 +172,16 @@ export interface Quest {
   questGiverId?: string | null;
 }
 
-// Types for Notary Store
+export interface WorldEvent {
+  id: string;
+  type: 'RAID' | 'FESTIVAL' | 'ECLIPSE';
+  title: string;
+  description: string;
+  startTime: number;
+  endTime: number;
+  active: boolean;
+}
+
 export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';
 
 export interface StoreProduct {

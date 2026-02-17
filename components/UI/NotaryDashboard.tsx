@@ -10,6 +10,47 @@ const storeProducts: StoreProduct[] = [
     { id: 'NOTARY_LICENSE', name: 'Notary License (T3)', description: 'Allows Guild & City foundation.', priceEUR: 30.00 }
 ];
 
+const WatchdogMonitor: React.FC = () => {
+    const { serverStats, logs } = useStore();
+    const watchdogLogs = logs.filter(l => l.type === 'WATCHDOG').slice(0, 10);
+    const threatColor = serverStats.threatLevel > 0.7 ? 'text-red-500' : serverStats.threatLevel > 0.3 ? 'text-yellow-500' : 'text-axiom-cyan';
+
+    return (
+        <div className="flex-1 flex flex-col p-4 space-y-4 overflow-hidden">
+            <div className="bg-black/40 border border-white/10 p-4 rounded-lg text-center">
+                <h3 className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">System Entropy</h3>
+                <div className={`text-3xl font-serif ${threatColor} font-bold`}>
+                    {(serverStats.threatLevel * 100).toFixed(1)}%
+                </div>
+                <div className="w-full h-1 bg-gray-800 rounded-full mt-3 overflow-hidden">
+                    <div 
+                        className={`h-full transition-all duration-500 ${serverStats.threatLevel > 0.5 ? 'bg-red-500' : 'bg-axiom-cyan'}`}
+                        style={{ width: `${serverStats.threatLevel * 100}%` }}
+                    ></div>
+                </div>
+            </div>
+
+            <div className="flex-1 bg-black/20 rounded-lg p-3 overflow-y-auto border border-white/5 space-y-2">
+                <h4 className="text-[9px] text-axiom-gold font-bold uppercase mb-2">Watchdog Logs</h4>
+                {watchdogLogs.length === 0 ? (
+                    <div className="text-[10px] text-gray-600 italic">No threats detected. System status: SECURE.</div>
+                ) : (
+                    watchdogLogs.map(log => (
+                        <div key={log.id} className="text-[9px] border-l border-axiom-gold/30 pl-2 py-1 leading-tight">
+                            <span className="text-axiom-gold/50 mr-2">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                            <span className="text-gray-300">{log.message}</span>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            <button className="w-full bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-500 text-[10px] font-bold py-2 rounded uppercase tracking-widest transition-all">
+                EMERGENCY FLUSH PROTOCOL
+            </button>
+        </div>
+    );
+};
+
 const Developments: React.FC<{ parcels: LandParcel[]; user: User | null; build: (pId: string, sType: StructureType) => void; certify: (pId: string) => void; }> = ({ parcels, user, build, certify }) => {
     const owned = parcels.filter(p => p.ownerId === user?.id);
     if (owned.length === 0) {
@@ -42,7 +83,7 @@ export const NotaryDashboard = () => {
   const [isMinimized, setIsMinimized] = useState(device.isMobile);
   const [isPayPalOpen, setPayPalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
-  const [activeTab, setActiveTab] = useState<'STATUS' | 'REGISTRY' | 'DEVELOP'>('STATUS');
+  const [activeTab, setActiveTab] = useState<'STATUS' | 'WATCHDOG' | 'DEVELOP'>('STATUS');
 
   const awakenedCount = agents.filter(a => a.isAwakened).length;
   const widthClass = isMinimized ? 'w-12' : (device.isMobile ? 'w-64' : 'w-80');
@@ -68,7 +109,7 @@ export const NotaryDashboard = () => {
           <div className="flex-1 flex flex-col overflow-hidden">
               <div className="flex border-b border-white/10">
                   <TabButton label="Status" isActive={activeTab === 'STATUS'} onClick={() => setActiveTab('STATUS')} />
-                  <TabButton label="Grundbuch" isActive={activeTab === 'REGISTRY'} onClick={() => setActiveTab('REGISTRY')} />
+                  <TabButton label="Watchdog" isActive={activeTab === 'WATCHDOG'} onClick={() => setActiveTab('WATCHDOG')} />
                   <TabButton label="Develop" isActive={activeTab === 'DEVELOP'} onClick={() => setActiveTab('DEVELOP')} />
               </div>
               
@@ -92,7 +133,7 @@ export const NotaryDashboard = () => {
                     </div>
                   </div>
               )}
-              {activeTab === 'REGISTRY' && <LandRegistry parcels={landParcels} user={user} />}
+              {activeTab === 'WATCHDOG' && <WatchdogMonitor />}
               {activeTab === 'DEVELOP' && <Developments parcels={landParcels} user={user} build={buildStructure} certify={certifyParcel} />}
           </div>
         )}
@@ -100,25 +141,6 @@ export const NotaryDashboard = () => {
     </>
   );
 };
-
-const LandRegistry: React.FC<{ parcels: LandParcel[]; user: User | null; }> = ({ parcels, user }) => (
-    <div className="flex-1 overflow-y-auto p-4 space-y-2 touch-scroll">
-        {parcels.map(p => {
-            const isOwner = p.ownerId === user?.id;
-            return (
-                <div key={p.id} className={`p-2 rounded border text-xs transition-all ${isOwner ? 'bg-axiom-gold/10 border-axiom-gold/50' : 'bg-white/5 border-white/10'}`}>
-                    <div className="flex justify-between items-center">
-                        <span className={isOwner ? 'text-axiom-gold font-bold' : 'text-white'}>{p.name}</span>
-                        <span className="text-[10px] text-gray-500">[{p.coordinates.join(', ')}]</span>
-                    </div>
-                    <div className="text-[10px] mt-1">
-                        Owner: <span className="font-mono text-gray-400">{p.ownerId ? p.ownerId.slice(0,12) : 'UNCLAIMED'}</span>
-                    </div>
-                </div>
-            )
-        })}
-    </div>
-);
 
 const TabButton: React.FC<{ label: string; isActive: boolean; onClick: () => void }> = ({ label, isActive, onClick }) => (
     <button onClick={onClick} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'bg-white/10 text-axiom-cyan' : 'text-gray-500 hover:bg-white/5'}`}>

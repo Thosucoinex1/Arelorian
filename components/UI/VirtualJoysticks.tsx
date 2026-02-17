@@ -1,3 +1,4 @@
+
 import React, { useRef, useState } from 'react';
 import { useStore } from '../../store';
 
@@ -15,7 +16,6 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
 
     const handleTouchStart = (e: React.TouchEvent) => {
         e.preventDefault();
-        // FIX: Directly access the touch object and add a check for its existence.
         const touch = e.changedTouches[0];
         if (touch && touchId.current === null) {
             touchId.current = touch.identifier;
@@ -27,14 +27,10 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
     const handleTouchMove = (e: React.TouchEvent) => {
         e.preventDefault();
         if (touchId.current !== null) {
-            // FIX: The `find` method was causing type inference issues, switched to a standard for loop.
-            let touch: Touch | null = null;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === touchId.current) {
-                    touch = e.changedTouches[i];
-                    break;
-                }
-            }
+            // FIX: Explicitly cast the found touch to the Touch interface to resolve 'unknown' property access errors.
+            const touch = Array.from(e.changedTouches).find(
+                (t: Touch) => t.identifier === touchId.current
+            ) as Touch | undefined;
 
             if (touch && base) {
                 let dx = touch.clientX - base.x;
@@ -61,16 +57,12 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
 
     const handleTouchEnd = (e: React.TouchEvent) => {
         e.preventDefault();
-        // FIX: The `find` method was causing type inference issues, switched to a standard for loop.
-        let touchFound = false;
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === touchId.current) {
-                touchFound = true;
-                break;
-            }
-        }
+        // FIX: Explicitly cast the found touch to the Touch interface to resolve 'unknown' property access errors.
+        const touch = Array.from(e.changedTouches).find(
+            (t: Touch) => t.identifier === touchId.current
+        ) as Touch | undefined;
         
-        if (touchFound) {
+        if (touch) {
             touchId.current = null;
             setBase(null);
             setNub({ x: 0, y: 0 });

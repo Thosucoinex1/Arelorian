@@ -141,7 +141,8 @@ const InventoryItem: React.FC<{
 const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
     const setCounts: Record<string, number> = {};
     // FIX: Switched to Object.values for cleaner, type-safe iteration over equipment items.
-    Object.values(agent.equipment).forEach((item) => {
+    // FIX: Explicitly type `item` as `Item | null` to resolve type inference issues.
+    Object.values(agent.equipment).forEach((item: Item | null) => {
         if (item?.setName) {
             setCounts[item.setName] = (setCounts[item.setName] || 0) + 1;
         }
@@ -152,7 +153,7 @@ const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
         const setDef = ITEM_SETS[setName];
         if (!setDef) return;
 
-        // FIX: The previous implementation using Object.keys was causing type errors. This version iterates over entries for type safety.
+        // FIX: Using Object.entries is a safe way to iterate over the set definition's numeric keys.
         Object.entries(setDef).forEach(([thresholdStr, effects]) => {
             const threshold = Number(thresholdStr);
             if (count >= threshold) {

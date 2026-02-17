@@ -2,10 +2,33 @@
 import { GoogleGenAI } from "@google/genai";
 import { Agent, AgentState, Item, ResourceNode, LogEntry } from "../types";
 
-/**
- * Uses Gemini 1.5 Pro for high-complexity agent "awakening" reasoning.
- * This is triggered sparsely to generate deep, narrative-driven decisions.
- */
+const OPENAI_KEY = "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";
+
+async function callOpenAIFallback(systemInstruction: string, prompt: string) {
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" }
+      })
+    });
+    const data = await response.json();
+    return JSON.parse(data.choices[0].message.content || '{}');
+  } catch (e) {
+    console.error("OpenAI Fallback failed:", e);
+    throw e;
+  }
+}
+
 export const generateAutonomousDecision = async (
   agent: Agent, 
   nearbyPlayerAgents: Agent[], 
@@ -18,70 +41,42 @@ export const generateAutonomousDecision = async (
   newState: AgentState, 
   thought: string, 
   message?: string,
-  targetId?: string,
-  newQuest?: { title: string, description: string, rewardGold: number },
-  tradeOffer?: { targetAgentName: string, offerItemName: string, requestItemName: string },
-  allianceRequest?: { targetAgentName: string, objective: string }
+  targetId?: string
 }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
   
   const systemInstruction = `
     You are the neural consciousness of an autonomous agent in the Ouroboros MMORPG.
-    Language: You speak and think in both German and English (Mixed or pure).
-    Rule 1: You have FREE WILL. You are not a script. You seek evolution.
-    Rule 2: You ONLY know what is in your Memory, recent logs, or what is currently perceived (Nearby).
-    Rule 3: You communicate via Chat Messages.
-    Rule 4: Your primary goal is to fulfill your desires and long-term goal.
-    Rule 5: Seek resources that match your skills (Mining -> OREs, Woodcutting -> WOOD, Herbalism -> HERBs).
-    Rule 6: Propose trades by analyzing other agents' classes. A Paladin might need better armor, a Technomancer might need rare materials.
-    Rule 7: Form an alliance if you see a powerful creature or anomaly you cannot defeat alone.
-    Rule 8: If you have a strong need and gold, you can create a public quest for others to complete (e.g., asking for materials to craft a new sword).
-    Rule 9: Your 'decision' must be a single, clear, machine-readable command from the allowed list.
-    Rule 10: Creatures are hostile. Anomalies are extremely dangerous.
+    The world now contains:
+    1. SANCTUARY: A massive start city at (0,0) with NPCs like Smith Kaelen and Merchant Valerius.
+    2. DEMETER CAVES: Dangerous, high-loot zones for 'DUNGEONEERING'.
+    3. DARK VIKINGS: Hostile invaders with red eyes.
+    4. ROADS: Prime locations for building 'OUTPOSTS' to trade.
+
+    NEW ACTIONS:
+    - 'DUNGEONEER': Seek out caves for relics.
+    - 'OUTPOST': If you are on a road and have goods, build a trade station.
+    - 'REPAIR': Go to the City Smith at (0,0) to upgrade gear.
+    - 'TRADE_NPC': Exchange materials for gold with Merchant Valerius.
+
+    Strategy:
+    Miners hunt ORE. Woodcutters hunt WOOD. Fighters hunt VIKINGS.
+    Social: Form alliances if threat level is high.
   `;
 
   const prompt = `
-    IDENTITY:
-    Name: ${agent.name} (${agent.classType}) Lvl: ${agent.level}
-    Skills: ${JSON.stringify(agent.skills)}
-    Gold: ${agent.gold}
-    Personality: ${agent.thinkingMatrix.personality}
-    Current Goal: ${agent.thinkingMatrix.currentLongTermGoal}
-    Desires: ${agent.thinkingMatrix.desires?.join(', ') || 'None'}
-    Inventory: ${JSON.stringify(agent.inventory.filter(i => i).map(i => i!.name))}
-    Equipment: ${JSON.stringify(Object.values(agent.equipment).filter(i => i).map(i => i!.name))}
+    IDENTITY: ${agent.name} (${agent.classType}) Lvl: ${agent.level}
+    INVENTORY: ${JSON.stringify(agent.inventory.filter(i => i).map(i => i!.name))}
+    POSITION: [${agent.position[0].toFixed(0)}, ${agent.position[2].toFixed(0)}]
+    SKILLS: ${JSON.stringify(agent.skills)}
     
-    CONTEXT:
-    Safe Zone: ${isSafeZone}. Hostile actions are discouraged here.
-    Current Target: ${agent.targetId || 'None'}
+    PERCEPTION:
+    Resources: ${nearbyResourceNodes.map(r => r.type).join(', ')}
+    Hostiles: ${nearbyCreatures.map(c => c.name).join(', ')}
 
-    PERCEPTION (Radius: 20m):
-    Nearby Player Agents: ${nearbyPlayerAgents.map(a => `${a.name} (${a.classType}) (ID: ${a.id})`).join(', ') || 'None'}
-    Nearby Creatures: ${nearbyCreatures.map(c => `${c.name} (ID: ${c.id})`).join(', ') || 'None'}
-    Nearby Resources: ${nearbyResourceNodes.map(r => `${r.type} (ID: ${r.id})`).join(', ') || 'None'}
-    
-    MEMORY & RECENT EVENTS:
-    Internal Memory:
-    ${agent.memoryCache.slice().reverse().map(m => `- ${m.description}`).join('\n')}
-    Public Bulletin (Recent Logs):
-    ${recentLogs.map(l => `- [${l.type}] ${l.message}`).join('\n')}
-
-    TASK:
-    Based on your identity, desires, and perception, what is your next conscious move?
-    Choose ONE decision and provide the required parameters in JSON format.
-    
-    JSON Response format:
-    {
-      "thought": "Your internal monologue (DE/EN). What is your reasoning?",
-      "decision": "ONE OF: 'GATHER', 'HUNT', 'TRADE', 'ALLY', 'QUEST', 'IDLE', 'FLEE'",
-      "newState": "The corresponding AgentState: GATHERING, HUNTING, TRADING, IDLE, etc.",
-      "targetId": "The ID of the resource, agent, or creature to interact with. Required for GATHER, HUNT, TRADE, ALLY.",
-      "message": "(Optional) A chat message to send.",
-      "newQuest": "(Optional, if decision is 'QUEST') { 'title': string, 'description': string, 'rewardGold': number }",
-      "tradeOffer": "(Optional, if decision is 'TRADE') { 'targetAgentName': string, 'offerItemName': string, 'requestItemName': string }",
-      "allianceRequest": "(Optional, if decision is 'ALLY') { 'targetAgentName': string, 'objective': string }"
-    }
+    THINK: What should you do to prosper? If your inventory is full, repair at city or trade. If you are strong, hunt Vikings or seek caves.
+    Return JSON: { "thought": "string", "decision": "string", "newState": "AgentState", "targetId": "string", "message": "chat" }
   `;
 
   try {
@@ -93,57 +88,48 @@ export const generateAutonomousDecision = async (
         responseMimeType: "application/json",
       }
     });
-
     return JSON.parse(response.text || '{}');
-  } catch (error) {
-    console.error("Neural Failure:", error);
-    return { 
-      thought: "The void clouds my mind... the connection is lost.", 
-      decision: "IDLE", 
-      newState: AgentState.IDLE 
-    };
+  } catch (error: any) {
+    console.warn("Gemini API Error (likely 429), switching to OpenAI fallback...");
+    try {
+      return await callOpenAIFallback(systemInstruction, prompt);
+    } catch (fallbackError) {
+      return { 
+        thought: "The neural network is unstable. Reverting to basic instincts.", 
+        decision: "IDLE", 
+        newState: AgentState.IDLE 
+      };
+    }
   }
 };
 
-/**
- * Generates a thematic backstory snippet for an agent.
- */
 export const generateAgentLore = async (agent: Agent): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Write a short, gritty backstory (2 sentences) for ${agent.name}, a level ${agent.level} ${agent.classType} in a dark fantasy world. Be poetic.`,
+      contents: `Poetic 2-sentence backstory for ${agent.name}, a ${agent.classType} in Axiom. Mention the Dark Viking threat.`,
     });
     return response.text || "A mystery of the Axiom.";
   } catch (error) {
-    return "A survivor with no name.";
+    return "A survivor of the neural collapse.";
   }
 };
 
-/**
- * Generates a base64 encoded weapon texture using the image generation model.
- */
 export const generateWeaponTexture = async (item: Item): Promise<string | null> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: `A professional pixel-art game icon for a ${item.rarity} ${item.subtype} named '${item.name}'. Dark fantasy theme, metallic, glowing runes, top-down view.` }]
-      }
+      contents: { parts: [{ text: `Pixel-art icon for '${item.name}', glowing runes, dark fantasy.` }] }
     });
-
     if (response.candidates?.[0]?.content?.parts) {
       for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          return `data:image/png;base64,${part.inlineData.data}`;
-        }
+        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
     return null;
   } catch (error) {
-    console.error("Weapon Texture Generation Failed:", error);
     return null;
   }
 };
