@@ -1,4 +1,7 @@
 "yaml
+env:
+  FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
 name: Auto-Push-Deploy
 
 on:
@@ -12,14 +15,18 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v2
+
       - name: Install Dependencies
         run: npm install
+
       - name: Build und Deploy
         run: npm run build && npm run deploy
+
       - name: Push to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v1
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: gemini-e603b
-          hostingChannel: main"
+          hostingChannel: main
+```
