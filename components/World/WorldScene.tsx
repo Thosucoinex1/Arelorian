@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '../../store';
-import { Chunk, Agent, StructureType, AgentState } from '../../types';
+import { Chunk, Agent, StructureType, AgentState, LandParcel } from '../../types';
 import { axiomVertexShader, axiomFragmentShader } from './AxiomShader';
 import { soundManager } from '../../services/SoundManager';
 
@@ -80,8 +80,32 @@ const DarkChurch: React.FC<{ position: [number, number, number] }> = ({ position
     </group>
 );
 
-const CityStructure: React.FC<{ type: StructureType, position: [number, number, number] }> = ({ type, position }) => {
-    const color = type === 'SMITH' ? '#d97706' : type === 'BANK' ? '#06b6d4' : '#6366f1';
+const CityStructure: React.FC<{ type: StructureType, position: [number, number, number], name?: string }> = ({ type, position, name }) => {
+    const color = type === 'SMITH' ? '#d97706' : type === 'BANK' ? '#06b6d4' : type === 'HOUSE' ? '#8b5cf6' : '#6366f1';
+    
+    // Custom geometry for houses
+    if (type === 'HOUSE') {
+        return (
+            <group position={position}>
+                 <mesh castShadow position={[0, 1.5, 0]}>
+                    <boxGeometry args={[3, 3, 3]} />
+                    <meshStandardMaterial color="#444" />
+                 </mesh>
+                 <mesh position={[0, 4, 0]} rotation={[0, Math.PI/4, 0]}>
+                     <coneGeometry args={[2.5, 2, 4]} />
+                     <meshStandardMaterial color={color} />
+                 </mesh>
+                 {name && (
+                    <Html position={[0, 6, 0]} center distanceFactor={25}>
+                        <div className="bg-black/80 px-2 py-0.5 rounded border border-purple-500/30 text-[8px] font-sans text-purple-200 whitespace-nowrap">
+                            {name}
+                        </div>
+                    </Html>
+                 )}
+            </group>
+        )
+    }
+
     return (
         <group position={position}>
             <mesh castShadow position={[0, 3, 0]}>
@@ -97,6 +121,39 @@ const CityStructure: React.FC<{ type: StructureType, position: [number, number, 
                     {type}
                 </div>
             </Html>
+        </group>
+    );
+};
+
+const ParcelMarker: React.FC<{ parcel: LandParcel }> = ({ parcel }) => {
+    if (!parcel.ownerId) {
+        return (
+             <group position={parcel.position}>
+                <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.1, 0]}>
+                    <ringGeometry args={[1.5, 1.8, 4]} />
+                    <meshBasicMaterial color="#333" />
+                </mesh>
+             </group>
+        );
+    }
+    
+    const hasStructure = parcel.structures.length > 0;
+    
+    return (
+        <group>
+            {hasStructure ? (
+                <CityStructure type="HOUSE" position={parcel.position} name={parcel.name} />
+            ) : (
+                <group position={parcel.position}>
+                    <mesh position={[0, 0.5, 0]}>
+                        <boxGeometry args={[1, 1, 1]} />
+                        <meshStandardMaterial color="#8b5cf6" wireframe />
+                    </mesh>
+                    <Html position={[0, 2, 0]} center distanceFactor={20}>
+                        <div className="text-[8px] text-purple-400 bg-black/50 px-1 rounded">CLAIMED</div>
+                    </Html>
+                </group>
+            )}
         </group>
     );
 };
@@ -205,46 +262,64 @@ const CameraController = () => {
 }
 
 const GameLoop = () => {
-    const updateAgents = useStore(state => state.updateAgents);
+    const updatePhysics = useStore(state => state.updatePhysics);
     useFrame((_state, delta) => {
-        updateAgents(delta);
+        updatePhysics(delta);
     });
     return null;
 };
 
-const WorldScene = () => {
-  const { agents, selectAgent, stability, loadedChunks } = useStore();
+// Internal component to handle scene content requiring Store access
+const SceneContent = () => {
+    // We select only what is needed to avoid unnecessary re-renders of the Canvas parent
+    // but here we are inside the Canvas, so using hooks is safe.
+    const agents = useStore(state => state.agents);
+    const loadedChunks = useStore(state => state.loadedChunks);
+    const stability = useStore(state => state.stability);
+    const landParcels = useStore(state => state.landParcels);
+    const selectAgent = useStore(state => state.selectAgent);
 
+    return (
+        <Suspense fallback={null}>
+            <GameLoop />
+            <color attach="background" args={['#050505']} /> 
+            <fog attach="fog" args={['#050505', 80, 350]} />
+            
+            <CameraController />
+            
+            <ambientLight intensity={0.4} />
+            <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} />
+            <Stars radius={300} count={6000} factor={4} fade speed={1} />
+            
+            <group>
+                {loadedChunks.map(chunk => (
+                    <TerrainChunk key={chunk.id} chunk={chunk} stability={stability} />
+                ))}
+                <group>
+                    <CityStructure type="SMITH" position={[12, 0, -12]} />
+                    <CityStructure type="MARKET" position={[-12, 0, -12]} />
+                    <CityStructure type="BANK" position={[0, 0, -18]} />
+                    <DemeterCave position={[-45, 0, 45]} />
+                    <DarkChurch position={[60, 0, -60]} />
+                </group>
+                <group>
+                    {landParcels.map(parcel => (
+                        <ParcelMarker key={parcel.id} parcel={parcel} />
+                    ))}
+                </group>
+            </group>
+
+            {agents.map((agent) => (
+              <AgentMesh key={agent.id} agent={agent} onSelect={selectAgent} />
+            ))}
+        </Suspense>
+    );
+};
+
+const WorldScene = () => {
   return (
     <Canvas shadows camera={{ position: [60, 80, 60], fov: 45 }} dpr={[1, 1.5]}>
-      <Suspense fallback={null}>
-        <GameLoop />
-        <color attach="background" args={['#050505']} /> 
-        <fog attach="fog" args={['#050505', 80, 350]} />
-        
-        <CameraController />
-        
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} />
-        <Stars radius={300} count={6000} factor={4} fade speed={1} />
-        
-        <group>
-            {loadedChunks.map(chunk => (
-                <TerrainChunk key={chunk.id} chunk={chunk} stability={stability} />
-            ))}
-            <group>
-                <CityStructure type="SMITH" position={[12, 0, -12]} />
-                <CityStructure type="MARKET" position={[-12, 0, -12]} />
-                <CityStructure type="BANK" position={[0, 0, -18]} />
-                <DemeterCave position={[-45, 0, 45]} />
-                <DarkChurch position={[60, 0, -60]} />
-            </group>
-        </group>
-
-        {agents.map((agent) => (
-          <AgentMesh key={agent.id} agent={agent} onSelect={selectAgent} />
-        ))}
-      </Suspense>
+        <SceneContent />
     </Canvas>
   );
 };

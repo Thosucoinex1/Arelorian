@@ -1,171 +1,194 @@
 
-import React, { useEffect, useState } from 'react';
-import WorldScene from './components/World/WorldScene';
-import { AgentHUD } from './components/UI/AgentHUD';
-import { ChatConsole } from './components/UI/ChatConsole';
+import React, { useEffect, useState, useRef } from 'react';
+import { 
+  ShieldCheck, 
+  Key, 
+  Send,
+  Terminal,
+  BrainCircuit,
+  Activity
+} from 'lucide-react';
 import { useStore } from './store';
+import { AXIOMS } from './types';
+
+// UI Component Imports
+import { AgentHUD } from './components/UI/AgentHUD';
 import { NotaryDashboard } from './components/UI/NotaryDashboard';
-import { EventOverlay } from './components/UI/EventOverlay';
-import { QuestLog } from './components/UI/QuestLog';
 import { CharacterSheet } from './components/UI/CharacterSheet';
+import { QuestLog } from './components/UI/QuestLog';
 import { AdminDashboard } from './components/UI/AdminDashboard';
 import { WorldMap } from './components/UI/WorldMap';
+import { AuctionHouse } from './components/UI/AuctionHouse';
 import { VirtualJoysticks } from './components/UI/VirtualJoysticks';
-import { soundManager } from './services/SoundManager';
+import { EventOverlay } from './components/UI/EventOverlay';
+import { ChatConsole } from './components/UI/ChatConsole';
+import WorldScene from './components/World/WorldScene';
 
-const ChecklistOverlay = () => {
-    const [visible, setVisible] = useState(true);
-    const items = [
-        "ARE-Logic Core (Stability/DNA)",
-        "Grid 35x35 Expansion System",
-        "Hellgate & Dungeon Recursion",
-        "Mount System (Horse mechanics)",
-        "High-Fidelity Character Sheet",
-        "Notary & Land Certification",
-        "World Jackpot (10% fees)"
-    ];
+const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 
-    if (!visible) return null;
-
-    return (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4">
-            <div className="bg-[#111] border border-axiom-cyan p-8 rounded-lg max-w-lg shadow-[0_0_50px_rgba(6,182,212,0.3)]">
-                <h2 className="text-axiom-cyan font-serif text-2xl mb-4 tracking-widest uppercase">System Initialization Checklist</h2>
-                <div className="space-y-3 mb-8">
-                    {items.map((item, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                            <div className="w-4 h-4 border border-axiom-cyan flex items-center justify-center text-[10px] text-axiom-cyan">✓</div>
-                            <span className="text-gray-300 text-sm font-sans">{item}</span>
-                        </div>
-                    ))}
-                </div>
-                <button 
-                    onClick={() => setVisible(false)}
-                    className="w-full bg-axiom-cyan hover:bg-axiom-cyan/80 text-black font-bold py-3 rounded uppercase tracking-widest transition-all"
-                >
-                    SYSTEM ONLINE. Ouroboros-Instanz N+1 initialisiert.
-                </button>
-                <p className="text-center text-[10px] text-gray-500 mt-4 italic">"Das lebendige Haus atmet."</p>
-            </div>
-        </div>
-    );
-}
-
-const AuthGate = () => {
-    const { user, login } = useStore();
-    const [email, setEmail] = useState('');
-
-    if (!user) {
-        return (
-            <div className="w-full h-screen bg-axiom-dark flex items-center justify-center font-sans">
-                <div className="w-96 bg-black/30 border border-axiom-purple/50 rounded-lg p-8 shadow-2xl backdrop-blur-lg text-center">
-                    <h1 className="text-3xl font-serif text-white tracking-widest mb-2">OUROBOROS V3.0</h1>
-                    <p className="text-xs text-axiom-cyan mb-6">SINGULARITÄT: AXIOM REALITY EMERGENCE</p>
-                    <form onSubmit={(e) => { e.preventDefault(); if(email) login(email); }}>
-                        <input
-                            type="email"
-                            placeholder="notary_id@axiom.dev"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-white/5 border border-white/20 p-3 text-sm text-white rounded mb-4 focus:outline-none focus:ring-2 focus:ring-axiom-cyan"
-                            required
-                        />
-                        <button type="submit" className="w-full bg-axiom-purple hover:bg-axiom-purple/80 text-white py-3 rounded font-bold uppercase tracking-wider">
-                            Initialize Singularity
-                        </button>
-                    </form>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <>
-            <ChecklistOverlay />
-            <App />
-        </>
-    );
-}
-
-const App = () => {
-  const { initGame, stability, globalJackpot, showCharacterSheet, showAdmin, showMap, toggleMap, toggleAdmin, hasNotaryLicense, device } = useStore();
+const NeuralTerminal = () => {
+  const { logs, sendSignal } = useStore();
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    initGame();
-  }, []);
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [logs]);
 
   return (
-    <div className="w-full h-screen relative bg-axiom-dark overflow-hidden font-sans select-none touch-none">
-      {/* Top Status HUD */}
-      <div className="absolute top-4 left-4 z-50 flex gap-4 pointer-events-none">
-        <div className="bg-black/60 border border-axiom-cyan/40 p-2 rounded backdrop-blur-md pointer-events-auto cursor-help">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Stability Index</div>
-            <div className={`text-xl font-serif font-black ${stability < 0.7 ? 'text-red-500 animate-pulse' : 'text-axiom-cyan'}`}>
-                {(stability * 100).toFixed(1)}%
-            </div>
-        </div>
-        <div className="bg-black/60 border border-axiom-gold/40 p-2 rounded backdrop-blur-md">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">World Jackpot</div>
-            <div className="text-xl font-serif font-black text-axiom-gold">
-                {globalJackpot.toLocaleString()} G
-            </div>
-        </div>
-        
-        {/* Navigation Controls */}
-        <div className="flex gap-2 pointer-events-auto">
-            <button 
-                onClick={() => { toggleMap(true); soundManager.playUI('CLICK'); }}
-                className="bg-black/60 border border-axiom-cyan/40 px-4 py-2 rounded backdrop-blur-md text-axiom-cyan text-xs font-bold uppercase tracking-widest hover:bg-axiom-cyan/20 transition-all"
-            >
-                World Map
-            </button>
-            {hasNotaryLicense && (
-                <button 
-                    onClick={() => { toggleAdmin(true); soundManager.playUI('CLICK'); }}
-                    className="bg-black/60 border border-axiom-purple/40 px-4 py-2 rounded backdrop-blur-md text-axiom-purple text-xs font-bold uppercase tracking-widest hover:bg-axiom-purple/20 transition-all"
-                >
-                    Admin Console
-                </button>
-            )}
-        </div>
-      </div>
-
-      <EventOverlay />
-      
-      <div className="absolute inset-0 z-0">
-        <WorldScene />
-      </div>
-      
-      {/* HUD Layers */}
-      <div className="absolute inset-0 z-10 pointer-events-none flex justify-between p-4 pt-16">
-        <div className="flex flex-col justify-between h-full">
-          <AgentHUD />
-          <ChatConsole />
-        </div>
-        <div className="h-full flex flex-col items-end">
-            <QuestLog />
-        </div>
-      </div>
-
-      {/* Mobile Controls */}
-      {device.isMobile && <VirtualJoysticks />}
-
-      {/* Right Side Notary Panel */}
-      <div className="absolute top-0 right-0 h-full z-20 pointer-events-none flex items-center pt-10">
-          <NotaryDashboard />
-      </div>
-
-      {/* Modals & Overlays */}
-      {showCharacterSheet && (
-          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
-              <CharacterSheet />
+    <div className="fixed bottom-6 left-6 w-[420px] pointer-events-auto font-sans z-50 hidden md:flex">
+      <div className="bg-black/90 border-2 border-cyan-500/30 rounded-[2rem] overflow-hidden shadow-2xl flex flex-col h-[500px] backdrop-blur-xl">
+        <div className="bg-cyan-900/20 p-4 border-b border-white/5 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-cyan-400" />
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">Neural Terminal v4.5</span>
           </div>
-      )}
+          <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
+        </div>
 
-      {showAdmin && <AdminDashboard />}
-      {showMap && <WorldMap />}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+          {logs.map(log => (
+            <div key={log.id} className="animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[8px] text-gray-600">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                <span className={`text-[9px] font-black uppercase ${
+                  log.sender === 'NOTAR' ? 'text-cyan-400' : 'text-axiom-gold'
+                }`}>{String(log.sender || 'SYSTEM')}</span>
+              </div>
+              <p className={`text-[11px] p-3 rounded-2xl border ${
+                log.sender === 'NOTAR' 
+                  ? 'bg-cyan-500/10 text-cyan-100 border-cyan-500/20' 
+                  : 'bg-axiom-gold/10 text-axiom-gold border-axiom-gold/20'
+              }`}>
+                {String(log.message)}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-4 bg-black/60 border-t border-white/5">
+          <div className="flex gap-2">
+            <input 
+              className="flex-1 bg-gray-900 border border-gray-800 rounded-2xl px-5 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 transition-all"
+              placeholder="Sende Impuls an Matrix..."
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && input && (sendSignal(input), setInput(""))}
+            />
+            <button 
+              onClick={() => { if(input) { sendSignal(input); setInput(""); } }}
+              className="bg-cyan-600 hover:bg-cyan-500 p-3 rounded-2xl transition-all shadow-lg shadow-cyan-900/30"
+            >
+              <Send className="w-5 h-5 text-white" />
+            </button>
+          </div>
+          <div className="flex justify-between items-center mt-3 px-2">
+            <span className="text-[8px] text-gray-600 uppercase">Axiomatic Grounding Active</span>
+            <span className="text-[8px] text-red-500 flex items-center gap-1"><BrainCircuit className="w-3 h-3" /> Neural Bridge</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default AuthGate;
+export default function App() {
+  const { initGame, stability, globalJackpot } = useStore();
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+
+  useEffect(() => { initGame(); }, []);
+
+  if (!isConfirmed) {
+    return (
+      <div className="fixed inset-0 bg-axiom-dark flex items-center justify-center z-[100] p-6 font-sans">
+        <div className="max-w-md w-full bg-black/60 border-2 border-axiom-cyan/40 p-10 rounded-[3rem] text-center shadow-2xl backdrop-blur-xl">
+          <ShieldCheck className="w-16 h-16 text-axiom-cyan mx-auto mb-6 animate-pulse" />
+          <h2 className="text-2xl font-serif font-black text-white mb-2 uppercase tracking-tighter">Axiom Handshake</h2>
+          <p className="text-[10px] text-gray-500 mb-8 uppercase tracking-[0.2em]">Ouroboros Autonomous MMORPG Architect</p>
+          
+          <div className="relative mb-6">
+            <Key className="absolute left-4 top-4 w-5 h-5 text-gray-600" />
+            <input 
+              type="password" 
+              placeholder="UNIVERSAL KEY..." 
+              className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-xs text-axiom-cyan focus:border-axiom-cyan outline-none transition-all"
+              value={keyInput} onChange={e => setKeyInput(e.target.value)}
+            />
+          </div>
+          
+          <button 
+            onClick={() => { if(keyInput === UNIVERSAL_KEY) setIsConfirmed(true); }}
+            className="w-full bg-axiom-cyan py-5 rounded-2xl font-black text-sm text-black hover:bg-white transition-all shadow-xl shadow-cyan-900/40"
+          >
+            INITIALIZE SINGULARITY
+          </button>
+
+          <div className="mt-8 flex justify-center gap-4 text-[9px] text-gray-600 font-mono">
+             <span title={AXIOMS.ENERGY}>ENERGY_SYNC</span>
+             <span title={AXIOMS.RECURSION}>RECURSION_V2</span>
+             <span title={AXIOMS.EROSION}>EROSION_PULSE</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-screen bg-axiom-dark overflow-hidden select-none relative">
+      {/* 3D Scene Layer */}
+      <div className="absolute inset-0 z-0">
+        <WorldScene />
+      </div>
+
+      {/* UI Layer */}
+      <div className="absolute inset-0 pointer-events-none z-40">
+        {/* HUD Elements */}
+        <div className="absolute top-6 left-6 z-50 flex gap-4 pointer-events-none">
+            <div className="bg-black/80 border border-cyan-500/20 p-3 rounded-xl backdrop-blur-md">
+            <div className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-1">Reality Stability</div>
+            <div className={`text-xl font-serif font-black ${stability < 0.7 ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`}>
+                {(Number(stability) * 100).toFixed(1)}%
+            </div>
+            </div>
+            <div className="bg-black/80 border border-axiom-gold/20 p-3 rounded-xl backdrop-blur-md">
+            <div className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-1">Jackpot Reserve</div>
+            <div className="text-xl font-serif font-black text-axiom-gold">
+                {Number(globalJackpot || 0).toLocaleString()} G
+            </div>
+            </div>
+        </div>
+
+        <div className="absolute bottom-6 right-6 pointer-events-auto">
+            <AgentHUD />
+        </div>
+        <div className="absolute right-0 top-0 h-full pointer-events-auto flex items-center">
+            <NotaryDashboard />
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto">
+                <CharacterSheet />
+            </div>
+        </div>
+        
+        <div className="absolute bottom-20 left-6 pointer-events-auto">
+             <ChatConsole />
+        </div>
+
+        <QuestLog />
+        <AdminDashboard />
+        <WorldMap />
+        <AuctionHouse />
+        <VirtualJoysticks />
+        <EventOverlay />
+      </div>
+
+      {/* Terminal Overlay */}
+      <NeuralTerminal />
+      
+      {/* Cinematic Vignette */}
+      <div className="absolute inset-0 pointer-events-none border-[12px] border-white/5 z-50" />
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-black/20 z-10" />
+    </div>
+  );
+}

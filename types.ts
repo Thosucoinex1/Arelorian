@@ -11,11 +11,13 @@ export enum AgentState {
   BUILDING = 'BUILDING',
   DUNGEONEERING = 'DUNGEONEERING',
   MOUNTED = 'MOUNTED',
-  LYING_DOWN = 'LYING_DOWN',
-  HELLGATE_INVASION = 'HELLGATE_INVASION',
   ALLIANCE_FORMING = 'ALLIANCE_FORMING'
 }
 
+/**
+ * --- OUROBOROS AXIOMS ---
+ * Fundamental mathematical grounding for the simulation.
+ */
 export const AXIOMS = {
   ENERGY: 'Verbrauch = ΔRealität / Kapazität',
   EROSION: 'Aktion + Zeit = ↑Korruption',
@@ -27,26 +29,7 @@ export const AXIOMS = {
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'AXIOMATIC';
 export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE';
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
-
 export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT' | 'EVENT' | 'X_BRIDGE';
-
-export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';
-
-export type ItemEffectType = 'CRIT_CHANCE' | 'LIFESTEAL' | 'THORNS' | 'PASSIVE_REGEN' | 'ON_HIT_STUN' | 'ON_HIT_SLOW';
-
-export interface ItemEffect {
-  type: ItemEffectType;
-  value: number;
-  description: string;
-}
-
-export interface ItemStats {
-    dmg?: number;
-    str?: number;
-    agi?: number;
-    int?: number;
-    vit?: number;
-}
 
 export interface AxiomaticDNA {
   hash: string;
@@ -54,11 +37,66 @@ export interface AxiomaticDNA {
   corruption: number;
 }
 
+// Added Item-related types for character management
+export interface ItemStats {
+  str?: number;
+  agi?: number;
+  int?: number;
+  vit?: number;
+  hp?: number;
+}
+
+export interface ItemEffect {
+  description: string;
+  type: string;
+  value: number;
+}
+
+export interface Item {
+  id: string;
+  name: string;
+  type: ItemType;
+  subtype: string;
+  rarity: ItemRarity;
+  stats: ItemStats;
+  description: string;
+  setName?: string;
+}
+
+// Added Structure and Land types for world building
+export type StructureType = 'HOUSE' | 'SMITH' | 'MARKET' | 'BANK' | 'CHURCH' | 'CAVE';
+
+export interface Structure {
+  id: string;
+  type: StructureType;
+  position: [number, number, number];
+}
+
+export interface LandParcel {
+  id: string;
+  name: string;
+  ownerId: string | null; // Changed to nullable to signify unowned land
+  position: [number, number, number]; // Added position for world placement
+  isCertified: boolean;
+  structures: Structure[];
+  price: number;
+}
+
+// Added Store types for acquisitions
+export type ProductType = 'LAND' | 'LICENSE' | 'SKIN';
+
+export interface StoreProduct {
+  id: string;
+  name: string;
+  description: string;
+  priceEUR: number;
+}
+
 export interface Agent {
   id: string;
   name: string;
   classType: string;
-  faction: 'PLAYER' | 'ANOMALY' | 'CREATURE' | 'SYSTEM' | 'NPC' | 'VIKING' | 'DEMON';
+  faction: 'PLAYER' | 'ANOMALY' | 'CREATURE' | 'SYSTEM' | 'NPC';
   position: [number, number, number];
   rotationY: number;
   level: number;
@@ -66,15 +104,16 @@ export interface Agent {
   state: AgentState;
   soulDensity: number;
   gold: number;
-  stabilityIndex: number; // Integrity/Stability
+  stabilityIndex: number; 
   energy: number;
   maxEnergy: number;
-  integrity: number; // Reality coherence (0.0 to 1.0)
+  integrity: number; 
   dna: AxiomaticDNA;
   loreSnippet?: string;
   isAwakened?: boolean;
+  lastChoiceLogic?: string; // Summary of axiomatic choice
   
-  memoryCache: any[];
+  memoryCache: string[];
   thinkingMatrix: {
     personality: string;
     currentLongTermGoal: string;
@@ -83,6 +122,7 @@ export interface Agent {
   };
   skills: Record<string, number>;
   
+  // Updated inventory to use defined Item type
   inventory: (Item | null)[];
   equipment: {
     mainHand: Item | null;
@@ -94,9 +134,7 @@ export interface Agent {
   
   stats: { str: number; agi: number; int: number; vit: number; hp: number; maxHp: number };
   targetId?: string | null;
-  mountId?: string | null;
   alliedId?: string | null;
-  activeQuestId?: string | null;
   stuckTicks?: number; 
   wanderTarget?: [number, number, number] | null;
 }
@@ -106,58 +144,22 @@ export interface Chunk {
   x: number; 
   z: number; 
   biome: string; 
-  depth: number;
   entropy: number;
 }
 
-export interface WorldEvent {
+export interface ResourceNode {
   id: string;
-  type: 'RAID' | 'FESTIVAL' | 'ECLIPSE' | 'HELLGATE_INVASION';
-  title: string;
-  description: string;
-  active: boolean;
-  startTime: number;
-  endTime: number;
-  position?: [number, number, number];
-}
-
-export type StructureType = 'HOUSE' | 'BANK' | 'SMITH' | 'MARKET' | 'OUTPOST' | 'CAVE_ENTRANCE' | 'DARK_CHURCH' | 'ADMIN_TERMINAL';
-
-export interface Structure {
-  id: string;
-  type: StructureType;
-  name: string;
-  builtAt: number;
-}
-
-export interface Item {
-  id: string;
-  name: string;
-  type: ItemType;
-  subtype: string;
-  rarity: ItemRarity;
-  stats: ItemStats;
-  effects?: ItemEffect[];
-  description: string;
-  experience?: number;
-  setName?: string;
-}
-
-export interface LandParcel {
-  id: string;
-  name: string;
-  coordinates: [number, number];
-  ownerId: string | null;
-  value: number;
-  isCertified: boolean;
-  structures: Structure[];
+  type: ResourceType;
+  position: [number, number, number];
+  amount: number;
 }
 
 export interface LogEntry {
   id: string;
   timestamp: number;
   message: string;
-  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'GUILD' | 'WATCHDOG' | 'EVENT';
+  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'WATCHDOG' | 'EVENT';
+  sender?: string;
 }
 
 export interface ChatMessage {
@@ -167,6 +169,7 @@ export interface ChatMessage {
   message: string;
   channel: ChatChannel;
   timestamp: number;
+  // Added eventPosition for navigation functionality in ChatConsole
   eventPosition?: [number, number, number];
 }
 
@@ -178,26 +181,4 @@ export interface Quest {
   timestamp: number;
   issuerId: string;
   position?: [number, number, number];
-}
-
-export interface ResourceNode {
-  id: string;
-  type: ResourceType;
-  position: [number, number, number];
-  amount: number;
-}
-
-export interface AuctionListing {
-  id: string;
-  item: Item;
-  sellerId: string;
-  price: number;
-  expiresAt: number;
-}
-
-export interface StoreProduct {
-  id: string;
-  name: string;
-  description: string;
-  priceEUR: number;
 }

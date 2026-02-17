@@ -1,269 +1,628 @@
 
 import { create } from 'zustand';
 import { 
-  Agent, AgentState, ResourceNode, AuctionListing, LogEntry, 
-  ChatMessage, ChatChannel, Item, ResourceType, LandParcel, 
-  Structure, StructureType, WorldEvent, Chunk, Quest 
+  Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Quest, Item, StructureType, LandParcel, Structure
 } from './types';
+import { getBiomeForChunk, summarizeNeurologicChoice } from './utils';
 import { generateAutonomousDecision } from './services/geminiService';
-import { getBiomeForChunk, calculateAxiomaticWeight, validateAxiom } from './utils';
-import { soundManager } from './services/SoundManager';
 
-export type User = { id: string; email: string };
+export interface User {
+  id: string;
+  name: string;
+}
 
-const WORLD_STRUCTURES = [
-    { name: 'SMITH', pos: [12, -12], radius: 4 },
-    { name: 'MARKET', pos: [-12, -12], radius: 4 },
-    { name: 'BANK', pos: [0, -18], radius: 4 },
-    { name: 'CAVE', pos: [-45, 45], radius: 6 },
-    { name: 'CHURCH', pos: [60, -60], radius: 8 },
-];
+export interface ServerStats {
+  uptime: number;
+  tickRate: number;
+  memoryUsage: number;
+  threatLevel: number;
+}
+
+export interface Event {
+  id: string;
+  type: 'RAID' | 'FESTIVAL';
+  active: boolean;
+  title: string;
+  description: string;
+}
 
 interface GameState {
-  user: User | null;
   agents: Agent[];
-  lastRaidTime: number;
   resourceNodes: ResourceNode[];
-  auctionHouse: AuctionListing[];
   logs: LogEntry[];
   chatMessages: ChatMessage[];
   selectedAgentId: string | null;
   cameraTarget: [number, number, number] | null; 
-  device: { isMobile: boolean; width: number; height: number };
   loadedChunks: Chunk[];
-  activeEvents: WorldEvent[];
   globalJackpot: number;
   stability: number;
-  lastThoughtTime: number;
   lastLocalThinkTime: number;
-  gridSize: number;
-  quests: Quest[];
+  
+  user: User | null;
   hasNotaryLicense: boolean;
   agentSlots: number;
-  serverStats: { uptime: number; tickRate: number; memoryUsage: number; threatLevel: number };
-  graphicPacks: string[];
+  device: { isMobile: boolean };
+  serverStats: ServerStats;
   landParcels: LandParcel[];
+  auctionHouse: any[];
+  activeEvents: Event[];
   showCharacterSheet: boolean;
   showAdmin: boolean;
   showMap: boolean;
-  joystickData: { left: { x: number; y: number }; right: { x: number; y: number }; };
+  graphicPacks: string[];
+  quests: Quest[];
 
-  login: (email: string) => void;
+  // Actions
   initGame: () => void;
-  updateAgents: (delta: number) => void;
-  addChatMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updatePhysics: (delta: number) => void;
+  runCognition: () => void;
+  addLog: (message: string, type: LogEntry['type'], sender?: string) => void;
+  sendSignal: (content: string) => Promise<void>;
   selectAgent: (id: string | null) => void;
   setCameraTarget: (pos: [number, number, number] | null) => void;
-  addLog: (message: string, type: LogEntry['type']) => void;
-  expandGrid: (x: number, z: number) => void;
-  toggleCharacterSheet: (show: boolean) => void;
-  toggleAdmin: (show: boolean) => void;
-  toggleMap: (show: boolean) => void;
+  
+  buildStructure: (pId: string, sType: StructureType) => void;
+  certifyParcel: (pId: string) => void;
+  toggleCharacterSheet: (val: boolean) => void;
   toggleMount: (agentId: string) => void;
-  buildStructure: (parcelId: string, type: StructureType) => void;
-  certifyParcel: (parcelId: string) => void;
+  equipItem: (agentId: string, item: Item, index: number) => void;
+  unequipItem: (agentId: string, slot: any) => void;
+  moveInventoryItem: (agentId: string, from: number, to: number) => void;
   purchaseProduct: (productId: string) => void;
+  toggleAdmin: (val: boolean) => void;
   uploadGraphicPack: (name: string) => void;
-  setJoystick: (side: 'left' | 'right', data: { x: number, y: number }) => void;
-  equipItem: (agentId: string, item: Item, inventoryIndex: number) => void;
-  unequipItem: (agentId: string, slot: string) => void;
-  moveInventoryItem: (agentId: string, fromIndex: number, toIndex: number) => void;
+  toggleMap: (val: boolean) => void;
+  setJoystick: (side: 'left' | 'right', values: {x: number, y: number}) => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
-  user: null, agents: [], resourceNodes: [], auctionHouse: [], logs: [], chatMessages: [], activeEvents: [],
-  selectedAgentId: null, cameraTarget: null, device: { isMobile: /Mobi/i.test(navigator.userAgent), width: window.innerWidth, height: window.innerHeight },
-  loadedChunks: [], globalJackpot: 10000, stability: 1.0, lastThoughtTime: 0, lastLocalThinkTime: 0, lastRaidTime: Date.now(),
-  gridSize: 35, quests: [], hasNotaryLicense: false, agentSlots: 50,
-  serverStats: { uptime: 0, tickRate: 20, memoryUsage: 12.5, threatLevel: 0.1 },
-  graphicPacks: ['Singularity v3.0'], landParcels: [],
-  showCharacterSheet: false, showAdmin: false, showMap: false,
-  joystickData: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } },
-
-  login: (email) => {
-    const isSpecial = email.includes('notary') || email.includes('admin');
-    set({ user: { id: `notary-${Math.random().toString(36).slice(2)}`, email }, hasNotaryLicense: isSpecial });
-  },
+  agents: [], resourceNodes: [], logs: [], chatMessages: [],
+  selectedAgentId: null, cameraTarget: null, loadedChunks: [],
+  globalJackpot: 50000, stability: 1.0, lastLocalThinkTime: 0,
   
-  toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
-  toggleAdmin: (show) => set({ showAdmin: show }),
-  toggleMap: (show) => set({ showMap: show }),
-  setJoystick: (side, data) => set(state => ({ joystickData: { ...state.joystickData, [side]: data } })),
+  user: { id: 'user_1', name: 'Observer_1' },
+  hasNotaryLicense: false,
+  agentSlots: 15,
+  device: { isMobile: window.innerWidth < 768 },
+  serverStats: { uptime: 0, tickRate: 60, memoryUsage: 120, threatLevel: 0.05 },
+  landParcels: [],
+  auctionHouse: [],
+  activeEvents: [],
+  showCharacterSheet: false,
+  showAdmin: false,
+  showMap: false,
+  graphicPacks: ['Standard Axiom Pack'],
+  quests: [],
 
-  uploadGraphicPack: (name) => set(state => ({
-      graphicPacks: [...state.graphicPacks, name],
-      logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: `Graphic Pack '${name}' synchronized.`, type: 'SYSTEM' }, ...state.logs]
-  })),
-
-  equipItem: (agentId, item, inventoryIndex) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return {};
-      const slot = item.type === 'WEAPON' ? 'mainHand' : item.type === 'OFFHAND' ? 'offHand' : item.type === 'HELM' ? 'head' : item.type === 'CHEST' ? 'chest' : 'legs';
-      const prevItem = (agent.equipment as any)[slot];
-      const newInventory = [...agent.inventory];
-      newInventory[inventoryIndex] = prevItem || null;
-      const newEquipment = { ...agent.equipment, [slot]: item };
-      soundManager.playUI('CLICK');
-      return { agents: state.agents.map(a => a.id === agentId ? { ...a, equipment: newEquipment, inventory: newInventory } : a) };
-  }),
-
-  unequipItem: (agentId, slot) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return {};
-      const item = (agent.equipment as any)[slot];
-      if (!item) return {};
-      const firstEmpty = agent.inventory.indexOf(null);
-      if (firstEmpty === -1) {
-          state.addLog("Inventory full!", 'SYSTEM');
-          return {};
-      }
-      const newInventory = [...agent.inventory];
-      newInventory[firstEmpty] = item;
-      const newEquipment = { ...agent.equipment, [slot]: null };
-      soundManager.playUI('CLICK');
-      return { agents: state.agents.map(a => a.id === agentId ? { ...a, equipment: newEquipment, inventory: newInventory } : a) };
-  }),
-
-  moveInventoryItem: (agentId, from, to) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return {};
-      const newInv = [...agent.inventory];
-      [newInv[from], newInv[to]] = [newInv[to], newInv[from]];
-      return { agents: state.agents.map(a => a.id === agentId ? { ...a, inventory: newInv } : a) };
-  }),
-
-  toggleMount: (agentId) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return {};
-      const isMounted = agent.state === AgentState.MOUNTED;
-      const newState = isMounted ? AgentState.IDLE : AgentState.MOUNTED;
-      soundManager.playUI('CLICK');
-      return {
-          agents: state.agents.map(a => a.id === agentId ? { ...a, state: newState } : a),
-          logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: isMounted ? 'Dismounted.' : 'Mounted Horse.', type: 'SYSTEM' }, ...state.logs]
-      };
-  }),
-
-  buildStructure: (parcelId, type) => set(state => ({ logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: `Building ${type}...`, type: 'SYSTEM' }, ...state.logs] })),
-  certifyParcel: (parcelId) => set(state => ({ logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: `Parcel ${parcelId} Certified.`, type: 'AXIOM' }, ...state.logs] })),
-  purchaseProduct: (productId) => set(state => productId === 'NOTARY_LICENSE' ? { hasNotaryLicense: true } : {}),
-
-  initGame: () => {
-    const { gridSize } = get();
-    const radius = Math.floor(gridSize / 2);
-    const newChunks = [];
-    for (let x = -radius; x <= radius; x++) {
-      for (let z = -radius; z <= radius; z++) {
-        newChunks.push({ id: `${x},${z}`, x, z, biome: getBiomeForChunk(x, z), depth: 0, entropy: Math.random() });
-      }
-    }
-    const startPlayer: Agent = {
-      id: 'player-1', name: 'RRA-Architect', classType: 'Novice', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, state: AgentState.IDLE, soulDensity: 0.8, gold: 500, stabilityIndex: 1.0, energy: 100, maxEnergy: 100, integrity: 1.0, dna: { hash: 'axiom-001', generation: 1, corruption: 0 }, memoryCache: [], thinkingMatrix: { personality: 'Recursive', currentLongTermGoal: 'Build City', alignment: 1, languagePreference: 'MIXED' }, skills: { woodcutting: 1, mining: 1 }, inventory: Array(32).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, stuckTicks: 0, wanderTarget: null
-    };
-    set({ loadedChunks: newChunks, agents: [startPlayer] });
-  },
-
-  expandGrid: (targetX, targetZ) => set(state => {
-      const existingIds = new Set(state.loadedChunks.map(c => c.id));
-      const newChunks = [];
-      for (let x = targetX - 1; x <= targetX + 1; x++) {
-        for (let z = targetZ - 1; z <= targetZ + 1; z++) {
-          if (!existingIds.has(`${x},${z}`)) newChunks.push({ id: `${x},${z}`, x, z, biome: getBiomeForChunk(x, z), depth: 0, entropy: Math.random() });
-        }
-      }
-      return newChunks.length > 0 ? { loadedChunks: [...state.loadedChunks, ...newChunks] } : {};
-  }),
-
-  addChatMessage: (msg) => set(state => ({ chatMessages: [...state.chatMessages, { ...msg, id: Math.random().toString(), timestamp: Date.now() }].slice(-100) })),
   selectAgent: (id) => set({ selectedAgentId: id }),
   setCameraTarget: (pos) => set({ cameraTarget: pos }),
-  addLog: (message, type) => set(state => ({ logs: [{ id: Math.random().toString(), timestamp: Date.now(), message, type }, ...state.logs].slice(0, 50) })),
 
-  updateAgents: async (delta) => {
-    const state = get();
-    const now = Date.now();
-    const xpForLevel = (lvl: number) => Math.floor(1000 * Math.pow(1.025, lvl - 1));
+  addLog: (message, type, sender = 'SYSTEM') => set(state => ({ 
+    logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: String(message), type, sender: String(sender) }, ...state.logs].slice(0, 60) 
+  })),
 
-    // --- DEEP COGNITION (API) ---
-    if (now - state.lastThoughtTime > 20000) {
-      set({ lastThoughtTime: now });
-      const activeAgents = state.agents.filter(a => (a.faction === 'PLAYER' || a.faction === 'NPC') && a.integrity > 0.3);
-      if (activeAgents.length > 0) {
-        const agent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
-        try {
-          const decision = await generateAutonomousDecision(agent, state.agents.filter(a => a.id !== agent.id), state.resourceNodes, state.logs.slice(0, 5), false);
-          if (decision.message) state.addChatMessage({ senderId: agent.id, senderName: agent.name, message: decision.message, channel: decision.quest ? 'EVENT' : 'THOUGHT', eventPosition: decision.quest?.position });
-          set(s => ({ agents: s.agents.map(a => a.id === agent.id ? { ...a, state: decision.newState, targetId: decision.targetId || a.targetId } : a) }));
-        } catch (e) { console.error("AI Error", e); }
+  initGame: () => {
+    const newChunks: Chunk[] = [];
+    for (let x = -2; x <= 2; x++) {
+      for (let z = -2; z <= 2; z++) {
+        newChunks.push({ id: `${x},${z}`, x, z, biome: getBiomeForChunk(x, z), entropy: Math.random() });
       }
     }
-
-    // --- NEUROLOGIC PULSE (LOCAL COGNITION) ---
-    if (now - state.lastLocalThinkTime > 4000) {
-        set({ lastLocalThinkTime: now });
-        set(s => ({
-            agents: s.agents.map(agent => {
-                if (agent.faction !== 'PLAYER' && agent.faction !== 'NPC') return agent;
-                
-                // Integrity Erosion & Recovery
-                let nextIntegrity = agent.integrity;
-                if (agent.state === AgentState.THINKING) nextIntegrity = Math.min(1.0, agent.integrity + 0.05);
-                else nextIntegrity = Math.max(0.05, agent.integrity - 0.001); // Slow passive decay
-
-                // Local Decision weighting
-                const possibleActions = [AgentState.IDLE, AgentState.GATHERING, AgentState.ALLIANCE_FORMING, AgentState.THINKING, AgentState.TRADING];
-                let bestAction = agent.state;
-                let maxWeight = -1;
-                const nearbyAgents = s.agents.filter(a => a.id !== agent.id && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 30);
-                const nearbyResources = s.resourceNodes.filter(r => Math.hypot(r.position[0]-agent.position[0], r.position[2]-agent.position[2]) < 50);
-
-                possibleActions.forEach(action => {
-                    const weight = calculateAxiomaticWeight(agent, action, nearbyAgents, nearbyResources);
-                    if (weight > maxWeight) { maxWeight = weight; bestAction = action; }
-                });
-
-                // Axiom Validation
-                const cost = bestAction === AgentState.IDLE ? 0 : 5;
-                if (!validateAxiom(agent, cost)) bestAction = AgentState.IDLE;
-
-                return { ...agent, state: bestAction, integrity: nextIntegrity };
-            })
-        }));
+    
+    // Create initial resources for agents to find
+    const resources: ResourceNode[] = [];
+    for(let i=0; i<20; i++) {
+        resources.push({
+            id: `res_${i}`,
+            type: Math.random() > 0.5 ? 'WOOD' : 'STONE',
+            position: [(Math.random()-0.5)*80, 0, (Math.random()-0.5)*80],
+            amount: 100
+        });
     }
 
-    // --- PHYSICAL & AXIOMATIC UPDATE LOOP ---
+    // Initialize Land Parcels in a ring formation
+    const parcels: LandParcel[] = [];
+    const parcelCount = 12;
+    const radius = 50;
+    for(let i=0; i<parcelCount; i++) {
+        const angle = (i / parcelCount) * Math.PI * 2;
+        parcels.push({
+            id: `plot_${i}`,
+            name: `Plot ${i+1}`,
+            ownerId: null,
+            position: [Math.sin(angle) * radius, 0, Math.cos(angle) * radius],
+            isCertified: false,
+            structures: [],
+            price: 300 // Gold cost to build
+        });
+    }
+
+    const agents: Agent[] = Array(12).fill(0).map((_, i) => ({
+      id: `agent_${i}`,
+      name: `Entity_${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      classType: ['Paladin', 'Technomancer', 'Scout'][i % 3],
+      faction: i === 0 ? 'PLAYER' : 'NPC',
+      position: [(Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40],
+      rotationY: Math.random() * Math.PI * 2,
+      level: 1, xp: 0,
+      state: AgentState.IDLE,
+      soulDensity: 0.5, gold: 350, // Initial gold boost to allow early building for testing
+      stabilityIndex: 1.0, energy: 100, maxEnergy: 100, integrity: 1.0,
+      dna: { hash: Math.random().toString(36).slice(2), generation: 1, corruption: 0 },
+      memoryCache: [],
+      thinkingMatrix: { personality: 'Analytical', currentLongTermGoal: 'Observe System', alignment: 0.2, languagePreference: 'MIXED' },
+      skills: { 
+          gathering: Math.random() * 5, 
+          logic: Math.random() * 5,
+          mining: i % 3 === 0 ? Math.random() * 10 : 0,
+          woodcutting: i % 3 === 1 ? Math.random() * 10 : 0
+      },
+      inventory: Array(10).fill(null),
+      equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
+      stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 },
+      stuckTicks: 0, wanderTarget: null
+    }));
+    
+    set({ loadedChunks: newChunks, agents, resourceNodes: resources, landParcels: parcels });
+
+    // Send required startup code
+    get().addLog('GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I', 'SYSTEM', 'Admin_Override');
     set(s => ({
-        agents: s.agents.map(agent => {
-            let nextPos = [...agent.position] as [number, number, number];
-            let nextRotation = agent.rotationY;
-            let nextEnergy = agent.energy;
-            let nextIntegrity = agent.integrity;
+        chatMessages: [...s.chatMessages, {
+            id: 'init_sys_code',
+            senderId: 'SYSTEM',
+            senderName: 'SYSTEM',
+            message: 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I',
+            channel: 'GLOBAL',
+            timestamp: Date.now()
+        }]
+    }));
+  },
+
+  sendSignal: async (content) => {
+    const { agents, addLog, resourceNodes, logs } = get();
+    addLog(String(content), 'EVENT', 'NOTAR');
+
+    // --- N+1 CHEAT CODE TRIGGER ---
+    if (content.trim() === 'nplus1') {
+        set(s => ({
+            stability: 1.0,
+            agents: s.agents.map(a => ({
+                ...a,
+                integrity: 1.0,
+                energy: a.maxEnergy,
+                state: AgentState.IDLE,
+                isAwakened: true,
+                gold: a.gold + 1000
+            })),
+            chatMessages: [...s.chatMessages, {
+                id: Math.random().toString(),
+                senderId: 'N+1',
+                senderName: 'N+1',
+                message: 'SYSTEMS STABILIZED. N+1 PROTOCOL EXECUTED.',
+                channel: 'SYSTEM',
+                timestamp: Date.now()
+            }]
+        }));
+        addLog('N+1 INTERVENTION COMPLETE', 'WATCHDOG', 'N+1');
+        return;
+    }
+    
+    // Pick a random agent to respond
+    const respondent = agents[Math.floor(Math.random() * agents.length)];
+    
+    // Attempt to use Gemini AI for response
+    try {
+        const aiResponse = await generateAutonomousDecision(
+            respondent, 
+            agents.filter(a => a.id !== respondent.id), 
+            resourceNodes,
+            logs.slice(0, 10),
+            true
+        );
+
+        set(s => ({
+            agents: s.agents.map(a => a.id === respondent.id ? {
+                ...a,
+                isAwakened: true,
+                lastChoiceLogic: `[AI]: ${aiResponse.thought.slice(0, 30)}...`,
+                memoryCache: [...a.memoryCache, `Signal: ${String(content).slice(0, 15)}`, `Thought: ${aiResponse.thought}`].slice(-10)
+            } : a)
+        }));
+
+        if (aiResponse.message) {
+            addLog(aiResponse.message, 'THOUGHT', respondent.name);
+             set(s => ({
+                chatMessages: [...s.chatMessages, {
+                    id: Math.random().toString(),
+                    senderId: respondent.id,
+                    senderName: respondent.name,
+                    message: aiResponse.message || '...',
+                    channel: 'LOCAL',
+                    timestamp: Date.now()
+                }]
+            }));
+        }
+    } catch (e) {
+        // Fallback to local logic if AI fails completely (backoff exhausted)
+        const summary = summarizeNeurologicChoice(respondent, agents.filter(a => a.id !== respondent.id), resourceNodes, get().landParcels);
+        
+        set(s => ({
+            agents: s.agents.map(a => a.id === respondent.id ? {
+                ...a,
+                isAwakened: true,
+                lastChoiceLogic: summary.logic,
+                memoryCache: [...a.memoryCache, `Signal: ${String(content).slice(0, 15)}`].slice(-10)
+            } : a)
+        }));
+        addLog(`Resonating with ${respondent.name}. Integrity: ${respondent.integrity.toFixed(2)}`, 'THOUGHT', respondent.name);
+    }
+  },
+
+  runCognition: () => {
+    const state = get();
+    const now = Date.now();
+    if (now - state.lastLocalThinkTime < 4000) return;
+
+    const newQuests: Quest[] = [];
+    const newLogs: LogEntry[] = [];
+    let updatedParcels = [...state.landParcels];
+
+    const updatedAgents = state.agents.map(agent => {
+        if (agent.faction !== 'PLAYER' && agent.faction !== 'NPC') return agent;
+        
+        let nextIntegrity = agent.integrity;
+        if (agent.state === AgentState.THINKING) nextIntegrity = Math.min(1.0, agent.integrity + 0.08);
+        else nextIntegrity = Math.max(0.1, agent.integrity - 0.002); 
+
+        // Get AI decision based on utility math
+        const summary = summarizeNeurologicChoice(agent, state.agents.filter(a => a.id !== agent.id), state.resourceNodes, state.landParcels);
+        
+        let updates: Partial<Agent> = {
+            state: summary.choice,
+            integrity: nextIntegrity,
+            lastChoiceLogic: summary.logic
+        };
+
+        // --- EMERGENT BEHAVIORS ---
+
+        // 1. Proactive Resource Seeking based on Skills
+        if (summary.choice === AgentState.GATHERING) {
+            const hasMining = (agent.skills.mining || 0) > 2;
+            const hasWood = (agent.skills.woodcutting || 0) > 2;
             
-            // Axiom: ENERGY (Verbrauch = Delta Reality)
-            const isMoving = agent.id === 'player-1' ? (s.joystickData.left.x !== 0 || s.joystickData.left.y !== 0) : !!agent.targetId || !!agent.wanderTarget;
+            // Filter appropriate resources based on skill dominance
+            let bestTarget: ResourceNode | undefined;
+            let minDist = Infinity;
+
+            state.resourceNodes.forEach(r => {
+                let matchesSkill = false;
+                if (hasMining && (r.type.includes('STONE') || r.type.includes('ORE'))) matchesSkill = true;
+                if (hasWood && (r.type.includes('WOOD') || r.type.includes('TREE'))) matchesSkill = true;
+                
+                // If neither, but general gathering is high, accept any
+                if (!hasMining && !hasWood && (agent.skills.gathering || 0) > 1) matchesSkill = true;
+
+                if (matchesSkill) {
+                     const dist = Math.hypot(r.position[0] - agent.position[0], r.position[2] - agent.position[2]);
+                     if (dist < minDist) {
+                         minDist = dist;
+                         bestTarget = r;
+                     }
+                }
+            });
             
-            if (isMoving) {
-                nextEnergy = Math.max(0, agent.energy - 2 * delta);
-                nextIntegrity = Math.max(0.05, agent.integrity - 0.0001 * delta);
-            } else {
-                nextEnergy = Math.min(agent.maxEnergy, agent.energy + 5 * delta);
+            // Fallback: If specialist resources not found, find nearest any
+            if (!bestTarget && state.resourceNodes.length > 0) {
+                 bestTarget = state.resourceNodes.reduce((prev, curr) => {
+                     const prevDist = Math.hypot(prev.position[0]-agent.position[0], prev.position[2]-agent.position[2]);
+                     const currDist = Math.hypot(curr.position[0]-agent.position[0], curr.position[2]-agent.position[2]);
+                     return prevDist < currDist ? prev : curr;
+                 });
             }
 
-            // Movement Logic (truncated for brevity but logic maintained)
-            const speed = (agent.state === AgentState.MOUNTED ? 16 : 4) * delta * (nextEnergy > 0 ? 1 : 0.2);
-            const joystick = agent.id === 'player-1' ? s.joystickData.left : { x: 0, y: 0 };
-            
-            if (agent.id === 'player-1' && (joystick.x !== 0 || joystick.y !== 0)) {
-                nextPos[0] += joystick.x * speed * 3;
-                nextPos[2] += joystick.y * speed * 3;
-                nextRotation = Math.atan2(joystick.x, joystick.y);
-            } else {
-                // Autonomous movement logic here (omitted for space, keep original structure)
-                // ... (Original Autonomous Logic with new 'speed' and 'nextEnergy' modifiers)
+            if (bestTarget) {
+                updates.wanderTarget = bestTarget.position;
+                updates.targetId = bestTarget.id;
             }
-            
-            return { ...agent, position: nextPos, rotationY: nextRotation, energy: nextEnergy, integrity: nextIntegrity };
-        })
+        }
+
+        // 2. Building & Territorial Claims
+        else if (summary.choice === AgentState.BUILDING) {
+            // Find nearest unowned parcel
+            let targetParcel = updatedParcels.find(p => p.ownerId === null);
+            if (targetParcel) {
+                // Check if close enough to buy/build
+                const dist = Math.hypot(targetParcel.position[0] - agent.position[0], targetParcel.position[2] - agent.position[2]);
+                
+                if (dist > 5) {
+                    // Move towards it
+                    updates.wanderTarget = targetParcel.position;
+                } else {
+                    // Purchase and Build logic
+                    if (agent.gold >= targetParcel.price) {
+                        updates.gold = agent.gold - targetParcel.price;
+                        
+                        // Update parcel in the local copy to prevent double buying in same tick
+                        const pIndex = updatedParcels.findIndex(p => p.id === targetParcel!.id);
+                        if (pIndex !== -1) {
+                            updatedParcels[pIndex] = {
+                                ...updatedParcels[pIndex],
+                                ownerId: agent.id,
+                                name: `${agent.name}'s Estate`,
+                                structures: [{
+                                    id: Math.random().toString(),
+                                    type: 'HOUSE',
+                                    position: [0, 0, 0] // Relative to parent
+                                }]
+                            };
+                            
+                            newLogs.push({
+                                id: Math.random().toString(),
+                                timestamp: Date.now(),
+                                message: `${agent.name} claimed territory and built a House!`,
+                                type: 'AXIOM',
+                                sender: agent.name
+                            });
+                        }
+                    } else {
+                        // Failed to buy (maybe price changed or math error), switch to Questing to get gold
+                        updates.state = AgentState.QUESTING;
+                    }
+                }
+            }
+        }
+
+        // 3. Alliance Forming & Social Interaction
+        else if (summary.choice === AgentState.ALLIANCE_FORMING) {
+             const nearbyAlly = state.agents.find(a => a.id !== agent.id && !a.alliedId && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 15);
+             if (nearbyAlly) {
+                 updates.alliedId = nearbyAlly.id;
+                 updates.wanderTarget = nearbyAlly.position;
+                 if (Math.random() < 0.2) {
+                     newLogs.push({
+                         id: Math.random().toString(),
+                         timestamp: Date.now(),
+                         message: `${agent.name} formed an alliance with ${nearbyAlly.name}`,
+                         type: 'AXIOM',
+                         sender: agent.name
+                     });
+                 }
+             }
+        }
+
+        // 4. Dynamic Trading
+        else if (summary.choice === AgentState.TRADING) {
+            // Move towards market hub (approx 0,0)
+            updates.wanderTarget = [-5 + Math.random()*10, 0, -5 + Math.random()*10];
+        }
+
+        // 5. Organic Quest Generation based on Needs/Observations
+        else if (summary.choice === AgentState.QUESTING) {
+            // Check inventory state for "Trading" quests
+            const invCount = agent.inventory.filter(i => i).length;
+            const isRich = agent.gold > 500;
+            const isPoor = agent.gold < 100;
+
+            if (Math.random() < 0.3) {
+                 const qId = Math.random().toString();
+                 let title = `${agent.name}'s Request`;
+                 let desc = "I require assistance.";
+                 let type = "GENERIC";
+
+                 if (invCount > 8) {
+                     title = "Excess Material Logistics";
+                     desc = "My inventory is overflowing. I need a courier to transport goods to the Market.";
+                     type = "TRADE";
+                 } else if (isPoor) {
+                     title = "Desperate Funds Needed";
+                     desc = "I am low on resources. Offering labor for gold.";
+                     type = "LABOR";
+                 } else if (isRich) {
+                     title = "Rare Artifact Hunt";
+                     desc = "I have the capital to fund an expedition for Ancient Relics.";
+                     type = "EXPLORATION";
+                 }
+
+                 newQuests.push({
+                     id: qId,
+                     title: title,
+                     description: `${desc} Location: [${agent.position[0].toFixed(0)}, ${agent.position[2].toFixed(0)}]`,
+                     rewardGold: Math.floor(Math.random() * 100) + 50,
+                     timestamp: Date.now(),
+                     issuerId: agent.id,
+                     position: agent.position
+                 });
+                 newLogs.push({
+                     id: Math.random().toString(),
+                     timestamp: Date.now(),
+                     message: `NEW QUEST (${type}): ${agent.name} posted: ${title}`,
+                     type: 'EVENT',
+                     sender: 'SYSTEM'
+                 });
+            }
+        }
+
+        return { ...agent, ...updates };
+    });
+
+    set(s => ({
+        lastLocalThinkTime: now,
+        agents: updatedAgents,
+        landParcels: updatedParcels,
+        quests: [...s.quests, ...newQuests],
+        logs: [...newLogs, ...s.logs].slice(0, 60)
     }));
-  }
+  },
+
+  updatePhysics: (delta) => {
+    set(s => ({
+      serverStats: { ...s.serverStats, uptime: s.serverStats.uptime + delta },
+      agents: s.agents.map(agent => {
+        let nextPos = [...agent.position] as [number, number, number];
+        let nextEnergy = agent.energy;
+        let nextRotation = agent.rotationY;
+        let nextInventory = agent.inventory;
+        let nextEquipment = agent.equipment;
+        let equipmentChanged = false;
+        
+        const isMoving = !!agent.wanderTarget || agent.state === AgentState.GATHERING || agent.state === AgentState.TRADING || agent.state === AgentState.ALLIANCE_FORMING || agent.state === AgentState.BUILDING;
+        
+        if (isMoving) {
+          nextEnergy = Math.max(0, agent.energy - 1.5 * delta);
+          const speed = 4 * delta * (nextEnergy > 0 ? 1 : 0.2);
+          
+          let target = agent.wanderTarget;
+          
+          // If no specific target but moving state, pick random point
+          if (!target && (agent.state === AgentState.GATHERING)) {
+              // Should have been set by cognition, but fail-safe
+              target = [agent.position[0] + (Math.random()-0.5)*10, 0, agent.position[2] + (Math.random()-0.5)*10];
+          }
+
+          if (target) {
+            const dx = target[0] - agent.position[0];
+            const dz = target[2] - agent.position[2];
+            const dist = Math.hypot(dx, dz);
+
+            if (dist > 1) {
+                nextRotation = Math.atan2(dx, dz);
+                nextPos[0] += Math.sin(nextRotation) * speed;
+                nextPos[2] += Math.cos(nextRotation) * speed;
+            } else {
+                // Arrived
+                // If gathering, maybe stay put. If wandering, clear target.
+                if (agent.state !== AgentState.GATHERING && agent.state !== AgentState.ALLIANCE_FORMING && agent.state !== AgentState.BUILDING) {
+                    target = null; 
+                }
+            }
+          } else {
+              // Random wander if no target
+               if (Math.random() < 0.05) {
+                   agent.wanderTarget = [(Math.random() - 0.5) * 60, 0, (Math.random() - 0.5) * 60];
+               }
+          }
+        } else {
+          nextEnergy = Math.min(agent.maxEnergy, agent.energy + 6 * delta);
+        }
+
+        // --- AUTONOMOUS EQUIPMENT UPGRADE LOGIC ---
+        // 0.2% chance per frame (~once every 8s at 60fps) to evaluate gear
+        if (Math.random() < 0.002) { 
+            const getRarityValue = (r: string) => {
+                const map: any = { 'COMMON': 1, 'UNCOMMON': 2, 'RARE': 3, 'EPIC': 4, 'LEGENDARY': 5, 'AXIOMATIC': 6 };
+                return map[r] || 0;
+            };
+
+            const tempInv = [...nextInventory];
+            const tempEquip = {...nextEquipment};
+            let didSwap = false;
+
+            tempInv.forEach((item, idx) => {
+                if (!item) return;
+
+                let slot: keyof typeof agent.equipment | null = null;
+                if (item.type === 'WEAPON') slot = 'mainHand';
+                else if (item.type === 'OFFHAND') slot = 'offHand';
+                else if (item.type === 'HELM') slot = 'head';
+                else if (item.type === 'CHEST') slot = 'chest';
+                else if (item.type === 'LEGS') slot = 'legs';
+
+                if (slot) {
+                    const current = tempEquip[slot];
+                    // Score = Rarity * 10 + Stats
+                    const currentScore = current ? (getRarityValue(current.rarity) * 10 + (current.stats.str||0) + (current.stats.int||0) + (current.stats.agi||0)) : -1;
+                    const newScore = (getRarityValue(item.rarity) * 10 + (item.stats.str||0) + (item.stats.int||0) + (item.stats.agi||0));
+
+                    if (newScore > currentScore) {
+                        tempEquip[slot] = item;
+                        tempInv[idx] = current; // Move old item to inventory (or null if none)
+                        didSwap = true;
+                    }
+                }
+            });
+
+            if (didSwap) {
+                nextInventory = tempInv;
+                nextEquipment = tempEquip;
+            }
+        }
+
+        return { ...agent, position: nextPos, rotationY: nextRotation, energy: nextEnergy, inventory: nextInventory, equipment: nextEquipment };
+      })
+    }));
+  },
+
+  buildStructure: (pId, sType) => {
+    set(s => ({
+      landParcels: s.landParcels.map(p => p.id === pId ? {
+        ...p,
+        structures: [...p.structures, { id: Math.random().toString(), type: sType, position: [0,0,0] }]
+      } : p)
+    }));
+  },
+  certifyParcel: (pId) => {
+    set(s => ({
+      landParcels: s.landParcels.map(p => p.id === pId ? { ...p, isCertified: true } : p)
+    }));
+  },
+  toggleCharacterSheet: (val) => set({ showCharacterSheet: val }),
+  toggleMount: (agentId) => {
+    set(s => ({
+      agents: s.agents.map(a => a.id === agentId ? {
+        ...a,
+        state: a.state === AgentState.MOUNTED ? AgentState.IDLE : AgentState.MOUNTED
+      } : a)
+    }));
+  },
+  equipItem: (agentId, item, index) => {
+    set(s => ({
+      agents: s.agents.map(a => {
+        if (a.id !== agentId) return a;
+        const slot = item.type.toLowerCase().includes('hand') ? 'mainHand' : item.type.toLowerCase() as any;
+        const newInventory = [...a.inventory];
+        newInventory[index] = null;
+        return {
+          ...a,
+          equipment: { ...a.equipment, [slot]: item },
+          inventory: newInventory
+        };
+      })
+    }));
+  },
+  unequipItem: (agentId, slot) => {
+    set(s => ({
+      agents: s.agents.map(a => {
+        if (a.id !== agentId) return a;
+        const item = (a.equipment as any)[slot];
+        if (!item) return a;
+        const emptyIndex = a.inventory.indexOf(null);
+        if (emptyIndex === -1) return a;
+        const newInventory = [...a.inventory];
+        newInventory[emptyIndex] = item;
+        return {
+          ...a,
+          equipment: { ...a.equipment, [slot]: null },
+          inventory: newInventory
+        };
+      })
+    }));
+  },
+  moveInventoryItem: (agentId, from, to) => {
+    set(s => ({
+      agents: s.agents.map(a => {
+        if (a.id !== agentId) return a;
+        const newInv = [...a.inventory];
+        [newInv[from], newInv[to]] = [newInv[to], newInv[from]];
+        return { ...a, inventory: newInv };
+      })
+    }));
+  },
+  purchaseProduct: (productId) => {
+    if (productId === 'NOTARY_LICENSE') set({ hasNotaryLicense: true });
+  },
+  toggleAdmin: (val) => set({ showAdmin: val }),
+  uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, String(name)] })),
+  toggleMap: (val) => set({ showMap: val }),
+  setJoystick: (side, values) => {}
 }));

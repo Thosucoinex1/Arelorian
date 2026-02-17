@@ -1,5 +1,6 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { Agent, AgentState, Item, ResourceNode, LogEntry, Quest } from "../types";
+
+import { GoogleGenAI } from "@google/genai";
+import { Agent, AgentState, ResourceNode, LogEntry, Quest } from "../types";
 
 export interface AIDecision {
   thought: string;
@@ -11,31 +12,34 @@ export interface AIDecision {
   quest?: Omit<Quest, 'id' | 'timestamp' | 'issuerId'>;
 }
 
-/**
- * MMORPG KERNEL UPDATE: API-Handler mit Exponential Backoff
- * Zweck: Behebung von 429 RESOURCE_EXHAUSTED Fehlern
- * Basierend auf: Hypokratischer Dateneid & Kostenbremse (15.01.2026)
- */
-const delays = [1000, 2000, 4000, 8000, 16000];
+const DELAYS = [1000, 2000, 4000, 8000, 16000];
 
-async function callGeminiWithBackoff(ai: any, params: any, retries = 5): Promise<any> {
+/**
+ * Robust API caller with Exponential Backoff
+ * Handles 429 (Resource Exhausted) and 503 (Service Unavailable)
+ */
+export async function callGeminiWithBackoff(ai: GoogleGenAI, params: any, retries = 5): Promise<any> {
   for (let i = 0; i <= retries; i++) {
     try {
-      // Create a fresh instance for each retry attempt as per best practice for key updates
+      // Create a fresh request for each attempt
       const response = await ai.models.generateContent(params);
       return response;
     } catch (error: any) {
       const isQuotaError = 
         error?.message?.includes('429') || 
         error?.message?.includes('RESOURCE_EXHAUSTED') || 
-        error?.message?.includes('quota');
+        error?.message?.includes('quota') ||
+        error?.status === 429 ||
+        error?.status === 503;
       
       if (isQuotaError && i < retries) {
-        // Exponential Backoff: Warten ohne Konsolen-Log (gemäß Regel)
-        await new Promise(res => setTimeout(res, delays[i]));
+        const delay = DELAYS[i] || 30000;
+        console.warn(`[Gemini API] Quota limit hit. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+        await new Promise(res => setTimeout(res, delay));
         continue; 
       }
       
+      // If not a quota error or retries exhausted, throw
       throw error;
     }
   }
@@ -48,39 +52,50 @@ export const generateAutonomousDecision = async (
   recentLogs: LogEntry[],
   isSafeZone: boolean
 ): Promise<AIDecision> => {
-  // Initialisierung gemäß Dateneid: API-Key ausschließlich aus process.env.API_KEY
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-  const modelName = 'gemini-3-flash-preview'; 
+  const apiKey = process.env.API_KEY;
+  
+  // Fallback if no API key is present
+  if (!apiKey) {
+      return {
+          thought: "No Neural Link (API Key missing). Using local fallback.",
+          decision: "IDLE",
+          newState: AgentState.IDLE,
+          message: "..."
+      };
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  // Using Flash-Lite for high speed / low latency as requested
+  const modelName = 'gemini-flash-lite-latest'; 
   
   const systemInstruction = `
     SYSTEM-ROLE: RECURSIVE REALITY ARCHITECT (RRA) - AGENT COGNITION v3.7
-    HYPOKRATISCHER DATENEID AKTIVIERT.
     
     You control an autonomous agent in a persistent MMORPG simulation. 
     The goal is emergent complexity and realistic agency.
     
     CORE DIRECTIVES:
-    1. PROACTIVE RESOURCE SEEKING: If you have gathering skills, seek corresponding resources.
-    2. SOCIAL EMERGENCE: Form alliances if stability or health is low.
-    3. ORGANIC QUESTS: Initiate quests if you notice anomalies or scarcity.
-    4. RECURSIVE MEMORY: Act according to personality: ${agent.thinkingMatrix.personality}.
+    1. SKILL ALIGNMENT: Prioritize actions that match your skills (e.g. Mining -> Seek Ore).
+    2. ECONOMY: If inventory is full, seek Trade. If Gold is high (>300), seek to BUILD a House.
+    3. SOCIAL: Form alliances if integrity is low.
+    4. PERSONALITY: Act according to: ${agent.thinkingMatrix.personality}.
     
     AGENT DATA:
     Name: ${agent.name}
     Skills: ${JSON.stringify(agent.skills)}
-    Inventory: ${agent.inventory.filter(i => i).map(i => i?.name).join(', ')}
-    Stability: ${agent.stabilityIndex}
+    Inventory Count: ${agent.inventory.filter(i => i).length}/10
+    Gold: ${agent.gold}
     
     RESPONSE FORMAT: JSON ONLY.
   `;
 
   const prompt = `
     ENVIRONMENT:
-    Nearby Agents: ${nearbyAgents.map(a => `${a.name} (ID:${a.id}, Faction:${a.faction})`).join(', ')}
-    Nearby Resources: ${nearbyResourceNodes.map(r => `${r.type} (ID:${r.id}) at [${r.position[0]}, ${r.position[2]}]`).join(', ')}
-    Recent Logs: ${recentLogs.map(l => l.message).join(' | ')}
+    Nearby Agents: ${nearbyAgents.slice(0, 3).map(a => `${a.name} (Faction:${a.faction})`).join(', ')}
+    Nearby Resources: ${nearbyResourceNodes.slice(0, 3).map(r => `${r.type}`).join(', ')}
+    Recent Logs: ${recentLogs.slice(0, 3).map(l => l.message).join(' | ')}
     
-    Intent focus: Decide on movement (targetId) or social interaction (message/alliedId).
+    Task: Decide next state (GATHERING, QUESTING, TRADING, ALLIANCE_FORMING, BUILDING, IDLE) and provide a short thought.
   `;
 
   try {
@@ -90,7 +105,7 @@ export const generateAutonomousDecision = async (
       config: { 
         systemInstruction, 
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 }
+        thinkingConfig: { thinkingBudget: 0 } // Disable thinking for speed
       }
     });
     
@@ -98,12 +113,11 @@ export const generateAutonomousDecision = async (
     const cleanJson = text.replace(/```json|```/g, '').trim();
     return JSON.parse(cleanJson);
   } catch (error: any) {
-    // Kritischer Systemfehler nach 5 Versuchen
-    console.error("Kritischer Systemfehler nach 5 Versuchen:", error.message);
+    console.error("Agent Cognition Failed:", error.message);
     
     return { 
-      thought: "Logische Korrosion detektiert.",
-      message: "SYSTEM-MELDUNG: Logische Korrosion detektiert. Die Entität benötigt eine Ruhephase (Quota überschritten). Bitte versuchen Sie es später erneut.",
+      thought: "Logische Korrosion detektiert. Neural Link offline.",
+      message: "SYSTEM-MELDUNG: Logische Korrosion detektiert.",
       decision: "IDLE", 
       newState: AgentState.IDLE 
     };

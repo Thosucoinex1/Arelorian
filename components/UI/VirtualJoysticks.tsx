@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from 'react';
 import { useStore } from '../../store';
 
@@ -15,7 +14,8 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
     const [nub, setNub] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        e.preventDefault();
+        // Stop propagation to prevent camera controls from stealing touch
+        e.stopPropagation();
         const touch = e.changedTouches[0];
         if (touch && touchId.current === null) {
             touchId.current = touch.identifier;
@@ -25,12 +25,17 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
+        e.stopPropagation();
         e.preventDefault();
         if (touchId.current !== null) {
-            // FIX: Explicitly cast the found touch to the Touch interface to resolve 'unknown' property access errors.
-            const touch = Array.from(e.changedTouches).find(
-                (t: Touch) => t.identifier === touchId.current
-            ) as Touch | undefined;
+            // Explicit iteration to avoid TypeScript Array.from inference issues with TouchList
+            let touch: React.Touch | undefined;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === touchId.current) {
+                    touch = e.changedTouches[i];
+                    break;
+                }
+            }
 
             if (touch && base) {
                 let dx = touch.clientX - base.x;
@@ -56,11 +61,16 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
+        e.stopPropagation();
         e.preventDefault();
-        // FIX: Explicitly cast the found touch to the Touch interface to resolve 'unknown' property access errors.
-        const touch = Array.from(e.changedTouches).find(
-            (t: Touch) => t.identifier === touchId.current
-        ) as Touch | undefined;
+        
+        let touch: React.Touch | undefined;
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId.current) {
+                touch = e.changedTouches[i];
+                break;
+            }
+        }
         
         if (touch) {
             touchId.current = null;
@@ -76,12 +86,13 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
         width: '40%',
         height: '40%',
         [side]: '5%',
+        zIndex: 50, // Higher than map but lower than modals
     };
 
     const baseStyle: React.CSSProperties = {
         position: 'absolute',
-        left: `${base?.x}px`,
-        top: `${base?.y}px`,
+        left: base ? `${base.x}px` : '0px',
+        top: base ? `${base.y}px` : '0px',
         width: STICK_RADIUS * 2,
         height: STICK_RADIUS * 2,
         background: 'rgba(255, 255, 255, 0.1)',
