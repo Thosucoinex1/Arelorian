@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useStore } from '../../store';
 import { Agent, Item, ItemStats, ItemEffect } from '../../types';
@@ -137,12 +138,14 @@ const InventoryItem: React.FC<{
     );
 };
 
-// FIX: Refactored to iterate over set definitions in a type-safe way, avoiding issues with `Object.entries` on numeric keys.
+// FIX: Refactored to iterate over set definitions in a type-safe way, resolving iterator/unknown errors.
 const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
     const setCounts: Record<string, number> = {};
-    // FIX: Switched to Object.values for cleaner, type-safe iteration over equipment items.
-    // FIX: Explicitly type `item` as `Item | null` to resolve type inference issues.
-    Object.values(agent.equipment).forEach((item: Item | null) => {
+    
+    // Use Object.keys with casting to (keyof typeof agent.equipment)[] for safe iteration over known properties.
+    const equipment = agent.equipment;
+    (Object.keys(equipment) as (keyof typeof equipment)[]).forEach(slot => {
+        const item = equipment[slot];
         if (item?.setName) {
             setCounts[item.setName] = (setCounts[item.setName] || 0) + 1;
         }
@@ -153,10 +156,11 @@ const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
         const setDef = ITEM_SETS[setName];
         if (!setDef) return;
 
-        // FIX: Using Object.entries is a safe way to iterate over the set definition's numeric keys.
-        Object.entries(setDef).forEach(([thresholdStr, effects]) => {
+        // Use Object.keys and mapping to iterate through threshold numbers safely.
+        Object.keys(setDef).forEach((thresholdStr) => {
             const threshold = Number(thresholdStr);
-            if (count >= threshold) {
+            const effects = setDef[threshold];
+            if (count >= threshold && Array.isArray(effects)) {
                 activeBonuses.push(...effects);
             }
         });
