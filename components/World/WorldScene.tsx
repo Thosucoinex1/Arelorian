@@ -1,5 +1,6 @@
+
 import React, { useRef, useMemo, Suspense, useState, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '../../store';
@@ -138,7 +139,6 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
 
             {/* Alliance Aura */}
             {hasAlliance && (
-                // FIX: Moved rotation from ringGeometry to the parent mesh as rotation is not a valid prop on ringGeometry.
                 <mesh position={[0, 0.9, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                     <ringGeometry args={[1, 1.2, 32]} />
                     <meshBasicMaterial color="#d97706" transparent opacity={0.3} side={THREE.DoubleSide} />
@@ -163,9 +163,49 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
     );
 };
 
+const CameraController = () => {
+    const controlsRef = useRef<any>();
+    const cameraTarget = useStore(state => state.cameraTarget);
+    const setCameraTarget = useStore(state => state.setCameraTarget);
+    const { camera } = useThree();
+
+    // Smooth navigation logic
+    useFrame((_state, delta) => {
+        if (cameraTarget && controlsRef.current) {
+            const targetVec = new THREE.Vector3(...cameraTarget);
+            
+            // Interpolate controls target
+            controlsRef.current.target.lerp(targetVec, 5 * delta);
+            
+            // Adjust camera position slightly to maintain view but move toward target
+            const dist = camera.position.distanceTo(targetVec);
+            if (dist > 100) {
+               // If too far, nudge camera closer for a dramatic "jump" effect
+               const dir = new THREE.Vector3().subVectors(camera.position, targetVec).normalize();
+               const idealPos = targetVec.clone().add(dir.multiplyScalar(60));
+               camera.position.lerp(idealPos, 2 * delta);
+            }
+
+            // If we are close enough, clear the target to return control to user
+            if (controlsRef.current.target.distanceTo(targetVec) < 0.1) {
+                setCameraTarget(null);
+            }
+        }
+    });
+
+    return (
+        <OrbitControls 
+            ref={controlsRef}
+            maxDistance={300} 
+            minDistance={10} 
+            enableDamping 
+            dampingFactor={0.05} 
+        />
+    );
+}
+
 const GameLoop = () => {
     const updateAgents = useStore(state => state.updateAgents);
-    // FIX: Corrected useFrame signature. delta is the second argument, not a property of state.
     useFrame((_state, delta) => {
         updateAgents(delta);
     });
@@ -181,7 +221,9 @@ const WorldScene = () => {
         <GameLoop />
         <color attach="background" args={['#050505']} /> 
         <fog attach="fog" args={['#050505', 80, 350]} />
-        <OrbitControls maxDistance={300} minDistance={10} enableDamping dampingFactor={0.05} />
+        
+        <CameraController />
+        
         <ambientLight intensity={0.4} />
         <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} />
         <Stars radius={300} count={6000} factor={4} fade speed={1} />

@@ -86,7 +86,8 @@ export interface Agent {
   mountId?: string | null;
   alliedId?: string | null;
   activeQuestId?: string | null;
-  stuckTicks?: number; // Added to track stall status
+  stuckTicks?: number; 
+  wanderTarget?: [number, number, number] | null;
 }
 
 export interface Chunk { 
@@ -106,6 +107,7 @@ export interface WorldEvent {
   active: boolean;
   startTime: number;
   endTime: number;
+  position?: [number, number, number]; // Added for jump-to-event
 }
 
 export type StructureType = 'HOUSE' | 'BANK' | 'SMITH' | 'MARKET' | 'OUTPOST' | 'CAVE_ENTRANCE' | 'DARK_CHURCH' | 'ADMIN_TERMINAL';
@@ -154,6 +156,7 @@ export interface ChatMessage {
   message: string;
   channel: ChatChannel;
   timestamp: number;
+  eventPosition?: [number, number, number]; // Added for jump-to-event from chat
 }
 
 export interface Quest {
@@ -163,6 +166,7 @@ export interface Quest {
   rewardGold: number;
   timestamp: number;
   issuerId: string;
+  position?: [number, number, number]; // Objective position
 }
 
 export interface ResourceNode {

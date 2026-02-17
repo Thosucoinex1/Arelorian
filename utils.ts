@@ -1,16 +1,73 @@
 
 import { Agent, Item, ItemEffectType, ItemEffect, LandParcel, ResourceNode, ResourceType, AgentState, Chunk } from './types';
 
+// --- AXIOMATIC UTILITY ENGINE (AUE) ---
+
+/**
+ * Calculates the "Desire Weight" for an agent to perform a specific state change.
+ * This is the core mathematical grounding for autonomous behavior without API calls.
+ */
+export const calculateAxiomaticWeight = (
+    agent: Agent, 
+    action: AgentState, 
+    nearbyAgents: Agent[], 
+    nearbyResources: ResourceNode[]
+): number => {
+    let weight = 0;
+
+    switch (action) {
+        case AgentState.GATHERING:
+            // High weight if resources match skills and are nearby
+            nearbyResources.forEach(res => {
+                const dist = Math.hypot(res.position[0] - agent.position[0], res.position[2] - agent.position[2]);
+                const skillBonus = (agent.skills[res.type.toLowerCase()] || 0) * 2;
+                if (dist < 40) weight += (40 - dist) * (1 + skillBonus);
+            });
+            break;
+
+        case AgentState.ALLIANCE_FORMING:
+            // High weight if lonely (soulDensity low) or surrounded by friendly/similar level agents
+            const socialPressure = nearbyAgents.filter(a => a.id !== agent.id && a.faction === 'PLAYER').length;
+            if (socialPressure > 0 && socialPressure < 3) {
+                weight += socialPressure * 15 * (1.1 - agent.soulDensity);
+            }
+            break;
+
+        case AgentState.TRADING:
+            // High weight if gold is low or inventory is high
+            const invCount = agent.inventory.filter(i => i).length;
+            weight += (invCount * 5) + (agent.gold < 100 ? 20 : 0);
+            break;
+
+        case AgentState.ASCENDING:
+            // Occurs only if level is high and soul density is high
+            if (agent.level > 10) weight += agent.soulDensity * 50;
+            break;
+
+        case AgentState.IDLE:
+            // Natural decay of activity
+            weight = 5;
+            break;
+            
+        default:
+            weight = 0;
+    }
+
+    // Add "Chaos/Curiosity" entropy based on agent DNA
+    const entropy = (Math.sin(Date.now() * 0.001 + parseInt(agent.dna.hash.slice(-2), 16)) + 1) * 5;
+    
+    return weight + entropy;
+};
+
 // --- WORLD GENERATION ---
 
-// Simple hash function for pseudo-randomness from coordinates
 const simpleHash = (x: number, z: number) => {
     const str = `${x},${z}`;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str.charCodeAt(i);
         hash = ((hash << 5) - hash) + char;
-        hash |= 0; // Convert to 32bit integer
+        hash |= 0; 
     }
     return Math.abs(hash);
 };
@@ -110,8 +167,6 @@ export const generateCreaturesForChunk = (chunk: Chunk): Agent[] => {
     return creatures;
 };
 
-
-
 export const ITEM_SETS: Record<string, { [count: number]: ItemEffect[] }> = {
     'Voidstalker': {
         2: [{ type: 'CRIT_CHANCE', value: 5, description: 'Set (2): +5% Crit Chance' }],
@@ -131,99 +186,54 @@ export const ITEM_SETS: Record<string, { [count: number]: ItemEffect[] }> = {
     }
 };
 
-/**
- * Checks if an agent is within the boundaries of a Notary-owned land parcel.
- * This defines a "Safe Zone" where PvP is disabled.
- */
 export const isAgentInSafeZone = (agent: Agent, parcels: LandParcel[], notaryId: string | null): boolean => {
     if (!notaryId) return false;
-
-    const PARCEL_SIZE = 20; // Each parcel is a 20x20 unit square
+    const PARCEL_SIZE = 20;
     const ownedParcels = parcels.filter(p => p.ownerId === notaryId && p.isCertified);
-
     for (const parcel of ownedParcels) {
         const [px, pz] = parcel.coordinates;
         const [ax, _, az] = agent.position;
-
         const x_min = px - (PARCEL_SIZE / 2);
         const x_max = px + (PARCEL_SIZE / 2);
         const z_min = pz - (PARCEL_SIZE / 2);
         const z_max = pz + (PARCEL_SIZE / 2);
-
-        if (ax >= x_min && ax <= x_max && az >= z_min && az <= z_max) {
-            return true;
-        }
+        if (ax >= x_min && ax <= x_max && az >= z_min && az <= z_max) return true;
     }
     return false;
 };
 
-/**
- * Processes and aggregates all active item effects from an agent's equipment.
- * Returns a structured object mapping Effect Types to their total calculated values.
- */
 export const aggregateActiveEffects = (agent: Agent, includeInventory: boolean = false): Record<ItemEffectType, number> => {
   const totals: Record<ItemEffectType, number> = {
-    'ON_HIT_SLOW': 0,
-    'ON_HIT_STUN': 0,
-    'PASSIVE_REGEN': 0,
-    'THORNS': 0,
-    'CRIT_CHANCE': 0,
-    'LIFESTEAL': 0
+    'ON_HIT_SLOW': 0, 'ON_HIT_STUN': 0, 'PASSIVE_REGEN': 0, 'THORNS': 0, 'CRIT_CHANCE': 0, 'LIFESTEAL': 0
   };
-
   const setCounts: Record<string, number> = {};
-
   const processItem = (item: Item | null) => {
     if (!item) return;
-    
-    // Process Intrinsic Effects
     if (item.effects) {
-        item.effects.forEach(effect => {
-            totals[effect.type] += effect.value;
-        });
+        item.effects.forEach(effect => { totals[effect.type] += effect.value; });
     }
-
-    // Count Sets
-    if (item.setName) {
-        setCounts[item.setName] = (setCounts[item.setName] || 0) + 1;
-    }
+    if (item.setName) setCounts[item.setName] = (setCounts[item.setName] || 0) + 1;
   };
-
-  // Process currently equipped items
   Object.values(agent.equipment).forEach(item => processItem(item));
-
-  // Process Set Bonuses
   Object.entries(setCounts).forEach(([setName, count]) => {
       const setDef = ITEM_SETS[setName];
       if (!setDef) return;
-
       Object.entries(setDef).forEach(([thresholdStr, effects]) => {
           const threshold = parseInt(thresholdStr);
           if (count >= threshold) {
-              effects.forEach(effect => {
-                  totals[effect.type] += effect.value;
-              });
+              effects.forEach(effect => { totals[effect.type] += effect.value; });
           }
       });
   });
-
-  if (includeInventory) {
-    agent.inventory.forEach(item => processItem(item));
-  }
-
+  if (includeInventory) agent.inventory.forEach(item => processItem(item));
   return totals;
 };
 
-/**
- * Calculates a raw power score for a single item to facilitate quick comparisons.
- */
 export const calculateItemRating = (item: Item | null | undefined): number => {
     if (!item) return 0;
-
     let rating = (item.stats.str || 0) + (item.stats.agi || 0) + (item.stats.int || 0) + (item.stats.vit || 0);
     rating += (item.stats.dmg || 0) * 2;
-    rating += (item.experience || 0) * 0.1; // Add experience to rating
-
+    rating += (item.experience || 0) * 0.1;
     if (item.effects) {
         item.effects.forEach(effect => {
             switch(effect.type) {
@@ -236,27 +246,19 @@ export const calculateItemRating = (item: Item | null | undefined): number => {
             }
         });
     }
-    
     if (item.setName) rating += 10;
-
     return Math.floor(rating);
 };
 
-/**
- * Helper to calculate total Combat Rating based on stats and effects.
- */
 export const calculateCombatRating = (agent: Agent): number => {
     const effects = aggregateActiveEffects(agent);
-    
     let rating = agent.stats.str + agent.stats.agi + agent.stats.int + agent.stats.vit;
     rating += (agent.equipment.mainHand?.stats?.dmg || 0) * 2;
-    
     rating += (effects.CRIT_CHANCE || 0) * 20;
     rating += (effects.LIFESTEAL || 0) * 10;
     rating += (effects.THORNS || 0) * 5;
     rating += (effects.PASSIVE_REGEN || 0) * 5;
     rating += (effects.ON_HIT_STUN || 0) * 15;
     rating += (effects.ON_HIT_SLOW || 0) * 5;
-    
     return Math.floor(rating);
 };

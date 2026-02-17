@@ -1,10 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
-import { ChatChannel } from '../../types';
+import { ChatChannel, ChatMessage } from '../../types';
+import { soundManager } from '../../services/SoundManager';
 
 export const ChatConsole = () => {
     const messages = useStore(state => state.chatMessages);
+    const agents = useStore(state => state.agents);
+    const setCameraTarget = useStore(state => state.setCameraTarget);
+    const selectAgent = useStore(state => state.selectAgent);
     const isMobile = useStore(state => state.device.isMobile);
     const [activeTab, setActiveTab] = useState<ChatChannel | 'ALL'>('ALL');
     const [isExpanded, setIsExpanded] = useState(true);
@@ -27,7 +31,28 @@ export const ChatConsole = () => {
             case 'COMBAT': return 'text-yellow-500';
             case 'GUILD': return 'text-green-400';
             case 'SYSTEM': return 'text-blue-400';
+            case 'THOUGHT': return 'text-axiom-cyan italic opacity-80';
+            case 'EVENT': return 'text-axiom-gold font-bold';
             default: return 'text-gray-400';
+        }
+    };
+
+    const handleMessageClick = (msg: ChatMessage) => {
+        soundManager.playUI('CLICK');
+        
+        // Jump to event position if provided
+        if (msg.channel === 'EVENT' && msg.eventPosition) {
+            setCameraTarget([...msg.eventPosition]);
+            soundManager.playCombat('MAGIC');
+            return;
+        }
+
+        // Default agent jump
+        const targetAgent = agents.find(a => a.id === msg.senderId);
+        if (targetAgent) {
+            setCameraTarget([...targetAgent.position]);
+            selectAgent(targetAgent.id);
+            soundManager.playCombat('MAGIC'); // Neural link feedback
         }
     };
 
@@ -38,10 +63,9 @@ export const ChatConsole = () => {
             ${isExpanded ? 'h-40 md:h-48 bg-black/80' : 'h-8 bg-black/60'}
             border border-white/20 rounded-lg flex flex-col
         `}>
-            {/* Tabs / Header */}
             <div className="flex justify-between items-center border-b border-white/10 bg-black/40 rounded-t-lg pr-2">
                 <div className="flex overflow-x-auto scrollbar-hide">
-                    {['ALL', 'GLOBAL', 'LOCAL', 'COMBAT', 'SYSTEM'].map((tab) => (
+                    {['ALL', 'GLOBAL', 'LOCAL', 'COMBAT', 'SYSTEM', 'EVENT'].map((tab) => (
                         <button 
                             key={tab}
                             onClick={() => { setActiveTab(tab as any); setIsExpanded(true); }}
@@ -56,35 +80,39 @@ export const ChatConsole = () => {
                 </button>
             </div>
 
-            {/* Log Area */}
             {isExpanded && (
                 <>
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-1 touch-scroll">
                         {filteredMessages.length === 0 && (
-                            <div className="text-gray-600 text-xs italic text-center mt-4">No messages in this channel.</div>
+                            <div className="text-gray-600 text-xs italic text-center mt-4">No data in this channel.</div>
                         )}
                         {filteredMessages.map((msg) => (
-                            <div key={msg.id} className="text-xs break-words leading-tight hover:bg-white/5 p-0.5 rounded">
+                            <div key={msg.id} className="text-xs break-words leading-tight hover:bg-white/5 p-0.5 rounded transition-colors group">
                                 <span className="text-gray-500 mr-2 text-[10px] md:text-xs">[{new Date(msg.timestamp).toLocaleTimeString()}]</span>
                                 {msg.channel !== 'SYSTEM' && (
-                                    <span className="font-bold text-gray-300 mr-1 cursor-pointer hover:underline text-[10px] md:text-xs">
+                                    <span 
+                                        onClick={() => handleMessageClick(msg)}
+                                        className="font-bold text-gray-300 mr-1 cursor-pointer hover:underline text-[10px] md:text-xs group-hover:text-axiom-cyan transition-colors"
+                                    >
                                         [{msg.senderName}]:
                                     </span>
                                 )}
-                                <span className={`${getChannelColor(msg.channel)} text-[10px] md:text-xs`}>
+                                <span 
+                                    onClick={() => msg.channel === 'EVENT' ? handleMessageClick(msg) : null}
+                                    className={`${getChannelColor(msg.channel)} text-[10px] md:text-xs ${msg.channel === 'EVENT' ? 'cursor-pointer hover:underline' : ''}`}
+                                >
                                     {msg.message}
                                 </span>
                             </div>
                         ))}
                     </div>
 
-                    {/* Input Placeholder */}
                     <div className="h-8 border-t border-white/10 flex items-center px-2 bg-black/60 flex-shrink-0">
-                        <span className="text-axiom-cyan text-xs font-bold mr-2">[SAY]:</span>
+                        <span className="text-axiom-cyan text-xs font-bold mr-2 uppercase tracking-tighter">observer:</span>
                         <input 
                             disabled 
-                            placeholder="Chat module strictly autonomous. Observer Mode active." 
-                            className="bg-transparent border-none outline-none text-xs text-gray-500 w-full italic"
+                            placeholder="Neural link active. Interaction with logs enabled." 
+                            className="bg-transparent border-none outline-none text-[10px] text-gray-500 w-full italic"
                         />
                     </div>
                 </>
