@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ouroboros: Axiom Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'axiom-dark': '#0a0a0f',
+              'axiom-purple': '#4f46e5',
+              'axiom-cyan': '#06b6d4',
+              'axiom-gold': '#d97706',
+              'soul-fire': '#ff4500'
+            },
+            fontFamily: {
+              sans: ['Rajdhani', 'sans-serif'],
+              serif: ['Cinzel', 'serif'],
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      body { margin: 0; background-color: #050505; color: white; overflow: hidden; }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: #0f0f15; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@19.0.0/",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react/": "https://esm.sh/react@19.0.0/",
+    "react": "https://esm.sh/react@19.0.0",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.0",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@9.121.4?external=three,react,react-dom,@react-three/fiber",
+    "three": "https://esm.sh/three@0.173.0",
+    "zustand": "https://esm.sh/zustand@5.0.3?external=react",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.0.0-rc.6?external=three,react,react-dom"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
