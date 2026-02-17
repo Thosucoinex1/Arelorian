@@ -1,5 +1,113 @@
+import { Agent, Item, ItemEffectType, ItemEffect, LandParcel, ResourceNode, ResourceType, AgentState } from './types';
+import { Chunk } from './store';
 
-import { Agent, Item, ItemEffectType, ItemEffect, LandParcel } from './types';
+// --- WORLD GENERATION ---
+
+// Simple hash function for pseudo-randomness from coordinates
+const simpleHash = (x: number, z: number) => {
+    const str = `${x},${z}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+};
+
+export type Biome = 'CITY' | 'FOREST' | 'MOUNTAIN' | 'PLAINS';
+
+export const getBiomeForChunk = (x: number, z: number): Biome => {
+    if (x === 0 && z === 0) return 'CITY';
+    const hash = simpleHash(x, z);
+    const val = hash % 100;
+    if (val < 35) return 'FOREST';
+    if (val < 60) return 'MOUNTAIN';
+    return 'PLAINS';
+};
+
+const BIOME_RESOURCES: Record<Biome, { type: ResourceType, density: number }[]> = {
+    'CITY': [],
+    'FOREST': [{ type: 'WOOD', density: 0.1 }, { type: 'SUNLEAF_HERB', density: 0.02 }],
+    'MOUNTAIN': [{ type: 'STONE', density: 0.08 }, { type: 'IRON_ORE', density: 0.05 }, { type: 'SILVER_ORE', density: 0.02 }],
+    'PLAINS': [{ type: 'WOOD', density: 0.01 }, { type: 'STONE', density: 0.02 }, { type: 'SUNLEAF_HERB', density: 0.04 }],
+};
+
+const BIOME_CREATURES: Record<Biome, { classType: string, density: number }[]> = {
+    'CITY': [],
+    'FOREST': [{ classType: 'Wolf', density: 0.01 }],
+    'MOUNTAIN': [{ classType: 'Goblin', density: 0.015 }],
+    'PLAINS': [{ classType: 'Wolf', density: 0.005 }],
+};
+
+export const generateResourcesForChunk = (chunk: Chunk): ResourceNode[] => {
+    const resources: ResourceNode[] = [];
+    const resourceRules = BIOME_RESOURCES[chunk.biome as Biome];
+    if (!resourceRules) return [];
+
+    const CHUNK_AREA = 80 * 80;
+    
+    resourceRules.forEach(rule => {
+        const count = Math.floor(CHUNK_AREA * rule.density);
+        for (let i = 0; i < count; i++) {
+            const pos_x = chunk.x * 80 + (Math.random() - 0.5) * 80;
+            const pos_z = chunk.z * 80 + (Math.random() - 0.5) * 80;
+            resources.push({
+                id: `res-${chunk.id}-${rule.type}-${i}`,
+                type: rule.type,
+                position: [pos_x, 0, pos_z],
+                amount: 50 + Math.floor(Math.random() * 50)
+            });
+        }
+    });
+
+    return resources;
+};
+
+export const generateCreaturesForChunk = (chunk: Chunk): Agent[] => {
+    const creatures: Agent[] = [];
+    const creatureRules = BIOME_CREATURES[chunk.biome as Biome];
+    if (!creatureRules) return [];
+
+    const CHUNK_AREA = 80 * 80;
+
+    creatureRules.forEach(rule => {
+        const count = Math.floor(CHUNK_AREA * rule.density);
+        for (let i = 0; i < count; i++) {
+            const pos_x = chunk.x * 80 + (Math.random() - 0.5) * 80;
+            const pos_z = chunk.z * 80 + (Math.random() - 0.5) * 80;
+            creatures.push({
+                id: `creature-${chunk.id}-${rule.classType}-${i}`,
+                name: rule.classType,
+                classType: rule.classType,
+                faction: 'CREATURE',
+                position: [pos_x, 0, pos_z],
+                rotationY: Math.random() * Math.PI * 2,
+                level: rule.classType === 'Goblin' ? 2 : 1,
+                state: AgentState.IDLE,
+                soulDensity: 0,
+                gold: Math.floor(Math.random() * 5),
+                isAwakened: false,
+                memoryCache: [],
+                thinkingMatrix: { personality: "Hostile, territorial", currentLongTermGoal: "Patrol area", alignment: -0.5, languagePreference: 'MIXED' },
+                skills: { mining: 0, woodcutting: 0, herbalism: 0, crafting: 0, negotiation: 0 },
+                inventory: [],
+                equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
+                stats: { 
+                    str: rule.classType === 'Goblin' ? 8 : 12, 
+                    agi: rule.classType === 'Goblin' ? 12 : 10, 
+                    int: 2, vit: 10, 
+                    hp: rule.classType === 'Goblin' ? 40 : 60, 
+                    maxHp: rule.classType === 'Goblin' ? 40 : 60 
+                },
+            });
+        }
+    });
+    
+    return creatures;
+};
+
+
 
 export const ITEM_SETS: Record<string, { [count: number]: ItemEffect[] }> = {
     'Voidstalker': {
@@ -28,7 +136,7 @@ export const isAgentInSafeZone = (agent: Agent, parcels: LandParcel[], notaryId:
     if (!notaryId) return false;
 
     const PARCEL_SIZE = 20; // Each parcel is a 20x20 unit square
-    const ownedParcels = parcels.filter(p => p.ownerId === notaryId);
+    const ownedParcels = parcels.filter(p => p.ownerId === notaryId && p.isCertified);
 
     for (const parcel of ownedParcels) {
         const [px, pz] = parcel.coordinates;
@@ -79,10 +187,7 @@ export const aggregateActiveEffects = (agent: Agent, includeInventory: boolean =
   };
 
   // Process currently equipped items
-  processItem(agent.equipment.head);
-  processItem(agent.equipment.chest);
-  processItem(agent.equipment.legs);
-  processItem(agent.equipment.mainHand);
+  Object.values(agent.equipment).forEach(item => processItem(item));
 
   // Process Set Bonuses
   Object.entries(setCounts).forEach(([setName, count]) => {

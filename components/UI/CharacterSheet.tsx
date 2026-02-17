@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store';
-import { Agent, Item, ItemStats } from '../../types';
+import { Agent, Item, ItemStats, ItemEffect } from '../../types';
+import { ITEM_SETS } from '../../utils';
 
 type EquipmentSlotType = keyof Agent['equipment'];
 
@@ -23,8 +24,6 @@ const getSlotForItemType = (type: Item['type']): EquipmentSlotType | null => {
     }
 }
 
-// FIX: Refactored the component to use a more idiomatic map-based rendering approach.
-// This avoids manually creating an array of JSX elements and resolves the 'Cannot find namespace JSX' error by removing the explicit type annotation.
 const StatComparison: React.FC<{ newItem: Item, equippedItem: Item | null }> = ({ newItem, equippedItem }) => {
     if (!equippedItem) {
         return (
@@ -93,14 +92,16 @@ const ItemTooltip: React.FC<{ item: Item, agent: Agent, position: {x: number, y:
 const EquipmentSlot: React.FC<{ agent: Agent, slot: EquipmentSlotType, onUnequip: (slot: EquipmentSlotType) => void }> = ({ agent, slot, onUnequip }) => {
     const item = agent.equipment[slot];
     const label = slot.replace(/([A-Z])/g, ' $1').toUpperCase();
+    const rarityGlowClass = item?.rarity === 'EPIC' ? 'item-glow-epic' : item?.rarity === 'LEGENDARY' ? 'item-glow-legendary' : '';
     
     return (
         <div className="text-center">
             <div
                 onClick={() => item && onUnequip(slot)}
-                className={`w-16 h-16 md:w-20 md:h-20 mx-auto bg-black/50 border-2 border-dashed border-white/10 rounded-lg flex items-center justify-center cursor-pointer hover:border-axiom-cyan ${item ? RARITY_COLORS[item.rarity] : ''}`}
+                className={`relative w-16 h-16 md:w-20 md:h-20 mx-auto bg-black/50 border-2 border-dashed border-white/10 rounded-lg flex items-center justify-center cursor-pointer hover:border-axiom-cyan ${item ? RARITY_COLORS[item.rarity] : ''} ${rarityGlowClass}`}
             >
                 {item ? <span className="text-3xl">⚔️</span> : <span className="text-gray-600 text-2xl">+</span>}
+                {item?.setName && <div className="absolute top-1 right-1 w-2 h-2 bg-axiom-cyan rounded-full border border-black" title={`Set: ${item.setName}`}></div>}
             </div>
             <p className="text-[10px] text-gray-500 mt-1">{label}</p>
             {item && <p className="text-xs font-bold text-white truncate">{item.name}</p>}
@@ -119,6 +120,7 @@ const InventoryItem: React.FC<{
     if (!item) {
         return <div className="w-16 h-16 bg-black/30 border border-white/5 rounded"></div>;
     }
+    const rarityGlowClass = item.rarity === 'EPIC' ? 'item-glow-epic' : item.rarity === 'LEGENDARY' ? 'item-glow-legendary' : '';
 
     return (
         <div
@@ -127,9 +129,51 @@ const InventoryItem: React.FC<{
             onClick={() => onEquip(item, index)}
             onMouseEnter={(e) => onMouseEnter(item, e)}
             onMouseLeave={onMouseLeave}
-            className={`w-16 h-16 bg-black/50 border-2 ${RARITY_COLORS[item.rarity]} rounded flex items-center justify-center cursor-pointer hover:bg-axiom-cyan/20 transition-colors`}
+            className={`relative w-16 h-16 bg-black/50 border-2 ${RARITY_COLORS[item.rarity]} rounded flex items-center justify-center cursor-pointer hover:bg-axiom-cyan/20 transition-colors ${rarityGlowClass}`}
         >
              <span className="text-2xl">⚔️</span>
+             {item.setName && <div className="absolute top-1 right-1 w-2 h-2 bg-axiom-cyan rounded-full border border-black" title={`Set: ${item.setName}`}></div>}
+        </div>
+    );
+};
+
+// FIX: Refactored to iterate over set definitions in a type-safe way, avoiding issues with `Object.entries` on numeric keys.
+const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
+    const setCounts: Record<string, number> = {};
+    // FIX: Switched to Object.values for cleaner, type-safe iteration over equipment items.
+    Object.values(agent.equipment).forEach((item) => {
+        if (item?.setName) {
+            setCounts[item.setName] = (setCounts[item.setName] || 0) + 1;
+        }
+    });
+
+    const activeBonuses: ItemEffect[] = [];
+    Object.entries(setCounts).forEach(([setName, count]) => {
+        const setDef = ITEM_SETS[setName];
+        if (!setDef) return;
+
+        // FIX: The previous implementation using Object.keys was causing type errors. This version iterates over entries for type safety.
+        Object.entries(setDef).forEach(([thresholdStr, effects]) => {
+            const threshold = Number(thresholdStr);
+            if (count >= threshold) {
+                activeBonuses.push(...effects);
+            }
+        });
+    });
+
+
+    if (activeBonuses.length === 0) return null;
+
+    return (
+        <div className="mt-6">
+            <h3 className="text-green-400 text-xs font-bold uppercase mb-2 tracking-widest">Set Bonuses</h3>
+            <div className="space-y-1 text-sm bg-black/20 p-2 rounded">
+                {activeBonuses.map((effect, i) => (
+                    <div key={`${effect.description}-${i}`} className="text-green-300 text-xs">
+                        {effect.description}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
@@ -186,14 +230,17 @@ export const CharacterSheet = () => {
                             <div></div><EquipmentSlot agent={agent} slot="legs" onUnequip={handleUnequip} /><div></div>
                         </div>
                      </div>
-                     <div className="mt-6">
-                        <h3 className="text-axiom-gold text-xs font-bold uppercase mb-2 tracking-widest">Core Matrix</h3>
-                        <div className="space-y-1 text-sm bg-black/20 p-2 rounded">
-                            <div className="flex justify-between"><span>STR</span> <span className="text-white">{agent.stats.str}</span></div>
-                            <div className="flex justify-between"><span>AGI</span> <span className="text-white">{agent.stats.agi}</span></div>
-                            <div className="flex justify-between"><span>INT</span> <span className="text-white">{agent.stats.int}</span></div>
-                            <div className="flex justify-between"><span>VIT</span> <span className="text-white">{agent.stats.vit}</span></div>
+                     <div>
+                        <div className="mt-6">
+                            <h3 className="text-axiom-gold text-xs font-bold uppercase mb-2 tracking-widest">Core Matrix</h3>
+                            <div className="space-y-1 text-sm bg-black/20 p-2 rounded">
+                                <div className="flex justify-between"><span>STR</span> <span className="text-white">{agent.stats.str}</span></div>
+                                <div className="flex justify-between"><span>AGI</span> <span className="text-white">{agent.stats.agi}</span></div>
+                                <div className="flex justify-between"><span>INT</span> <span className="text-white">{agent.stats.int}</span></div>
+                                <div className="flex justify-between"><span>VIT</span> <span className="text-white">{agent.stats.vit}</span></div>
+                            </div>
                         </div>
+                        <ActiveSetBonuses agent={agent} />
                     </div>
                 </div>
 

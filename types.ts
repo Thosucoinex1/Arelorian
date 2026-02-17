@@ -8,12 +8,13 @@ export enum AgentState {
   QUESTING = 'QUESTING',
   THINKING = 'THINKING',
   TRADING = 'TRADING',
-  BUILDING = 'BUILDING'
+  BUILDING = 'BUILDING',
+  HUNTING = 'HUNTING'
 }
 
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
-export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'NECK' | 'WAIST' | 'FINGER' | 'RESOURCE';
-export type ResourceType = 'WOOD' | 'ORE' | 'FOOD' | 'SOUL_SHARD';
+export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'NECK' | 'WAIST' | 'FINGER' | 'MATERIAL' | 'CONSUMABLE';
+export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'SUNLEAF_HERB';
 
 export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT';
 
@@ -46,12 +47,13 @@ export interface ThinkingMatrix {
   currentLongTermGoal: string;
   alignment: number; // -1 (Chaos) bis 1 (Ordnung)
   languagePreference: 'EN' | 'DE' | 'MIXED';
+  desires?: string[];
 }
 
 export interface AgentSkills {
   mining: number;
   woodcutting: number;
-  farming: number;
+  herbalism: number;
   crafting: number;
   negotiation: number;
 }
@@ -93,6 +95,7 @@ export interface Agent {
   id: string;
   name: string;
   classType: string;
+  faction: 'PLAYER' | 'ANOMALY' | 'CREATURE';
   position: [number, number, number];
   rotationY: number;
   level: number;
@@ -118,6 +121,8 @@ export interface Agent {
   
   loreSnippet?: string;
   stats: { str: number; agi: number; int: number; vit: number; hp: number; maxHp: number };
+  targetId?: string | null;
+  allianceId?: string | null;
 }
 
 export interface ResourceNode {
@@ -131,7 +136,7 @@ export interface LogEntry {
   id: string;
   timestamp: number;
   message: string;
-  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT';
+  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'GUILD';
 }
 
 export type StructureType = 'HOUSE' | 'BANK';
@@ -159,6 +164,7 @@ export interface Quest {
   title: string;
   description: string;
   rewardGold: number;
+  questGiverId?: string | null;
 }
 
 // Types for Notary Store

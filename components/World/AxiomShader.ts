@@ -64,6 +64,7 @@ varying float vElevation;
 
 uniform float uTime;
 uniform float uAwakeningDensity; 
+uniform float uBiome; // 0: City, 1: Forest, 2: Mountain, 3: Plains
 
 // FIX: Noise functions must be declared before they are used by fbm.
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
@@ -111,13 +112,22 @@ void main() {
     float rock_noise = fbm(vPosition.xz * 0.2);
     vec3 rock_color = vec3(0.15 + rock_noise * 0.1);
 
-    float moss_noise = fbm(vPosition.xz * 1.5);
-    vec3 moss_color = vec3(0.1, 0.25, 0.15) * (0.5 + moss_noise * 0.5);
+    float dirt_noise = fbm(vPosition.xz * 1.5);
+    vec3 dirt_color = vec3(0.2, 0.1, 0.05) * (0.5 + dirt_noise * 0.5);
 
     // Texture Blending based on slope (using the new, correct normal)
     float slope = 1.0 - normal.y;
     float blend_factor = smoothstep(0.2, 0.6, slope);
-    vec3 terrain_color = mix(moss_color, rock_color, blend_factor);
+    vec3 terrain_color = mix(dirt_color, rock_color, blend_factor);
+    
+    // Biome Coloring
+    if (uBiome == 1.0) { // Forest
+        terrain_color = mix(terrain_color, vec3(0.1, 0.25, 0.1), 0.5);
+    } else if (uBiome == 2.0) { // Mountain
+        terrain_color = mix(terrain_color, vec3(0.3, 0.3, 0.35), 0.6);
+    } else if (uBiome == 3.0) { // Plains
+        terrain_color = mix(terrain_color, vec3(0.3, 0.25, 0.1), 0.4);
+    }
     
     // Grid Logic
     float uGridSize = 0.02;
@@ -130,13 +140,13 @@ void main() {
     vec3 axiomCyan = vec3(0.023, 0.713, 0.831);
     vec3 awakenedGridColor = mix(uGridColor, axiomCyan, uAwakeningDensity);
     float gridIntensity = (0.05 + uAwakeningDensity * 0.3) * gridPattern;
-    vec3 final_color = mix(terrain_color, awakenedGridColor, gridIntensity);
+    vec3 final_grid_color = mix(terrain_color, awakenedGridColor, gridIntensity);
 
     // Lighting (using the new, correct normal)
     vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 lighting = vec3(0.3) + vec3(0.7) * diff;
-    final_color *= lighting;
+    vec3 final_color = final_grid_color * lighting;
 
     gl_FragColor = vec4(final_color, 1.0);
 }

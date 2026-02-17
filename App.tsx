@@ -11,6 +11,7 @@ import { AdminDashboard } from './components/UI/AdminDashboard';
 import { WorldMap } from './components/UI/WorldMap';
 import { QuestLog } from './components/UI/QuestLog';
 import { soundManager } from './services/SoundManager';
+import { VirtualJoysticks } from './components/UI/VirtualJoysticks';
 
 const AuthGate = () => {
     const { user, login } = useStore();
@@ -63,7 +64,8 @@ const AppHeader = () => {
 }
 
 const App = () => {
-  const { initGame, showAdmin, showMap, toggleAdmin, toggleMap } = useStore();
+  const { initGame, showAdmin, showMap, toggleAdmin, toggleMap, device } = useStore();
+  const isMobile = device.isMobile;
 
   useEffect(() => {
     initGame();
@@ -112,6 +114,7 @@ const App = () => {
       </div>
       <AdminDashboard />
       <WorldMap />
+      {isMobile && <VirtualJoysticks />}
       <div className="absolute bottom-4 right-4 text-white/10 text-6xl font-serif pointer-events-none">
         OUROBOROS
       </div>
