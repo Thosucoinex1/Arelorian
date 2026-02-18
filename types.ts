@@ -120,6 +120,7 @@ export interface Agent {
   dna: AxiomaticDNA;
   memoryCache: string[];
   isAwakened?: boolean;
+  isAdvancedIntel?: boolean; // Associated with house ownership
   loreSnippet?: string;
   quotaResetTime?: number;
   apiQuotaExceeded?: boolean;
@@ -204,11 +205,12 @@ export interface LandParcel {
   structures: Structure[];
 }
 
-export type StructureType = 'HOUSE' | 'BANK' | 'FORGE' | 'MARKET_STALL';
+export type StructureType = 'HOUSE' | 'BANK' | 'FORGE' | 'MARKET_STALL' | 'DATA_HUB';
 
 export interface Structure {
   id: string;
   type: StructureType;
+  ownerId?: string;
 }
 
 export const AXIOMS = [
@@ -233,4 +235,4 @@ export interface StoreProduct {
     priceEUR: number;
 }
 
-export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';
+export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE' | 'MATRIX_ENERGY_REFILL' | 'DATA_HUB_UPGRADE';

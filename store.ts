@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
-  Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel
+  Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs } from './utils';
 import { generateAutonomousDecision } from './services/geminiService';
@@ -26,6 +26,9 @@ interface GameState {
   cameraTarget: [number, number, number] | null; 
   serverStats: { uptime: number; tickRate: number; memoryUsage: number; threatLevel: number };
   user: { id: string; name: string; email: string };
+  userApiKey: string | null;
+  matrixEnergy: number; 
+  globalApiCooldown: number; // Timestamp when API can be used again
   device: { isMobile: boolean };
   lastLocalThinkTime: number;
   showMarket: boolean;
@@ -55,6 +58,11 @@ interface GameState {
   uploadGraphicPack: (name: string) => void;
   importAgent: (source: string, type: 'URL' | 'JSON') => void;
   setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => void;
+  setUserApiKey: (key: string | null) => void;
+  consumeEnergy: (amount: number) => boolean;
+  refillEnergy: (amount: number) => void;
+  buildStructureOnParcel: (parcelId: string, type: StructureType) => void;
+  setGlobalApiCooldown: (timestamp: number) => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -70,6 +78,9 @@ export const useStore = create<GameState>((set, get) => ({
   auctionHouse: [],
   activeEvents: [],
   graphicPacks: ['Default Architecture'],
+  userApiKey: localStorage.getItem('OUROBOROS_API_KEY'),
+  matrixEnergy: 100,
+  globalApiCooldown: 0,
   market: {
     prices: { WOOD: 5, STONE: 8, IRON_ORE: 15, SILVER_ORE: 40, GOLD_ORE: 100, DIAMOND: 500, ANCIENT_RELIC: 1000, SUNLEAF_HERB: 25 },
     inventory: { WOOD: 100, STONE: 100, IRON_ORE: 50, SILVER_ORE: 10, GOLD_ORE: 5, DIAMOND: 1, ANCIENT_RELIC: 0, SUNLEAF_HERB: 20 }
@@ -87,6 +98,29 @@ export const useStore = create<GameState>((set, get) => ({
   showCharacterSheet: false,
   isAxiomAuthenticated: false,
 
+  setUserApiKey: (key) => {
+    if (key) localStorage.setItem('OUROBOROS_API_KEY', key);
+    else localStorage.removeItem('OUROBOROS_API_KEY');
+    set({ userApiKey: key });
+  },
+
+  setGlobalApiCooldown: (timestamp) => set({ globalApiCooldown: timestamp }),
+
+  consumeEnergy: (amount) => {
+    const current = get().matrixEnergy;
+    if (current >= amount) {
+      set({ matrixEnergy: current - amount });
+      return true;
+    }
+    get().addLog("Matrix-Energie kritisch. Schalte auf Heuristik um oder spende Energie.", 'WATCHDOG', 'SYSTEM');
+    return false;
+  },
+
+  refillEnergy: (amount) => {
+    set(s => ({ matrixEnergy: s.matrixEnergy + amount }));
+    get().addLog(`Neuraler Refill erfolgreich: +${amount} Energie.`, 'SYSTEM', 'NOTAR');
+  },
+
   initGame: () => {
     const initialChunks: Chunk[] = [
         { id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0 },
@@ -96,11 +130,11 @@ export const useStore = create<GameState>((set, get) => ({
     const initialAgents: Agent[] = [
         {
             id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8 },
-            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true
+            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false
         },
         {
           id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4 },
-          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false
+          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false
         }
     ];
 
@@ -109,7 +143,15 @@ export const useStore = create<GameState>((set, get) => ({
       { id: 'm2', type: 'GOBLIN', name: 'Scavenger', position: [-30, 0, 40], rotationY: 0, stats: { ...MONSTER_TEMPLATES.GOBLIN, maxHp: 60 }, xpReward: 40, state: 'IDLE', targetId: null, color: '#84cc16', scale: 0.8 }
     ];
 
-    set({ loadedChunks: initialChunks, agents: initialAgents, monsters: initialMonsters, pois: generateProceduralPOIs(10) });
+    set({ 
+      loadedChunks: initialChunks, 
+      agents: initialAgents, 
+      monsters: initialMonsters, 
+      pois: generateProceduralPOIs(10),
+      landParcels: [
+        { id: 'parcel_1', name: 'Axiom Lot Alpha', ownerId: 'u1', isCertified: true, structures: [] }
+      ]
+    });
     get().addLog("ADMIN: Welt initialisiert. Marktplatz eröffnet.", 'SYSTEM', 'NOTAR');
   },
 
@@ -167,9 +209,28 @@ export const useStore = create<GameState>((set, get) => ({
     if (now - state.lastLocalThinkTime < 8000) return;
     set({ lastLocalThinkTime: now });
 
+    // Global Rate Limit Check
+    const isApiThrottled = now < state.globalApiCooldown;
+
     for (const agent of state.agents) {
       if (agent.faction === 'SYSTEM') continue;
-      const decision = await generateAutonomousDecision(agent, state.agents.filter(a => a.id !== agent.id), state.resourceNodes, state.logs.slice(0, 5), false, true);
+
+      // Cognitive Cost Calculation
+      const energyCost = agent.isAdvancedIntel ? 1 : 5;
+      const hasEnergy = get().consumeEnergy(energyCost);
+      
+      const useHeuristics = isApiThrottled || !hasEnergy;
+
+      const decision = await generateAutonomousDecision(
+        agent, 
+        state.agents.filter(a => a.id !== agent.id), 
+        state.resourceNodes, 
+        state.logs.slice(0, 5), 
+        false, 
+        !useHeuristics, 
+        state.userApiKey || undefined 
+      );
+
       set(s => ({
         agents: s.agents.map(a => a.id === agent.id ? { 
           ...a, 
@@ -200,8 +261,44 @@ export const useStore = create<GameState>((set, get) => ({
     get().addLog(`Signal: ${msg}`, 'AXIOM', 'OVERSEER');
   },
   purchaseProduct: (id) => {
+    if (id === 'MATRIX_ENERGY_REFILL') {
+      get().refillEnergy(500);
+      return;
+    }
+    if (id === 'DATA_HUB_UPGRADE') {
+      const selected = get().selectedAgentId;
+      if (selected) {
+        set(s => ({
+          agents: s.agents.map(a => a.id === selected ? { ...a, isAdvancedIntel: true } : a)
+        }));
+        get().addLog(`Agent ${selected} auf Advanced Intelligence upgegradet.`, 'SYSTEM', 'NOTAR');
+      }
+      return;
+    }
     get().addLog(`Purchased product: ${id}`, 'TRADE', 'SYSTEM');
   },
+
+  buildStructureOnParcel: (parcelId, type) => {
+    const parcel = get().landParcels.find(p => p.id === parcelId);
+    if (!parcel) return;
+
+    const newStructure = { id: `struct_${Date.now()}`, type, ownerId: get().user.id };
+    
+    set(s => ({
+      landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, newStructure] } : p)
+    }));
+
+    if (type === 'DATA_HUB') {
+       const agentId = get().selectedAgentId;
+       if (agentId) {
+         set(s => ({
+           agents: s.agents.map(a => a.id === agentId ? { ...a, isAdvancedIntel: true } : a)
+         }));
+         get().addLog(`DATA-HUB errichtet. Agent ${agentId} jetzt permanent auf Advanced Intelligence.`, 'AXIOM', 'SYSTEM');
+       }
+    }
+  },
+
   equipItem: (agentId, item, index) => {
     set(s => ({
       agents: s.agents.map(a => a.id === agentId ? {
@@ -243,7 +340,5 @@ export const useStore = create<GameState>((set, get) => ({
   importAgent: (source, type) => {
     get().addLog(`Importing entity from ${type}...`, 'SYSTEM', 'NOTAR');
   },
-  setJoystick: (side, axis) => {
-    // Handle joystick input for movement/camera
-  }
+  setJoystick: (side, axis) => {}
 })));

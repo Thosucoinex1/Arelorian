@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
 import { AgentState, AXIOMS } from '../../types';
-import { Timer, ZapOff, Eye, Package, Shield, Swords, Pickaxe, Hammer, Brain } from 'lucide-react';
+import { Timer, ZapOff, Eye, Package, Shield, Swords, Pickaxe, Hammer, Brain, Zap } from 'lucide-react';
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
   const agents = useStore(state => state.agents);
   const selectAgent = useStore(state => state.selectAgent);
   const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
+  const globalApiCooldown = useStore(state => state.globalApiCooldown);
   const isOpen = useStore(state => state.showCharacterSheet);
   const isMobile = useStore(state => state.device.isMobile);
 
@@ -31,6 +32,8 @@ export const AgentHUD = () => {
 
   const invCount = agent.inventory.filter(i => i).length;
   const bankCount = agent.bank.filter(i => i).length;
+  
+  const isThrottled = now < globalApiCooldown;
 
   const topSkills = Object.entries(agent.skills || {})
     .sort(([, a], [, b]) => b.level - a.level)
@@ -64,9 +67,9 @@ export const AgentHUD = () => {
                         {String(agent.state || AgentState.IDLE)}
                     </span>
                     {agent.isAwakened && (
-                        <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>
-                            {agent.apiQuotaExceeded ? <ZapOff className="w-2.5 h-2.5" /> : null}
-                            {agent.apiQuotaExceeded ? 'Neural Limit' : 'Awakened'}
+                        <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded || isThrottled ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>
+                            {agent.apiQuotaExceeded || isThrottled ? <ZapOff className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />}
+                            {isThrottled ? 'Throttled' : 'Awakened'}
                         </span>
                     )}
                 </div>
@@ -77,6 +80,7 @@ export const AgentHUD = () => {
                         <div className="flex items-center gap-1 mb-1 not-italic font-black text-axiom-cyan uppercase">
                             <Brain className="w-2.5 h-2.5" /> 
                             {String(agent.lastDecision.decision)}
+                            {isThrottled && <span className="text-[7px] ml-auto text-red-500 font-mono">[HEURISTIC]</span>}
                         </div>
                         {String(agent.lastDecision.justification)}
                     </div>
