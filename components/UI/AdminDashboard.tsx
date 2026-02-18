@@ -4,15 +4,24 @@ import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
 
 export const AdminDashboard = () => {
-    const { showAdmin, toggleAdmin, serverStats, graphicPacks, uploadGraphicPack } = useStore();
+    const { showAdmin, toggleAdmin, serverStats, graphicPacks, uploadGraphicPack, importAgent } = useStore();
     const [paypalKey, setPaypalKey] = useState("sk_test_123456789");
     const [newPackName, setNewPackName] = useState("");
+    const [importSource, setImportSource] = useState("");
+    const [importType, setImportType] = useState<'URL' | 'JSON'>('URL');
 
     if (!showAdmin) return null;
 
+    const handleImport = () => {
+        if (!importSource) return;
+        importAgent(importSource, importType);
+        setImportSource("");
+        soundManager.playUI('CLICK');
+    };
+
     return (
         <div className="absolute inset-0 bg-black/90 z-50 flex items-center justify-center font-sans">
-            <div className="w-[800px] bg-[#111] border border-axiom-purple rounded-lg shadow-[0_0_50px_rgba(79,70,229,0.3)] flex flex-col overflow-hidden">
+            <div className="w-[800px] bg-[#111] border border-axiom-purple rounded-lg shadow-[0_0_50px_rgba(79,70,229,0.3)] flex flex-col overflow-hidden max-h-[90vh]">
                 
                 {/* Header */}
                 <div className="bg-gradient-to-r from-axiom-purple to-black p-4 flex justify-between items-center">
@@ -20,7 +29,7 @@ export const AdminDashboard = () => {
                     <button onClick={() => toggleAdmin(false)} className="text-gray-400 hover:text-white">✕</button>
                 </div>
 
-                <div className="flex p-6 gap-6 h-[500px]">
+                <div className="flex p-6 gap-6 h-auto overflow-y-auto">
                     {/* Left: Stats */}
                     <div className="w-1/3 space-y-4">
                         <div className="bg-black/40 border border-white/10 p-4 rounded">
@@ -50,6 +59,32 @@ export const AdminDashboard = () => {
 
                     {/* Right: Controls & Assets */}
                     <div className="w-2/3 space-y-4">
+                        
+                        {/* Neural Import Section */}
+                        <div className="bg-black/40 border border-white/10 p-4 rounded border-l-4 border-l-green-500">
+                             <h3 className="text-green-500 text-xs font-bold uppercase mb-2 flex items-center gap-2">
+                                 <span>Neural Entity Import</span>
+                                 <span className="bg-green-900/40 text-[9px] px-1 rounded">V2.1</span>
+                             </h3>
+                             <div className="flex gap-2 mb-2">
+                                 <button onClick={() => setImportType('URL')} className={`flex-1 text-[10px] py-1 rounded border ${importType === 'URL' ? 'bg-green-900/40 border-green-500 text-white' : 'border-gray-700 text-gray-500'}`}>JanitorAI / CAI URL</button>
+                                 <button onClick={() => setImportType('JSON')} className={`flex-1 text-[10px] py-1 rounded border ${importType === 'JSON' ? 'bg-green-900/40 border-green-500 text-white' : 'border-gray-700 text-gray-500'}`}>Raw JSON Schema</button>
+                             </div>
+                             <textarea 
+                                value={importSource}
+                                onChange={(e) => setImportSource(e.target.value)}
+                                placeholder={importType === 'URL' ? "Paste https://janitorai.com/characters/... URL" : "{ \"name\": \"Entity\", ... }"}
+                                className="w-full h-20 bg-black border border-white/20 p-2 text-xs text-green-300 rounded font-mono mb-2 focus:border-green-500 outline-none"
+                             />
+                             <button 
+                                onClick={handleImport}
+                                disabled={!importSource}
+                                className={`w-full py-2 text-xs font-bold rounded uppercase tracking-wider ${!importSource ? 'bg-gray-800 text-gray-500' : 'bg-green-700 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.3)]'}`}
+                             >
+                                 Materialize Entity
+                             </button>
+                        </div>
+
                         <div className="bg-black/40 border border-white/10 p-4 rounded h-full flex flex-col">
                             <h3 className="text-white text-xs font-bold uppercase mb-4 border-b border-white/10 pb-2">Graphic Pack Manager</h3>
                             

@@ -1,10 +1,12 @@
 
 import { create } from 'zustand';
 import { 
-  Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Quest, Item, StructureType, LandParcel, Structure
+  Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Quest, Item, StructureType, LandParcel, Structure,
+  Monster, MonsterType, MONSTER_TEMPLATES, Battle
 } from './types';
 import { getBiomeForChunk, summarizeNeurologicChoice } from './utils';
 import { generateAutonomousDecision } from './services/geminiService';
+import { CharacterImporter } from './services/CharacterImporter';
 
 export interface User {
   id: string;
@@ -28,15 +30,19 @@ export interface Event {
 
 interface GameState {
   agents: Agent[];
+  monsters: Monster[];
   resourceNodes: ResourceNode[];
   logs: LogEntry[];
   chatMessages: ChatMessage[];
+  battles: Battle[];
+  
   selectedAgentId: string | null;
   cameraTarget: [number, number, number] | null; 
   loadedChunks: Chunk[];
   globalJackpot: number;
   stability: number;
   lastLocalThinkTime: number;
+  lastCombatTick: number;
   
   user: User | null;
   hasNotaryLicense: boolean;
@@ -73,12 +79,14 @@ interface GameState {
   uploadGraphicPack: (name: string) => void;
   toggleMap: (val: boolean) => void;
   setJoystick: (side: 'left' | 'right', values: {x: number, y: number}) => void;
+  
+  importAgent: (source: string, type: 'URL' | 'JSON') => Promise<void>;
 }
 
 export const useStore = create<GameState>((set, get) => ({
-  agents: [], resourceNodes: [], logs: [], chatMessages: [],
+  agents: [], monsters: [], resourceNodes: [], logs: [], chatMessages: [], battles: [],
   selectedAgentId: null, cameraTarget: null, loadedChunks: [],
-  globalJackpot: 50000, stability: 1.0, lastLocalThinkTime: 0,
+  globalJackpot: 50000, stability: 1.0, lastLocalThinkTime: 0, lastCombatTick: 0,
   
   user: { id: 'user_1', name: 'Observer_1' },
   hasNotaryLicense: false,
@@ -102,22 +110,83 @@ export const useStore = create<GameState>((set, get) => ({
   })),
 
   initGame: () => {
+    // --- OUROBOROS GRID GENERATION ---
+    // Instead of random scattering, we generate a grid of chunks with specific room types
     const newChunks: Chunk[] = [];
-    for (let x = -2; x <= 2; x++) {
-      for (let z = -2; z <= 2; z++) {
-        newChunks.push({ id: `${x},${z}`, x, z, biome: getBiomeForChunk(x, z), entropy: Math.random() });
-      }
-    }
-    
-    // Create initial resources for agents to find
     const resources: ResourceNode[] = [];
-    for(let i=0; i<20; i++) {
-        resources.push({
-            id: `res_${i}`,
-            type: Math.random() > 0.5 ? 'WOOD' : 'STONE',
-            position: [(Math.random()-0.5)*80, 0, (Math.random()-0.5)*80],
-            amount: 100
-        });
+    const newMonsters: Monster[] = [];
+    
+    const GRID_SIZE = 5; // 5x5 chunks = 400x400 units (80 units per chunk)
+    const OFFSET = 2; // -2 to +2
+    const CHUNK_SIZE = 80;
+
+    for (let x = -OFFSET; x <= OFFSET; x++) {
+      for (let z = -OFFSET; z <= OFFSET; z++) {
+        const biome = getBiomeForChunk(x, z);
+        const rand = Math.random();
+        
+        let roomType: Chunk['roomType'] = 'NORMAL';
+        if (x === 0 && z === 0) roomType = 'SAFE'; // Center city
+        else if (rand < 0.1) roomType = 'DUNGEON';
+        else if (rand < 0.2) roomType = 'RESOURCE_RICH';
+        else if (rand < 0.25) roomType = 'BOSS';
+
+        newChunks.push({ id: `${x},${z}`, x, z, biome, entropy: Math.random(), roomType });
+
+        // --- RESOURCE GENERATION ---
+        const resCount = roomType === 'RESOURCE_RICH' ? 8 : roomType === 'NORMAL' ? 2 : 0;
+        for(let i=0; i<resCount; i++) {
+           let type: any = 'WOOD';
+           if (biome === 'MOUNTAIN') type = Math.random() > 0.5 ? 'STONE' : 'IRON_ORE';
+           if (biome === 'FOREST') type = Math.random() > 0.7 ? 'SUNLEAF_HERB' : 'WOOD';
+           if (biome === 'PLAINS') type = Math.random() > 0.8 ? 'STONE' : 'WOOD';
+           if (roomType === 'RESOURCE_RICH') type = 'GOLD_ORE';
+
+           resources.push({
+               id: `res_${x}_${z}_${i}`,
+               type,
+               position: [
+                   x * CHUNK_SIZE + (Math.random() - 0.5) * 60,
+                   0,
+                   z * CHUNK_SIZE + (Math.random() - 0.5) * 60
+               ],
+               amount: 100
+           });
+        }
+
+        // --- MONSTER SPAWNING ---
+        if (roomType !== 'SAFE') {
+            const monsterChance = roomType === 'DUNGEON' ? 0.8 : 0.3;
+            if (Math.random() < monsterChance) {
+                const types: MonsterType[] = Object.keys(MONSTER_TEMPLATES) as MonsterType[];
+                // Biome preference
+                let preferredType: MonsterType = 'GOBLIN';
+                if (biome === 'MOUNTAIN') preferredType = 'ORC';
+                if (roomType === 'BOSS') preferredType = 'BOSS_DEMON';
+                else if (Math.random() > 0.9) preferredType = 'DRAGON';
+                else if (Math.random() > 0.6) preferredType = 'ORC';
+
+                const template = MONSTER_TEMPLATES[preferredType];
+                newMonsters.push({
+                    id: `mob_${x}_${z}_${Math.random().toString(36).substr(2,4)}`,
+                    type: preferredType,
+                    name: template.name,
+                    position: [
+                        x * CHUNK_SIZE + (Math.random() - 0.5) * 60,
+                        0,
+                        z * CHUNK_SIZE + (Math.random() - 0.5) * 60
+                    ],
+                    rotationY: Math.random() * Math.PI * 2,
+                    stats: { hp: template.hp, maxHp: template.hp, atk: template.atk, def: template.def },
+                    xpReward: template.xp,
+                    state: 'IDLE',
+                    targetId: null,
+                    color: template.color,
+                    scale: template.scale
+                });
+            }
+        }
+      }
     }
 
     // Initialize Land Parcels in a ring formation
@@ -137,20 +206,20 @@ export const useStore = create<GameState>((set, get) => ({
         });
     }
 
-    const agents: Agent[] = Array(12).fill(0).map((_, i) => ({
+    const agents: Agent[] = Array(8).fill(0).map((_, i) => ({
       id: `agent_${i}`,
       name: `Entity_${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       classType: ['Paladin', 'Technomancer', 'Scout'][i % 3],
-      faction: i === 0 ? 'PLAYER' : 'NPC',
+      faction: 'PLAYER',
       position: [(Math.random() - 0.5) * 40, 0, (Math.random() - 0.5) * 40],
       rotationY: Math.random() * Math.PI * 2,
       level: 1, xp: 0,
       state: AgentState.IDLE,
-      soulDensity: 0.5, gold: 350, // Initial gold boost to allow early building for testing
+      soulDensity: 0.5, gold: 350,
       stabilityIndex: 1.0, energy: 100, maxEnergy: 100, integrity: 1.0,
       dna: { hash: Math.random().toString(36).slice(2), generation: 1, corruption: 0 },
       memoryCache: [],
-      thinkingMatrix: { personality: 'Analytical', currentLongTermGoal: 'Observe System', alignment: 0.2, languagePreference: 'MIXED' },
+      thinkingMatrix: { personality: 'Analytical', currentLongTermGoal: 'Observe System', alignment: 0.2, languagePreference: 'MIXED', sociability: Math.random(), aggression: Math.random() },
       skills: { 
           gathering: Math.random() * 5, 
           logic: Math.random() * 5,
@@ -163,27 +232,61 @@ export const useStore = create<GameState>((set, get) => ({
       stuckTicks: 0, wanderTarget: null
     }));
     
-    set({ loadedChunks: newChunks, agents, resourceNodes: resources, landParcels: parcels });
+    set({ loadedChunks: newChunks, agents, monsters: newMonsters, resourceNodes: resources, landParcels: parcels });
+    
+    get().addLog('Ouroboros Grid Initialized. Monsters Spawned.', 'SYSTEM');
+  },
 
-    // Send required startup code
-    get().addLog('GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I', 'SYSTEM', 'Admin_Override');
-    set(s => ({
-        chatMessages: [...s.chatMessages, {
-            id: 'init_sys_code',
-            senderId: 'SYSTEM',
-            senderName: 'SYSTEM',
-            message: 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I',
-            channel: 'GLOBAL',
-            timestamp: Date.now()
-        }]
-    }));
+  importAgent: async (source, type) => {
+      get().addLog(`Initiating Neural Import...`, 'SYSTEM');
+      let data: Partial<Agent> | null = null;
+      
+      if (type === 'URL') {
+          data = await CharacterImporter.importFromURL(source);
+      } else {
+          data = CharacterImporter.importFromJSON(source);
+      }
+
+      if (data) {
+          const newAgent: Agent = {
+              id: `imported_${Date.now()}`,
+              name: data.name || 'Unknown',
+              classType: 'Traveler',
+              faction: 'PLAYER',
+              position: [0, 5, 0], // Spawn in air
+              rotationY: 0,
+              level: 1, xp: 0,
+              state: AgentState.IDLE,
+              soulDensity: 0.8, gold: 100,
+              stabilityIndex: 1.0, energy: 100, maxEnergy: 100, integrity: 1.0,
+              dna: { hash: 'IMPORTED', generation: 0, corruption: 0 },
+              memoryCache: [`IMPORTED FROM ${type}`],
+              thinkingMatrix: {
+                  personality: 'Complex',
+                  currentLongTermGoal: 'Adapt',
+                  alignment: 0.5,
+                  languagePreference: 'EN',
+                  ...data.thinkingMatrix
+              } as any,
+              skills: { gathering: 1, logic: 5 },
+              inventory: Array(10).fill(null),
+              equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
+              stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100, ...data.stats },
+              loreSnippet: data.loreSnippet
+          };
+
+          set(s => ({ agents: [...s.agents, newAgent] }));
+          get().addLog(`Entity '${newAgent.name}' materialized successfully.`, 'SYSTEM');
+      } else {
+          get().addLog(`Import Failed: Invalid Data`, 'SYSTEM');
+      }
   },
 
   sendSignal: async (content) => {
+    // ... existing implementation ...
     const { agents, addLog, resourceNodes, logs } = get();
     addLog(String(content), 'EVENT', 'NOTAR');
 
-    // --- N+1 CHEAT CODE TRIGGER ---
     if (content.trim() === 'nplus1') {
         set(s => ({
             stability: 1.0,
@@ -260,7 +363,8 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   runCognition: () => {
-    const state = get();
+      // ... existing implementation ...
+      const state = get();
     const now = Date.now();
     if (now - state.lastLocalThinkTime < 4000) return;
 
@@ -284,8 +388,7 @@ export const useStore = create<GameState>((set, get) => ({
             lastChoiceLogic: summary.logic
         };
 
-        // --- EMERGENT BEHAVIORS ---
-
+        // --- EMERGENT BEHAVIORS (Copied from previous store.ts) ---
         // 1. Proactive Resource Seeking based on Skills
         if (summary.choice === AgentState.GATHERING) {
             const hasMining = (agent.skills.mining || 0) > 2;
@@ -299,8 +402,6 @@ export const useStore = create<GameState>((set, get) => ({
                 let matchesSkill = false;
                 if (hasMining && (r.type.includes('STONE') || r.type.includes('ORE'))) matchesSkill = true;
                 if (hasWood && (r.type.includes('WOOD') || r.type.includes('TREE'))) matchesSkill = true;
-                
-                // If neither, but general gathering is high, accept any
                 if (!hasMining && !hasWood && (agent.skills.gathering || 0) > 1) matchesSkill = true;
 
                 if (matchesSkill) {
@@ -312,7 +413,6 @@ export const useStore = create<GameState>((set, get) => ({
                 }
             });
             
-            // Fallback: If specialist resources not found, find nearest any
             if (!bestTarget && state.resourceNodes.length > 0) {
                  bestTarget = state.resourceNodes.reduce((prev, curr) => {
                      const prevDist = Math.hypot(prev.position[0]-agent.position[0], prev.position[2]-agent.position[2]);
@@ -326,24 +426,15 @@ export const useStore = create<GameState>((set, get) => ({
                 updates.targetId = bestTarget.id;
             }
         }
-
-        // 2. Building & Territorial Claims
         else if (summary.choice === AgentState.BUILDING) {
-            // Find nearest unowned parcel
             let targetParcel = updatedParcels.find(p => p.ownerId === null);
             if (targetParcel) {
-                // Check if close enough to buy/build
                 const dist = Math.hypot(targetParcel.position[0] - agent.position[0], targetParcel.position[2] - agent.position[2]);
-                
                 if (dist > 5) {
-                    // Move towards it
                     updates.wanderTarget = targetParcel.position;
                 } else {
-                    // Purchase and Build logic
                     if (agent.gold >= targetParcel.price) {
                         updates.gold = agent.gold - targetParcel.price;
-                        
-                        // Update parcel in the local copy to prevent double buying in same tick
                         const pIndex = updatedParcels.findIndex(p => p.id === targetParcel!.id);
                         if (pIndex !== -1) {
                             updatedParcels[pIndex] = {
@@ -353,10 +444,9 @@ export const useStore = create<GameState>((set, get) => ({
                                 structures: [{
                                     id: Math.random().toString(),
                                     type: 'HOUSE',
-                                    position: [0, 0, 0] // Relative to parent
+                                    position: [0, 0, 0]
                                 }]
                             };
-                            
                             newLogs.push({
                                 id: Math.random().toString(),
                                 timestamp: Date.now(),
@@ -366,14 +456,11 @@ export const useStore = create<GameState>((set, get) => ({
                             });
                         }
                     } else {
-                        // Failed to buy (maybe price changed or math error), switch to Questing to get gold
                         updates.state = AgentState.QUESTING;
                     }
                 }
             }
         }
-
-        // 3. Alliance Forming & Social Interaction
         else if (summary.choice === AgentState.ALLIANCE_FORMING) {
              const nearbyAlly = state.agents.find(a => a.id !== agent.id && !a.alliedId && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 15);
              if (nearbyAlly) {
@@ -390,16 +477,10 @@ export const useStore = create<GameState>((set, get) => ({
                  }
              }
         }
-
-        // 4. Dynamic Trading
         else if (summary.choice === AgentState.TRADING) {
-            // Move towards market hub (approx 0,0)
             updates.wanderTarget = [-5 + Math.random()*10, 0, -5 + Math.random()*10];
         }
-
-        // 5. Organic Quest Generation based on Needs/Observations
         else if (summary.choice === AgentState.QUESTING) {
-            // Check inventory state for "Trading" quests
             const invCount = agent.inventory.filter(i => i).length;
             const isRich = agent.gold > 500;
             const isPoor = agent.gold < 100;
@@ -456,15 +537,107 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   updatePhysics: (delta) => {
-    set(s => ({
-      serverStats: { ...s.serverStats, uptime: s.serverStats.uptime + delta },
-      agents: s.agents.map(agent => {
+    // 1. Process Monster Logic & Combat (Throttled to 1s)
+    const now = Date.now();
+    const shouldRunLogic = now - get().lastCombatTick > 1000;
+    
+    set(s => {
+      let nextMonsters = [...s.monsters];
+      let nextBattles = [...s.battles];
+      let nextAgents = [...s.agents];
+      let nextLogs = [...s.logs];
+
+      if (shouldRunLogic) {
+        // MONSTER AI
+        nextMonsters = nextMonsters.map(m => {
+          if (m.state === 'DEAD') return m;
+          
+          // Find nearest player
+          let target = nextAgents.find(a => a.id === m.targetId);
+          if (!target) {
+            const nearest = nextAgents.find(a => {
+              const dist = Math.hypot(a.position[0] - m.position[0], a.position[2] - m.position[2]);
+              return dist < 15; // Aggro range
+            });
+            if (nearest) {
+              m.targetId = nearest.id;
+              m.state = 'COMBAT';
+              target = nearest;
+              
+              // Start Battle
+              if (!nextBattles.find(b => b.participants.some(p => p.id === m.id))) {
+                  nextBattles.push({
+                      id: `battle_${now}_${m.id}`,
+                      participants: [{ id: m.id, type: 'MONSTER' }, { id: nearest.id, type: 'AGENT' }],
+                      turn: 0,
+                      lastTick: now
+                  });
+                  nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `${m.name} attacked ${nearest.name}!`, type: 'COMBAT', sender: m.name });
+              }
+            }
+          }
+
+          // Move towards target
+          if (target && m.state === 'COMBAT') {
+            const dx = target.position[0] - m.position[0];
+            const dz = target.position[2] - m.position[2];
+            const dist = Math.hypot(dx, dz);
+            
+            if (dist > 2) {
+               const speed = 3 * delta;
+               const angle = Math.atan2(dx, dz);
+               m.position[0] += Math.sin(angle) * speed;
+               m.position[2] += Math.cos(angle) * speed;
+               m.rotationY = angle;
+            }
+          }
+
+          return m;
+        });
+
+        // PROCESS BATTLES
+        nextBattles = nextBattles.filter(b => {
+            const mPart = b.participants.find(p => p.type === 'MONSTER');
+            const aPart = b.participants.find(p => p.type === 'AGENT');
+            if(!mPart || !aPart) return false;
+
+            const monster = nextMonsters.find(m => m.id === mPart.id);
+            const agent = nextAgents.find(a => a.id === aPart.id);
+
+            if (!monster || !agent || monster.state === 'DEAD' || agent.stats.hp <= 0) {
+                // Battle over
+                if (monster && monster.stats.hp <= 0 && monster.state !== 'DEAD') {
+                    monster.state = 'DEAD';
+                    agent!.xp += monster.xpReward;
+                    agent!.gold += 20;
+                    nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `${agent!.name} defeated ${monster.name}! +${monster.xpReward} XP`, type: 'COMBAT', sender: 'SYSTEM' });
+                }
+                return false;
+            }
+
+            // Damage Step
+            const dmgToAgent = Math.max(1, monster.stats.atk - (agent.stats.vit / 2));
+            const dmgToMonster = Math.max(1, agent.stats.str - (monster.stats.def / 2));
+            
+            agent.stats.hp -= dmgToAgent;
+            monster.stats.hp -= dmgToMonster;
+
+            // Visual feedback via logs occasionally
+            if (Math.random() < 0.3) {
+                 nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `Combat: ${agent.name} (-${dmgToAgent}) vs ${monster.name} (-${dmgToMonster})`, type: 'COMBAT', sender: 'SYSTEM' });
+            }
+
+            return true;
+        });
+      }
+
+      // 2. Physics Update (Movement) for Agents
+      nextAgents = nextAgents.map(agent => {
         let nextPos = [...agent.position] as [number, number, number];
         let nextEnergy = agent.energy;
         let nextRotation = agent.rotationY;
         let nextInventory = agent.inventory;
         let nextEquipment = agent.equipment;
-        let equipmentChanged = false;
         
         const isMoving = !!agent.wanderTarget || agent.state === AgentState.GATHERING || agent.state === AgentState.TRADING || agent.state === AgentState.ALLIANCE_FORMING || agent.state === AgentState.BUILDING;
         
@@ -490,14 +663,11 @@ export const useStore = create<GameState>((set, get) => ({
                 nextPos[0] += Math.sin(nextRotation) * speed;
                 nextPos[2] += Math.cos(nextRotation) * speed;
             } else {
-                // Arrived
-                // If gathering, maybe stay put. If wandering, clear target.
                 if (agent.state !== AgentState.GATHERING && agent.state !== AgentState.ALLIANCE_FORMING && agent.state !== AgentState.BUILDING) {
                     target = null; 
                 }
             }
           } else {
-              // Random wander if no target
                if (Math.random() < 0.05) {
                    agent.wanderTarget = [(Math.random() - 0.5) * 60, 0, (Math.random() - 0.5) * 60];
                }
@@ -506,8 +676,7 @@ export const useStore = create<GameState>((set, get) => ({
           nextEnergy = Math.min(agent.maxEnergy, agent.energy + 6 * delta);
         }
 
-        // --- AUTONOMOUS EQUIPMENT UPGRADE LOGIC ---
-        // 0.2% chance per frame (~once every 8s at 60fps) to evaluate gear
+        // Equipment Auto-Upgrade logic (Existing)
         if (Math.random() < 0.002) { 
             const getRarityValue = (r: string) => {
                 const map: any = { 'COMMON': 1, 'UNCOMMON': 2, 'RARE': 3, 'EPIC': 4, 'LEGENDARY': 5, 'AXIOMATIC': 6 };
@@ -530,13 +699,12 @@ export const useStore = create<GameState>((set, get) => ({
 
                 if (slot) {
                     const current = tempEquip[slot];
-                    // Score = Rarity * 10 + Stats
                     const currentScore = current ? (getRarityValue(current.rarity) * 10 + (current.stats.str||0) + (current.stats.int||0) + (current.stats.agi||0)) : -1;
                     const newScore = (getRarityValue(item.rarity) * 10 + (item.stats.str||0) + (item.stats.int||0) + (item.stats.agi||0));
 
                     if (newScore > currentScore) {
                         tempEquip[slot] = item;
-                        tempInv[idx] = current; // Move old item to inventory (or null if none)
+                        tempInv[idx] = current;
                         didSwap = true;
                     }
                 }
@@ -549,8 +717,17 @@ export const useStore = create<GameState>((set, get) => ({
         }
 
         return { ...agent, position: nextPos, rotationY: nextRotation, energy: nextEnergy, inventory: nextInventory, equipment: nextEquipment };
-      })
-    }));
+      });
+
+      return {
+          serverStats: { ...s.serverStats, uptime: s.serverStats.uptime + delta },
+          agents: nextAgents,
+          monsters: nextMonsters,
+          battles: nextBattles,
+          logs: nextLogs,
+          lastCombatTick: shouldRunLogic ? now : s.lastCombatTick
+      };
+    });
   },
 
   buildStructure: (pId, sType) => {

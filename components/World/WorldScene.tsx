@@ -4,9 +4,19 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '../../store';
-import { Chunk, Agent, StructureType, AgentState, LandParcel } from '../../types';
+import { Chunk, Agent, StructureType, AgentState, LandParcel, Monster } from '../../types';
 import { axiomVertexShader, axiomFragmentShader } from './AxiomShader';
 import { soundManager } from '../../services/SoundManager';
+
+// Fix: Use a permissive string indexer for IntrinsicElements to allow both HTML and R3F tags globally.
+// This prevents "Property 'div' does not exist on type 'JSX.IntrinsicElements'" errors by merging with the existing React types.
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      [elemName: string]: any;
+    }
+  }
+}
 
 const SpeechBubble = ({ agentId }: { agentId: string }) => {
     const messages = useStore(state => state.chatMessages);
@@ -160,10 +170,15 @@ const ParcelMarker: React.FC<{ parcel: LandParcel }> = ({ parcel }) => {
 
 const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, stability }) => {
   const meshRef = useRef<THREE.Mesh>(null);
+  
+  // Create uniforms with Fog parameters to match scene
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uAwakeningDensity: { value: 1.0 - stability },
-    uBiome: { value: chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 }
+    uBiome: { value: chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 },
+    uFogColor: { value: new THREE.Color('#050505') },
+    uFogNear: { value: 80 },
+    uFogFar: { value: 350 }
   }), [chunk.id, stability]);
 
   useFrame((state) => {
@@ -174,10 +189,42 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
 
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[chunk.x * 80, -0.5, chunk.z * 80]}>
-      <planeGeometry args={[80, 80, 64, 64]} />
+      <planeGeometry args={[80, 80, 128, 128]} />
       <shaderMaterial vertexShader={axiomVertexShader} fragmentShader={axiomFragmentShader} uniforms={uniforms} />
     </mesh>
   );
+};
+
+const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
+    if (monster.state === 'DEAD') return null;
+
+    return (
+        <group position={monster.position} rotation={[0, monster.rotationY, 0]}>
+            <mesh castShadow position={[0, monster.scale / 2, 0]}>
+                <sphereGeometry args={[monster.scale, 16, 16]} />
+                <meshStandardMaterial color={monster.color} roughness={0.8} />
+            </mesh>
+            {/* Eyes */}
+            <mesh position={[monster.scale * 0.4, monster.scale * 0.5, monster.scale * 0.8]}>
+                <sphereGeometry args={[monster.scale * 0.2, 8, 8]} />
+                <meshStandardMaterial color="red" emissive="red" emissiveIntensity={1} />
+            </mesh>
+            <mesh position={[-monster.scale * 0.4, monster.scale * 0.5, monster.scale * 0.8]}>
+                <sphereGeometry args={[monster.scale * 0.2, 8, 8]} />
+                <meshStandardMaterial color="red" emissive="red" emissiveIntensity={1} />
+            </mesh>
+
+            {/* Health Bar */}
+            <Html position={[0, monster.scale * 2, 0]} center distanceFactor={15}>
+                 <div className="w-12 h-1 bg-gray-800 border border-black">
+                     <div 
+                        className="h-full bg-red-600 transition-all duration-200" 
+                        style={{ width: `${(monster.stats.hp / monster.stats.maxHp) * 100}%` }}
+                     />
+                 </div>
+            </Html>
+        </group>
+    );
 };
 
 const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({ agent, onSelect }) => {
@@ -229,7 +276,8 @@ const CameraController = () => {
     // Smooth navigation logic
     useFrame((_state, delta) => {
         if (cameraTarget && controlsRef.current) {
-            const targetVec = new THREE.Vector3(...cameraTarget);
+            // Explicitly pass arguments to Vector3 constructor to avoid spread on potential null/array issues in strict mode
+            const targetVec = new THREE.Vector3(cameraTarget[0], cameraTarget[1], cameraTarget[2]);
             
             // Interpolate controls target
             controlsRef.current.target.lerp(targetVec, 5 * delta);
@@ -271,9 +319,8 @@ const GameLoop = () => {
 
 // Internal component to handle scene content requiring Store access
 const SceneContent = () => {
-    // We select only what is needed to avoid unnecessary re-renders of the Canvas parent
-    // but here we are inside the Canvas, so using hooks is safe.
     const agents = useStore(state => state.agents);
+    const monsters = useStore(state => state.monsters);
     const loadedChunks = useStore(state => state.loadedChunks);
     const stability = useStore(state => state.stability);
     const landParcels = useStore(state => state.landParcels);
@@ -309,6 +356,10 @@ const SceneContent = () => {
                 </group>
             </group>
 
+            {monsters.map((monster) => (
+                <MonsterMesh key={monster.id} monster={monster} />
+            ))}
+
             {agents.map((agent) => (
               <AgentMesh key={agent.id} agent={agent} onSelect={selectAgent} />
             ))}
@@ -316,12 +367,20 @@ const SceneContent = () => {
     );
 };
 
+// Define stable props outside component to prevent re-creation causing Canvas resets
+const CAMERA_CONFIG = { position: [60, 80, 60], fov: 45 } as const;
+const DPR_CONFIG = [1, 1.5] as const;
+
 const WorldScene = () => {
   return (
-    <Canvas shadows camera={{ position: [60, 80, 60], fov: 45 }} dpr={[1, 1.5]}>
+    <Canvas 
+      shadows 
+      camera={CAMERA_CONFIG} 
+      dpr={DPR_CONFIG}
+    >
         <SceneContent />
     </Canvas>
   );
 };
 
-export default WorldScene;
+export default React.memo(WorldScene);

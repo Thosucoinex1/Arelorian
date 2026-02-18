@@ -64,9 +64,9 @@ export const generateAutonomousDecision = async (
       };
   }
 
+  // Fix: Use 'gemini-3-flash-preview' for advanced agent reasoning tasks.
   const ai = new GoogleGenAI({ apiKey });
-  // Using Flash-Lite for high speed / low latency as requested
-  const modelName = 'gemini-flash-lite-latest'; 
+  const modelName = 'gemini-3-flash-preview'; 
   
   const systemInstruction = `
     SYSTEM-ROLE: RECURSIVE REALITY ARCHITECT (RRA) - AGENT COGNITION v3.7
@@ -104,8 +104,7 @@ export const generateAutonomousDecision = async (
       contents: prompt,
       config: { 
         systemInstruction, 
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 } // Disable thinking for speed
+        responseMimeType: "application/json"
       }
     });
     

@@ -26,6 +26,44 @@ export const AXIOMS = {
   DUALITY: 'Physis ≡ Digital'
 };
 
+export const MONSTER_TEMPLATES = {
+  GOBLIN: { name: 'Goblin', hp: 50, atk: 5, def: 2, xp: 25, color: '#4ade80', scale: 0.6 },
+  ORC: { name: 'Orc', hp: 120, atk: 12, def: 8, xp: 75, color: '#166534', scale: 1.2 },
+  DRAGON: { name: 'Dragon', hp: 500, atk: 40, def: 30, xp: 500, color: '#b91c1c', scale: 2.5 },
+  BOSS_DEMON: { name: 'Demon Lord', hp: 1200, atk: 60, def: 50, xp: 2000, color: '#7f1d1d', scale: 3.0 }
+};
+
+export type MonsterType = keyof typeof MONSTER_TEMPLATES;
+
+export interface Monster {
+  id: string;
+  type: MonsterType;
+  name: string;
+  position: [number, number, number];
+  rotationY: number;
+  stats: {
+    hp: number;
+    maxHp: number;
+    atk: number;
+    def: number;
+  };
+  xpReward: number;
+  state: 'IDLE' | 'COMBAT' | 'PATROL' | 'DEAD';
+  targetId: string | null;
+  color: string;
+  scale: number;
+}
+
+export interface Battle {
+  id: string;
+  participants: {
+    id: string;
+    type: 'AGENT' | 'MONSTER';
+  }[];
+  turn: number;
+  lastTick: number;
+}
+
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'AXIOMATIC';
 export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE';
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
@@ -37,7 +75,6 @@ export interface AxiomaticDNA {
   corruption: number;
 }
 
-// Added Item-related types for character management
 export interface ItemStats {
   str?: number;
   agi?: number;
@@ -63,7 +100,6 @@ export interface Item {
   setName?: string;
 }
 
-// Added Structure and Land types for world building
 export type StructureType = 'HOUSE' | 'SMITH' | 'MARKET' | 'BANK' | 'CHURCH' | 'CAVE';
 
 export interface Structure {
@@ -75,14 +111,13 @@ export interface Structure {
 export interface LandParcel {
   id: string;
   name: string;
-  ownerId: string | null; // Changed to nullable to signify unowned land
-  position: [number, number, number]; // Added position for world placement
+  ownerId: string | null; 
+  position: [number, number, number]; 
   isCertified: boolean;
   structures: Structure[];
   price: number;
 }
 
-// Added Store types for acquisitions
 export type ProductType = 'LAND' | 'LICENSE' | 'SKIN';
 
 export interface StoreProduct {
@@ -111,7 +146,7 @@ export interface Agent {
   dna: AxiomaticDNA;
   loreSnippet?: string;
   isAwakened?: boolean;
-  lastChoiceLogic?: string; // Summary of axiomatic choice
+  lastChoiceLogic?: string; 
   
   memoryCache: string[];
   thinkingMatrix: {
@@ -119,10 +154,12 @@ export interface Agent {
     currentLongTermGoal: string;
     alignment: number;
     languagePreference: 'EN' | 'DE' | 'MIXED';
+    // Extended stats for importer compatibility
+    sociability?: number;
+    aggression?: number;
   };
   skills: Record<string, number>;
   
-  // Updated inventory to use defined Item type
   inventory: (Item | null)[];
   equipment: {
     mainHand: Item | null;
@@ -145,6 +182,7 @@ export interface Chunk {
   z: number; 
   biome: string; 
   entropy: number;
+  roomType?: 'NORMAL' | 'DUNGEON' | 'RESOURCE_RICH' | 'BOSS' | 'SAFE';
 }
 
 export interface ResourceNode {
@@ -169,7 +207,6 @@ export interface ChatMessage {
   message: string;
   channel: ChatChannel;
   timestamp: number;
-  // Added eventPosition for navigation functionality in ChatConsole
   eventPosition?: [number, number, number];
 }
 
