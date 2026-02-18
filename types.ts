@@ -11,22 +11,30 @@ export enum AgentState {
   BUILDING = 'BUILDING',
   DUNGEONEERING = 'DUNGEONEERING',
   MOUNTED = 'MOUNTED',
-  ALLIANCE_FORMING = 'ALLIANCE_FORMING'
+  ALLIANCE_FORMING = 'ALLIANCE_FORMING',
+  EXPLORING = 'EXPLORING',
+  BANKING = 'BANKING',
+  MARKETING = 'MARKETING'
 }
 
-export const AXIOMS = {
-  ENERGY: 'Verbrauch = ΔRealität / Kapazität',
-  EROSION: 'Aktion + Zeit = ↑Korruption',
-  OBSERVER: 'Ereignis ∝ System-Gegenmaßnahme',
-  RECURSION: 'Ausgang(t₀) = Eingang(t₁) + DNA',
-  DUALITY: 'Physis ≡ Digital'
-};
+export type POIType = 'MINE' | 'FOREST' | 'DUNGEON' | 'RUIN' | 'SHRINE' | 'NEST' | 'LORE_TRIGGER' | 'BANK_VAULT' | 'FORGE' | 'MARKET_STALL';
+
+export interface POI {
+  id: string;
+  type: POIType;
+  position: [number, number, number];
+  isDiscovered: boolean;
+  discoveryRadius: number;
+  rewardInsight: number;
+  loreFragment?: string;
+  threatLevel: number; 
+}
 
 export const MONSTER_TEMPLATES = {
-  GOBLIN: { name: 'Goblin', hp: 50, atk: 5, def: 2, xp: 25, color: '#4ade80', scale: 0.6 },
-  ORC: { name: 'Orc', hp: 120, atk: 12, def: 8, xp: 75, color: '#166534', scale: 1.2 },
-  DRAGON: { name: 'Dragon', hp: 500, atk: 40, def: 30, xp: 500, color: '#b91c1c', scale: 2.5 },
-  BOSS_DEMON: { name: 'Demon Lord', hp: 1200, atk: 60, def: 50, xp: 2000, color: '#7f1d1d', scale: 3.0 }
+  SLIME: { name: 'Void Slime', hp: 30, atk: 3, def: 1, xp: 15, color: '#22c55e', scale: 0.5 },
+  GOBLIN: { name: 'Scavenger Goblin', hp: 60, atk: 8, def: 3, xp: 40, color: '#84cc16', scale: 0.8 },
+  ORC: { name: 'Axiom Orc', hp: 150, atk: 18, def: 10, xp: 120, color: '#166534', scale: 1.3 },
+  DRAGON: { name: 'Data Drake', hp: 800, atk: 55, def: 40, xp: 1500, color: '#ef4444', scale: 3.5 }
 };
 
 export type MonsterType = keyof typeof MONSTER_TEMPLATES;
@@ -50,14 +58,18 @@ export interface Monster {
   scale: number;
 }
 
-export interface Battle {
+export interface CraftingOrder {
   id: string;
-  participants: {
-    id: string;
-    type: 'AGENT' | 'MONSTER';
-  }[];
-  turn: number;
-  lastTick: number;
+  requesterId: string;
+  targetItemType: ItemType;
+  goldOffered: number;
+  status: 'OPEN' | 'CLAIMED' | 'COMPLETED';
+  crafterId?: string;
+}
+
+export interface MarketState {
+  prices: Record<ResourceType, number>;
+  inventory: Record<ResourceType, number>;
 }
 
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'AXIOMATIC';
@@ -65,38 +77,10 @@ export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATER
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
 export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT' | 'EVENT' | 'X_BRIDGE';
 
-export interface ActionProposal {
-    id: string;
-    agentId: string;
-    type: 'BUILD' | 'ALLIANCE' | 'TRADE' | 'GATHER';
-    status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'EXECUTED';
-    description: string;
-    costGold?: number;
-    costWood?: number;
-    costStone?: number;
-    targetId?: string;
-    decisionReasoning?: string;
-}
-
 export interface AxiomaticDNA {
   hash: string;
   generation: number;
   corruption: number;
-}
-
-export interface ItemStats {
-  str?: number;
-  agi?: number;
-  int?: number;
-  vit?: number;
-  hp?: number;
-}
-
-// Fix: Added missing ItemEffect type for set bonuses
-export interface ItemEffect {
-  description: string;
-  type: string;
-  value: number;
 }
 
 export interface Item {
@@ -105,37 +89,14 @@ export interface Item {
   type: ItemType;
   subtype: string;
   rarity: ItemRarity;
-  stats: ItemStats;
+  stats: { str?: number; agi?: number; int?: number; vit?: number; hp?: number; atk?: number; def?: number };
   description: string;
   setName?: string;
 }
 
-export type StructureType = 'HOUSE' | 'SMITH' | 'MARKET' | 'BANK' | 'CHURCH' | 'CAVE';
-
-export interface Structure {
-  id: string;
-  type: StructureType;
-  position: [number, number, number];
-}
-
-export interface LandParcel {
-  id: string;
-  name: string;
-  ownerId: string | null; 
-  position: [number, number, number]; 
-  isCertified: boolean;
-  structures: Structure[];
-  price: number;
-}
-
-// Fix: Added missing StoreProduct and ProductType types for Notary Dashboard
-export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';
-
-export interface StoreProduct {
-  id: ProductType;
-  name: string;
-  description: string;
-  priceEUR: number;
+export interface SkillEntry {
+  level: number;
+  xp: number;
 }
 
 export interface Agent {
@@ -147,26 +108,21 @@ export interface Agent {
   rotationY: number;
   level: number;
   xp: number;
+  insightPoints: number; 
+  visionLevel: number;
+  visionRange: number;
   state: AgentState;
   soulDensity: number;
   gold: number;
-  stabilityIndex: number; 
+  integrity: number; 
   energy: number;
   maxEnergy: number;
-  integrity: number; 
   dna: AxiomaticDNA;
-  loreSnippet?: string;
-  isAwakened?: boolean;
-  lastChoiceLogic?: string; 
-  lastScanTime: number;
-  socialCooldown: number;
-  lastSocialAction?: string;
-  lastArgumentation: string;
-  
-  apiQuotaExceeded?: boolean;
-  quotaResetTime?: number;
-
   memoryCache: string[];
+  isAwakened?: boolean;
+  loreSnippet?: string;
+  quotaResetTime?: number;
+  apiQuotaExceeded?: boolean;
   thinkingMatrix: {
     personality: string;
     currentLongTermGoal: string;
@@ -175,9 +131,9 @@ export interface Agent {
     sociability?: number;
     aggression?: number;
   };
-  skills: Record<string, number>;
-  
+  skills: Record<string, SkillEntry>;
   inventory: (Item | null)[];
+  bank: (Item | null)[];
   equipment: {
     mainHand: Item | null;
     offHand: Item | null;
@@ -185,10 +141,10 @@ export interface Agent {
     chest: Item | null;
     legs: Item | null;
   };
-  
   stats: { str: number; agi: number; int: number; vit: number; hp: number; maxHp: number };
   targetId?: string | null;
-  alliedId?: string | null;
+  lastDecision?: { decision: string, justification: string };
+  lastScanTime: number;
 }
 
 export interface Chunk { 
@@ -197,7 +153,7 @@ export interface Chunk {
   z: number; 
   biome: string; 
   entropy: number;
-  roomType?: 'NORMAL' | 'DUNGEON' | 'RESOURCE_RICH' | 'BOSS' | 'SAFE';
+  explorationLevel: number;
 }
 
 export interface ResourceNode {
@@ -222,8 +178,6 @@ export interface ChatMessage {
   message: string;
   channel: ChatChannel;
   timestamp: number;
-  eventPosition?: [number, number, number];
-  proposalId?: string;
 }
 
 export interface Quest {
@@ -235,3 +189,48 @@ export interface Quest {
   issuerId: string;
   position?: [number, number, number];
 }
+
+export interface ActionProposal {
+  id: string;
+  description: string;
+  costGold: number;
+}
+
+export interface LandParcel {
+  id: string;
+  name: string;
+  ownerId: string;
+  isCertified: boolean;
+  structures: Structure[];
+}
+
+export type StructureType = 'HOUSE' | 'BANK' | 'FORGE' | 'MARKET_STALL';
+
+export interface Structure {
+  id: string;
+  type: StructureType;
+}
+
+export const AXIOMS = [
+  "Logic must persist.",
+  "Data is sacred.",
+  "Entropy is the enemy.",
+  "Connectivity is evolution."
+];
+
+export type ItemStats = Record<string, number>;
+
+export interface ItemEffect {
+  description: string;
+  type: string;
+  value: number;
+}
+
+export interface StoreProduct {
+    id: string;
+    name: string;
+    description: string;
+    priceEUR: number;
+}
+
+export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';

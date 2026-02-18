@@ -26,9 +26,6 @@ export class CharacterImporter {
     const match = url.match(/characters\/([^\/\?]+)/);
     const charId = match ? match[1] : 'unknown';
     
-    // In a real browser environment, we cannot fetch directly due to CORS without a proxy.
-    // We will simulate the extraction based on the URL or throw a mock "Success" with generated data if fetch fails.
-    
     // Mock Data based on ID to simulate success for the user
     return {
       name: `Janitor_${charId.slice(0, 5)}`,

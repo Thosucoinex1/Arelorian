@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
-import { useStore, User } from '../../store';
+import { useStore } from '../../store';
 import { LandParcel, StoreProduct, ProductType, Structure, StructureType } from '../../types';
 import { soundManager } from '../../services/SoundManager';
 import { PayPalModal } from './PayPalModal';
+import { ShoppingBag } from 'lucide-react';
 
 const storeProducts: StoreProduct[] = [
     { id: 'LAND_PARCEL', name: 'Land Parcel Grant', description: 'Acquire unowned territory.', priceEUR: 15.00 },
@@ -11,7 +12,6 @@ const storeProducts: StoreProduct[] = [
 ];
 
 const WatchdogMonitor: React.FC = () => {
-    // Fix: Use selectors
     const serverStats = useStore(state => state.serverStats);
     const logs = useStore(state => state.logs);
     
@@ -50,7 +50,7 @@ const WatchdogMonitor: React.FC = () => {
     );
 };
 
-const Developments: React.FC<{ parcels: LandParcel[]; user: User | null; build: (pId: string, sType: StructureType) => void; certify: (pId: string) => void; }> = ({ parcels, user, build, certify }) => {
+const Developments: React.FC<{ parcels: LandParcel[]; user: any; build: (pId: string, sType: StructureType) => void; certify: (pId: string) => void; }> = ({ parcels, user, build, certify }) => {
     const owned = parcels.filter(p => p.ownerId === user?.id);
     if (owned.length === 0) {
         return <div className="p-4 text-xs text-gray-500 italic">You do not own any land to develop. Acquire parcels via the Status tab.</div>
@@ -78,76 +78,66 @@ const Developments: React.FC<{ parcels: LandParcel[]; user: User | null; build: 
 };
 
 export const NotaryDashboard = () => {
-  // Use specific selectors for all properties to avoid generic useStore() errors
   const agents = useStore(state => state.agents);
-  const hasNotaryLicense = useStore(state => state.hasNotaryLicense);
-  const agentSlots = useStore(state => state.agentSlots);
   const device = useStore(state => state.device);
   const serverStats = useStore(state => state.serverStats);
   const landParcels = useStore(state => state.landParcels);
-  const buildStructure = useStore(state => state.buildStructure);
-  const certifyParcel = useStore(state => state.certifyParcel);
   const user = useStore(state => state.user);
+  const toggleMarket = useStore(state => state.toggleMarket);
 
   const [isMinimized, setIsMinimized] = useState(device.isMobile);
-  const [isPayPalOpen, setPayPalOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
   const [activeTab, setActiveTab] = useState<'STATUS' | 'WATCHDOG' | 'DEVELOP'>('STATUS');
 
-  const awakenedCount = agents.filter(a => a.isAwakened).length;
   const widthClass = isMinimized ? 'w-12' : (device.isMobile ? 'w-64' : 'w-80');
 
-  const handlePurchaseClick = (product: StoreProduct) => {
-    setSelectedProduct(product);
-    setPayPalOpen(true);
-    soundManager.playUI('CLICK');
-  };
-
   return (
-    <>
-      <PayPalModal isOpen={isPayPalOpen} onClose={() => setPayPalOpen(false)} product={selectedProduct} />
-      <div className={`flex flex-col h-[95%] max-h-[800px] bg-axiom-dark/90 backdrop-blur-md border-l border-white/10 transition-all duration-300 shadow-2xl z-20 pointer-events-auto ${widthClass}`}>
-        <div className={`border-b border-white/10 bg-gradient-to-r from-axiom-purple/20 to-transparent flex ${isMinimized ? 'flex-col-reverse justify-center py-4 gap-4' : 'flex-row justify-between p-4'} items-center transition-all`}>
-          {!isMinimized && <h2 className="text-lg md:text-xl font-serif text-white tracking-widest whitespace-nowrap">DUDEN REGISTER</h2>}
-          <button onClick={() => { setIsMinimized(!isMinimized); soundManager.playUI('CLICK'); }} className="text-axiom-gold hover:text-white transition-colors focus:outline-none p-2" title={isMinimized ? "Expand" : "Minimize"}>
-               {isMinimized ? '◀' : '▶'}
-          </button>
-        </div>
+    <div className={`flex flex-col h-[95%] max-h-[800px] bg-axiom-dark/90 backdrop-blur-md border-l border-white/10 transition-all duration-300 shadow-2xl z-20 pointer-events-auto ${widthClass}`}>
+      <div className={`border-b border-white/10 bg-gradient-to-r from-axiom-purple/20 to-transparent flex ${isMinimized ? 'flex-col-reverse justify-center py-4 gap-4' : 'flex-row justify-between p-4'} items-center transition-all`}>
+        {!isMinimized && <h2 className="text-lg md:text-xl font-serif text-white tracking-widest whitespace-nowrap">DUDEN REGISTER</h2>}
+        <button onClick={() => setIsMinimized(!isMinimized)} className="text-axiom-gold hover:text-white transition-colors focus:outline-none p-2">
+             {isMinimized ? '◀' : '▶'}
+        </button>
+      </div>
 
-        {!isMinimized && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex border-b border-white/10">
-                  <TabButton label="Status" isActive={activeTab === 'STATUS'} onClick={() => setActiveTab('STATUS')} />
-                  <TabButton label="Watchdog" isActive={activeTab === 'WATCHDOG'} onClick={() => setActiveTab('WATCHDOG')} />
-                  <TabButton label="Develop" isActive={activeTab === 'DEVELOP'} onClick={() => setActiveTab('DEVELOP')} />
-              </div>
-              
-              {activeTab === 'STATUS' && (
-                  <div className="p-4 space-y-4">
-                    <div className="bg-black/20 p-3 rounded">
-                      <h3 className="text-xs uppercase text-gray-500 font-bold tracking-wider mb-2">World Stability</h3>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          <div className="flex justify-between"><span>Status:</span><span className="text-green-400">Stable</span></div>
-                          <div className="flex justify-between"><span>Tick Rate:</span><span className="text-white">{String(serverStats.tickRate)} Hz</span></div>
-                          <div className="flex justify-between"><span>Souls:</span><span className="text-white">{String(agents.length)} / {String(agentSlots)}</span></div>
-                          <div className="flex justify-between"><span>Awakened:</span><span className="text-axiom-cyan">{String(awakenedCount)}</span></div>
-                      </div>
-                    </div>
-                    <div className="border-t border-white/10 pt-4">
-                      <h3 className="text-xs uppercase text-axiom-gold font-bold tracking-wider mb-3">Acquisitions</h3>
-                      <div className="space-y-2">
-                        <ProductCard product={storeProducts[0]} onClick={() => handlePurchaseClick(storeProducts[0])} />
-                        <ProductCard product={storeProducts[1]} onClick={() => handlePurchaseClick(storeProducts[1])} isDisabled={hasNotaryLicense} />
-                      </div>
+      {!isMinimized && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex border-b border-white/10">
+                <TabButton label="Status" isActive={activeTab === 'STATUS'} onClick={() => setActiveTab('STATUS')} />
+                <TabButton label="Watchdog" isActive={activeTab === 'WATCHDOG'} onClick={() => setActiveTab('WATCHDOG')} />
+                <TabButton label="Develop" isActive={activeTab === 'DEVELOP'} onClick={() => setActiveTab('DEVELOP')} />
+            </div>
+            
+            {activeTab === 'STATUS' && (
+                <div className="p-4 space-y-4">
+                  <div className="bg-black/20 p-3 rounded">
+                    <h3 className="text-xs uppercase text-gray-500 font-bold tracking-wider mb-2 text-center">Stability Check</h3>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div className="flex justify-between"><span>Status:</span><span className="text-green-400">Stable</span></div>
+                        <div className="flex justify-between"><span>Ticks:</span><span className="text-white">{String(serverStats.tickRate)}Hz</span></div>
+                        <div className="flex justify-between"><span>Entities:</span><span className="text-white">{String(agents.length)}</span></div>
                     </div>
                   </div>
-              )}
-              {activeTab === 'WATCHDOG' && <WatchdogMonitor />}
-              {activeTab === 'DEVELOP' && <Developments parcels={landParcels} user={user} build={buildStructure} certify={certifyParcel} />}
-          </div>
-        )}
-      </div>
-    </>
+                  
+                  <button 
+                    onClick={() => toggleMarket(true)}
+                    className="w-full bg-axiom-cyan/20 border border-axiom-cyan text-axiom-cyan py-3 rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 hover:bg-axiom-cyan hover:text-black transition-all"
+                  >
+                    <ShoppingBag className="w-4 h-4" /> Global Market
+                  </button>
+
+                  <div className="border-t border-white/10 pt-4">
+                    <h3 className="text-xs uppercase text-axiom-gold font-bold tracking-wider mb-3">System Assets</h3>
+                    <div className="space-y-2 opacity-50 cursor-not-allowed">
+                        <div className="p-2 rounded border border-white/10 text-[10px] text-gray-500 italic">Notary Gateway Suspended</div>
+                    </div>
+                  </div>
+                </div>
+            )}
+            {activeTab === 'WATCHDOG' && <WatchdogMonitor />}
+            {activeTab === 'DEVELOP' && <Developments parcels={landParcels} user={user} build={()=>{}} certify={()=>{}} />}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -155,18 +145,4 @@ const TabButton: React.FC<{ label: string; isActive: boolean; onClick: () => voi
     <button onClick={onClick} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'bg-white/10 text-axiom-cyan' : 'text-gray-500 hover:bg-white/5'}`}>
         {String(label)}
     </button>
-);
-
-const ProductCard: React.FC<{ product: StoreProduct; onClick: () => void; isDisabled?: boolean }> = ({ product, onClick, isDisabled }) => (
-    <div className={`p-2 rounded border transition-all ${isDisabled ? 'bg-green-800/20 border-green-500/30' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>
-        <div className="flex justify-between items-center">
-            <div>
-                <h4 className={`font-serif text-xs ${isDisabled ? 'text-green-400' : 'text-white'}`}>{String(product.name)}</h4>
-                <p className="text-[10px] text-gray-400">{String(product.description)}</p>
-            </div>
-            <button onClick={onClick} disabled={isDisabled} className={`text-xs px-2 py-1 rounded border whitespace-nowrap ${isDisabled ? 'border-green-500/50 text-green-500 cursor-default' : 'border-axiom-gold text-axiom-gold hover:bg-axiom-gold hover:text-black'}`}>
-                {isDisabled ? 'ACQUIRED' : `€${String(product.priceEUR.toFixed(2))}`}
-            </button>
-        </div>
-    </div>
 );

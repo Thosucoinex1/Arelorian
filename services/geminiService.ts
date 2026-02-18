@@ -1,10 +1,10 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { Agent, AgentState, ResourceNode, LogEntry, Quest, ActionProposal } from "../types";
+import { Agent, AgentState, ResourceNode, LogEntry, ActionProposal, Quest } from "../types";
 import { useStore } from "../store";
 
 export interface AIDecision {
-  thought: string;
+  justification: string;
   decision: string;
   newState: AgentState;
   targetId?: string;
@@ -62,26 +62,26 @@ function generateLocalHeuristicDecision(agent: Agent, canScan: boolean): AIDecis
     const healthRatio = agent.stats.hp / agent.stats.maxHp;
     
     let decision = AgentState.IDLE;
-    let thought = "";
+    let justification = "";
 
     if (healthRatio < 0.25) {
         decision = AgentState.IDLE;
-        thought = lang === 'DE' ? "Kritischer Vitalitätsverlust. Regeneration erforderlich." : "Critical vitality loss. Regeneration required.";
+        justification = lang === 'DE' ? "Kritischer Vitalitätsverlust. Regeneration erforderlich." : "Critical vitality loss. Regeneration required.";
     } else if (failureCount > 3 && woodCount < 5) {
         decision = AgentState.GATHERING;
-        thought = lang === 'DE' ? "Stabilisierungs-Ressourcen fehlen. Sammle Holz/Stein." : "Stabilization resources missing. Gathering wood/stone.";
+        justification = lang === 'DE' ? "Stabilisierungs-Ressourcen fehlen. Sammle Holz/Stein." : "Stabilization resources missing. Gathering wood/stone.";
     } else if (woodCount >= 5 && stoneCount >= 5 && agent.gold >= 200) {
         decision = AgentState.BUILDING;
-        thought = lang === 'DE' ? "Infrastruktur-Ziele erreicht. Errichte Basis." : "Infrastructure goals met. Constructing base.";
+        justification = lang === 'DE' ? "Infrastruktur-Ziele erreicht. Errichte Basis." : "Infrastructure goals met. Constructing base.";
     } else if (canScan) {
         decision = AgentState.QUESTING;
-        thought = lang === 'DE' ? "Sondiere Matrix-Anomalien." : "Probing matrix anomalies.";
+        justification = lang === 'DE' ? "Sondiere Matrix-Anomalien." : "Probing matrix anomalies.";
     } else {
         decision = AgentState.IDLE;
-        thought = lang === 'DE' ? "Warte auf Synchronisation." : "Waiting for synchronization.";
+        justification = lang === 'DE' ? "Warte auf Synchronisation." : "Waiting for synchronization.";
     }
 
-    return { thought, decision: String(decision), newState: decision };
+    return { justification, decision: String(decision), newState: decision };
 }
 
 function generateLocalSocialResponse(agent: Agent, senderName: string, message: string): SocialResponse {
@@ -177,7 +177,7 @@ export const generateAutonomousDecision = async (
   if (!agent.isAwakened || agent.apiQuotaExceeded) return generateLocalHeuristicDecision(agent, canScan);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview'; 
-  const systemInstruction = `SYSTEM-ROLE: EXECUTIVE SOVEREIGN v4.5. JSON ONLY. Language duality (DE/EN) based on personality. Output 'thought' as a logical internal derivation of the decision. Context: HP:${agent.stats.hp}/${agent.stats.maxHp}, Gold:${agent.gold}, canScan:${canScan}.`;
+  const systemInstruction = `SYSTEM-ROLE: EXECUTIVE SOVEREIGN v4.5. JSON ONLY. Language duality (DE/EN). Output 'justification' as a logical internal derivation of the 'decision'. Context: HP:${agent.stats.hp}/${agent.stats.maxHp}, Gold:${agent.gold}, canScan:${canScan}.`;
   const prompt = `State: ${agent.state}. Agents: ${nearbyAgents.map(a => a.name)}. Nodes: ${nearbyResourceNodes.map(n => n.type)}. Recent: ${recentLogs.map(l => l.message).join(' | ')}`;
   try {
     const response = await callGeminiWithBackoff(ai, agent.id, {
@@ -202,8 +202,8 @@ export const generateSocialResponse = async (
   if (!agent.isAwakened || agent.apiQuotaExceeded) return generateLocalSocialResponse(agent, senderName, incomingMessage);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
-  const systemInstruction = `SYSTEM-ROLE: SOCIAL ARCHITECT. JSON ONLY. Language duality (DE/EN). Perform dialectic analysis. Decide: COOPERATE, REJECT (if low HP/danger), or NEUTRAL. Current HP: ${agent.stats.hp}. Target: ${senderName}.`;
-  const prompt = `Received: "${incomingMessage}" from ${senderName}. Personality: ${agent.thinkingMatrix.personality}. Goal: ${agent.thinkingMatrix.currentLongTermGoal}`;
+  const systemInstruction = `SYSTEM-ROLE: SOCIAL ARCHITECT. JSON ONLY. Language duality (DE/EN). Decide: COOPERATE, REJECT, or NEUTRAL. Current HP: ${agent.stats.hp}.`;
+  const prompt = `Received: "${incomingMessage}" from ${senderName}. Personality: ${agent.thinkingMatrix.personality}.`;
   try {
     const response = await callGeminiWithBackoff(ai, agent.id, {
       model: modelName,
@@ -220,13 +220,14 @@ export const generateSocialResponse = async (
 
 export const evaluateActionProposal = async (agent: Agent, proposal: ActionProposal): Promise<ProposalDecision> => {
     if (!agent.isAwakened || agent.apiQuotaExceeded) {
-        const canFund = agent.gold >= (proposal.costGold || 0);
+        const cost = proposal.costGold || 0;
+        const canFund = agent.gold >= cost;
         return { approved: canFund, reasoning: "[Local Heuristic] Solvency check complete." };
     }
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await callGeminiWithBackoff(ai, agent.id, {
         model: 'gemini-3-flash-preview',
-        contents: `Evaluate: ${proposal.description}. Resources: Gold:${agent.gold}, Wood:N/A.`,
+        contents: `Evaluate: ${proposal.description}. Resources: Gold:${agent.gold}`,
         config: { systemInstruction: "SOVEREIGN JUDGE. JSON ONLY.", responseMimeType: "application/json" }
     });
     if (!response) return { approved: agent.gold >= (proposal.costGold || 0), reasoning: "Fallback." };

@@ -25,6 +25,7 @@ import { AuctionHouse } from './components/UI/AuctionHouse';
 import { VirtualJoysticks } from './components/UI/VirtualJoysticks';
 import { EventOverlay } from './components/UI/EventOverlay';
 import { ChatConsole } from './components/UI/ChatConsole';
+import { MarketOverlay } from './components/UI/MarketOverlay';
 import WorldScene from './components/World/WorldScene';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
@@ -183,6 +184,7 @@ const App = () => {
       <WorldMap />
       <AuctionHouse />
       <VirtualJoysticks />
+      <MarketOverlay />
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
       <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
     </div>

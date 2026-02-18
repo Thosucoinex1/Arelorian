@@ -9,7 +9,7 @@ export const ChatConsole = () => {
     const messages = useStore(state => state.chatMessages);
     const agents = useStore(state => state.agents);
     const isMobile = useStore(state => state.device.isMobile);
-    const [activeTab, setActiveTab] = useState<ChatChannel | 'ALL'>('ALL');
+    const [activeTab, setActiveTab] = useState<ChatChannel | 'ALL' | 'THOUGHT'>('ALL');
     const [isExpanded, setIsExpanded] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -37,7 +37,7 @@ export const ChatConsole = () => {
                 <div className="flex overflow-x-auto scrollbar-hide gap-1">
                     {['ALL', 'LOCAL', 'THOUGHT', 'SYSTEM'].map((tab) => (
                         <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all rounded-md flex items-center gap-1.5 ${activeTab === tab ? 'bg-axiom-cyan/20 text-axiom-cyan' : 'text-gray-500'}`}>
-                            {getChannelStyles(tab as ChatChannel).icon} {tab === 'THOUGHT' ? 'Kognition' : tab}
+                            {getChannelStyles(tab as ChatChannel).icon} {tab === 'THOUGHT' ? 'Kognition' : String(tab)}
                         </button>
                     ))}
                 </div>
@@ -53,17 +53,17 @@ export const ChatConsole = () => {
                             <div key={msg.id} className={`flex flex-col p-2 rounded-xl border ${isCognition ? 'border-axiom-cyan/20' : 'border-transparent'} ${bg}`}>
                                 <div className="flex items-center gap-2 mb-1">
                                     <div className={`${color} opacity-70`}>{icon}</div>
-                                    <span className="text-[10px] font-black uppercase text-gray-400">{msg.senderName}</span>
+                                    <span className="text-[10px] font-black uppercase text-gray-400">{String(msg.senderName)}</span>
                                     {agent?.isAwakened && <Zap className="w-2.5 h-2.5 text-axiom-gold" />}
                                     <div className="flex-1" />
-                                    <span className="text-[7px] font-bold text-gray-600 uppercase flex items-center gap-1"><Languages className="w-2 h-2" />{isGerman(msg.message) ? 'DE' : 'EN'}</span>
+                                    <span className="text-[7px] font-bold text-gray-600 uppercase flex items-center gap-1"><Languages className="w-2 h-2" />{isGerman(String(msg.message)) ? 'DE' : 'EN'}</span>
                                 </div>
                                 <div className={`text-[11px] leading-relaxed ${isCognition ? 'text-cyan-100 italic border-l-2 border-axiom-cyan/30 pl-2' : 'text-gray-300'}`}>
-                                    {msg.message}
+                                    {String(msg.message)}
                                 </div>
-                                {isCognition && agent?.lastArgumentation && (
+                                {isCognition && agent?.lastDecision && (
                                     <div className="mt-1 text-[9px] text-axiom-cyan/50 italic font-mono pl-2">
-                                        Logic Trace: {agent.lastArgumentation}
+                                        Logic Trace: {String(agent.lastDecision.decision)} - {String(agent.lastDecision.justification)}
                                     </div>
                                 )}
                             </div>
