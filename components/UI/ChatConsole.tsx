@@ -61,13 +61,13 @@ export const ChatConsole = () => {
         `}>
             <div className="flex justify-between items-center border-b border-white/10 bg-black/40 rounded-t-lg pr-2">
                 <div className="flex overflow-x-auto scrollbar-hide">
-                    {['ALL', 'GLOBAL', 'LOCAL', 'COMBAT', 'SYSTEM', 'EVENT'].map((tab) => (
+                    {['ALL', 'GLOBAL', 'LOCAL', 'COMBAT', 'SYSTEM', 'EVENT', 'THOUGHT'].map((tab) => (
                         <button 
                             key={tab}
                             onClick={() => { setActiveTab(tab as any); setIsExpanded(true); }}
                             className={`px-3 py-1 text-[10px] md:text-xs font-bold uppercase transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white/10 text-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
                         >
-                            {String(tab)}
+                            {String(tab === 'THOUGHT' ? 'THOUGHTS' : tab)}
                         </button>
                     ))}
                 </div>
@@ -94,8 +94,8 @@ export const ChatConsole = () => {
                                     </span>
                                 )}
                                 <span 
-                                    onClick={() => msg.channel === 'EVENT' ? handleMessageClick(msg) : null}
-                                    className={`${getChannelColor(msg.channel)} text-[10px] md:text-xs ${msg.channel === 'EVENT' ? 'cursor-pointer hover:underline' : ''}`}
+                                    onClick={() => (msg.channel === 'EVENT' || msg.channel === 'THOUGHT') ? handleMessageClick(msg) : null}
+                                    className={`${getChannelColor(msg.channel)} text-[10px] md:text-xs ${(msg.channel === 'EVENT' || msg.channel === 'THOUGHT') ? 'cursor-pointer hover:underline' : ''}`}
                                 >
                                     {String(msg.message)}
                                 </span>

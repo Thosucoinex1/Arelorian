@@ -45,7 +45,7 @@ interface GameState {
   lastLocalThinkTime: number;
   lastCombatTick: number;
   
-  user: User; // Changed from User | null to ensure it always exists
+  user: User;
   isAxiomAuthenticated: boolean;
   hasNotaryLicense: boolean;
   agentSlots: number;
@@ -86,12 +86,66 @@ interface GameState {
   importAgent: (source: string, type: 'URL' | 'JSON') => Promise<void>;
 }
 
+// Helper to format personality-driven thoughts
+const formatFlavorText = (agent: Agent, state: AgentState, reason: string): string => {
+    // Randomly choose language or stick to preference
+    const isGerman = Math.random() > 0.5 || agent.thinkingMatrix.languagePreference === 'DE';
+    
+    // Translation dictionary for core reasons if needed
+    const translations: Record<string, string> = {
+        "zu viel Gold im Beutel und kein festes Dach": "too much gold and no roof over my head",
+        "Inventar fast voll": "inventory almost full",
+        "Ressourcen in der Nähe entdeckt": "discovered resources nearby",
+        "Angst vor der Einsamkeit und Zerfall": "fear of solitude and decay",
+        "Suche nach kollektiver Stärke": "seeking collective strength",
+        "Goldreserven sind kritisch niedrig": "gold reserves are critically low",
+        "Drang nach Heldentaten": "urge for heroic deeds",
+        "die Realität scheint instabil zu werden": "reality seems to be becoming unstable",
+        "Erschöpfung der neuralen Pfade": "exhaustion of neural pathways",
+        "Handelswaren müssen veräußert werden": "goods need to be sold",
+        "Profitgier": "greed for profit"
+    };
+
+    const engReason = translations[reason] || reason;
+    const gerReason = reason;
+
+    if (state === AgentState.BUILDING) {
+        return isGerman 
+            ? `${agent.name} dachte er baut sich jetzt ein haus um: ${gerReason} um sicher zu sein vor Monster.`
+            : `${agent.name} thought he'd build a house now for: ${engReason} to be safe from monsters.`;
+    }
+
+    if (state === AgentState.ALLIANCE_FORMING) {
+        return isGerman
+            ? `${agent.name} formt eine Allianz, weil: ${gerReason}`
+            : `${agent.name} is forming an alliance because: ${engReason}`;
+    }
+
+    // Generic fallbacks for other states
+    if (isGerman) {
+        switch(state) {
+            case AgentState.GATHERING: return `${agent.name} geht sammeln. Grund: ${gerReason}`;
+            case AgentState.TRADING: return `${agent.name} möchte handeln, da ${gerReason}`;
+            case AgentState.QUESTING: return `${agent.name} sucht Abenteuer. ${gerReason}`;
+            case AgentState.THINKING: return `${agent.name} philosophiert... ${gerReason}`;
+            default: return `${agent.name} verharrt im Stillstand. ${gerReason}`;
+        }
+    } else {
+        switch(state) {
+            case AgentState.GATHERING: return `${agent.name} is going gathering. Reason: ${engReason}`;
+            case AgentState.TRADING: return `${agent.name} wants to trade because ${engReason}`;
+            case AgentState.QUESTING: return `${agent.name} seeks adventure. ${engReason}`;
+            case AgentState.THINKING: return `${agent.name} is philosophizing... ${engReason}`;
+            default: return `${agent.name} remains idle. ${engReason}`;
+        }
+    }
+};
+
 export const useStore = create<GameState>((set, get) => ({
   agents: [], monsters: [], resourceNodes: [], logs: [], chatMessages: [], battles: [],
   selectedAgentId: null, cameraTarget: null, loadedChunks: [],
   globalJackpot: 50000, stability: 1.0, lastLocalThinkTime: 0, lastCombatTick: 0,
   
-  // Reinforced user initialization with explicit email property
   user: { 
     id: 'user_1', 
     name: 'Observer_Alpha', 
@@ -373,6 +427,7 @@ export const useStore = create<GameState>((set, get) => ({
 
     const newQuests: Quest[] = [];
     const newLogs: LogEntry[] = [];
+    const newThoughts: ChatMessage[] = [];
     let updatedParcels = [...state.landParcels];
 
     const updatedAgents = state.agents.map(agent => {
@@ -384,6 +439,19 @@ export const useStore = create<GameState>((set, get) => ({
 
         const summary = summarizeNeurologicChoice(agent, state.agents.filter(a => a.id !== agent.id), state.resourceNodes, state.landParcels);
         
+        // Push cognitive decision as flavor text to the chat console
+        const flavorText = formatFlavorText(agent, summary.choice, summary.reason);
+
+        newThoughts.push({
+            id: `thought_${now}_${agent.id}`,
+            senderId: agent.id,
+            senderName: String(agent.name),
+            message: flavorText,
+            channel: 'THOUGHT',
+            timestamp: now,
+            eventPosition: [...agent.position] as [number, number, number]
+        });
+
         let updates: Partial<Agent> = {
             state: summary.choice,
             integrity: nextIntegrity,
@@ -457,7 +525,8 @@ export const useStore = create<GameState>((set, get) => ({
         agents: updatedAgents,
         landParcels: updatedParcels,
         quests: [...s.quests, ...newQuests],
-        logs: [...newLogs, ...s.logs].slice(0, 60)
+        logs: [...newLogs, ...s.logs].slice(0, 60),
+        chatMessages: [...s.chatMessages, ...newThoughts].slice(-100)
     }));
   },
 

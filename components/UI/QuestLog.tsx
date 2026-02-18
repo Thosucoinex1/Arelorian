@@ -1,7 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
+// Added Quest type import for proper typing
+import { Quest } from '../../types';
 
 export const QuestLog = () => {
     const quests = useStore(state => state.quests);
@@ -16,15 +17,16 @@ export const QuestLog = () => {
 
     const visibleQuests = quests.filter(q => (now - q.timestamp) > 15000);
 
-    const handleQuestClick = (quest: any) => {
+    // Fixed: Properly typed quest parameter and passed position tuples directly to avoid spread array length inference issues
+    const handleQuestClick = (quest: Quest) => {
         soundManager.playUI('CLICK');
         if (quest.position) {
-            setCameraTarget([...quest.position]);
+            setCameraTarget(quest.position);
             soundManager.playCombat('MAGIC');
         } else {
             const issuer = useStore.getState().agents.find(a => a.id === quest.issuerId);
             if (issuer) {
-                setCameraTarget([...issuer.position]);
+                setCameraTarget(issuer.position);
                 soundManager.playCombat('MAGIC');
             }
         }
