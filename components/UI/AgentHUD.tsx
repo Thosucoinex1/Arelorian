@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
 import { AgentState, AXIOMS } from '../../types';
+import { Timer } from 'lucide-react';
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
@@ -12,9 +13,22 @@ export const AgentHUD = () => {
   const isOpen = useStore(state => state.showCharacterSheet);
   const isMobile = useStore(state => state.device.isMobile);
 
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const agent = agents.find(a => a.id === selectedAgentId);
 
   if (!agent) return null;
+
+  const SCAN_COOLDOWN = 30 * 60 * 1000;
+  const timeSinceLastScan = now - agent.lastScanTime;
+  const isOnScanCooldown = timeSinceLastScan < SCAN_COOLDOWN;
+  const remainingScanTime = Math.max(0, SCAN_COOLDOWN - timeSinceLastScan);
+  const minutes = Math.floor(remainingScanTime / 60000);
+  const seconds = Math.floor((remainingScanTime % 60000) / 1000);
 
   return (
     <div className={`fixed top-8 left-8 pointer-events-auto transition-all duration-300 z-50 ${isMobile ? 'w-64' : 'w-72'}`}>
@@ -36,6 +50,16 @@ export const AgentHUD = () => {
                     </span>
                     {agent.isAwakened && <span className="text-axiom-gold text-[10px] animate-pulse">AWAKENED</span>}
                 </div>
+
+                {isOnScanCooldown && (
+                    <div className="flex items-center gap-2 mb-3 bg-white/5 p-2 rounded border border-white/5">
+                        <Timer className="w-3 h-3 text-axiom-gold" />
+                        <div className="flex flex-col">
+                            <span className="text-[7px] text-gray-500 uppercase font-black">Matrix Scan Ready In</span>
+                            <span className="text-[10px] text-axiom-gold font-mono">{minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}</span>
+                        </div>
+                    </div>
+                )}
 
                 <div className="space-y-3 mb-4">
                     <div>

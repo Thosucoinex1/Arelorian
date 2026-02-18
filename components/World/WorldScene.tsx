@@ -1,11 +1,12 @@
-import React, { useRef, useMemo, Suspense, useState, useEffect } from 'react';
+
+import { Html, OrbitControls, Stars } from '@react-three/drei';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
-import { OrbitControls, Stars, Html } from '@react-three/drei';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { useStore } from '../../store';
-import { Chunk, Agent, StructureType, AgentState, LandParcel, Monster } from '../../types';
-import { axiomVertexShader, axiomFragmentShader } from './AxiomShader';
 import { soundManager } from '../../services/SoundManager';
+import { useStore } from '../../store';
+import { Agent, AgentState, Chunk, LandParcel, Monster, ResourceNode, StructureType } from '../../types';
+import { axiomFragmentShader, axiomVertexShader } from './AxiomShader';
 
 declare global {
   namespace React {
@@ -64,6 +65,64 @@ const SpeechBubble = ({ agentId }: { agentId: string }) => {
                     {String(displayMessage)}
                 </div>
             </Html>
+        </group>
+    );
+};
+
+const ResourceNodeMesh: React.FC<{ node: ResourceNode }> = ({ node }) => {
+    const agents = useStore(state => state.agents);
+    const [isNear, setIsNear] = useState(false);
+
+    useFrame(() => {
+        let near = false;
+        for (const agent of agents) {
+            const dist = Math.hypot(agent.position[0] - node.position[0], agent.position[2] - node.position[2]);
+            if (dist < 10) {
+                near = true;
+                break;
+            }
+        }
+        if (near !== isNear) setIsNear(near);
+    });
+
+    const getColor = () => {
+        switch(node.type) {
+            case 'WOOD': return '#5d4037';
+            case 'STONE': return '#757575';
+            case 'IRON_ORE': return '#455a64';
+            case 'GOLD_ORE': return '#ffd700';
+            case 'DIAMOND': return '#00bcd4';
+            default: return '#8bc34a';
+        }
+    };
+
+    const getGeometry = () => {
+        if (node.type === 'WOOD') return <boxGeometry args={[1, 4, 1]} />;
+        if (node.type === 'DIAMOND') return <octahedronGeometry args={[1, 0]} />;
+        return <dodecahedronGeometry args={[1.5, 0]} />;
+    };
+
+    if (node.amount <= 0) return null;
+
+    return (
+        <group position={node.position}>
+            <mesh castShadow position={[0, node.type === 'WOOD' ? 2 : 1, 0]}>
+                {getGeometry()}
+                <meshStandardMaterial color={getColor()} roughness={0.7} emissive={getColor()} emissiveIntensity={node.type === 'DIAMOND' ? 0.5 : 0.1} />
+            </mesh>
+            {isNear && (
+                <Html position={[0, 4, 0]} center distanceFactor={15}>
+                    <div className="bg-axiom-dark/80 border border-axiom-gold/40 text-white px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest shadow-lg backdrop-blur-sm flex flex-col items-center gap-1">
+                        <span className="text-axiom-gold">{String(node.type)} Source</span>
+                        <div className="flex items-center gap-1">
+                            <div className="w-16 h-1 bg-gray-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-axiom-cyan transition-all" style={{ width: `${(node.amount / 50) * 100}%` }} />
+                            </div>
+                            <span className="text-gray-400 font-mono">{String(node.amount)}u</span>
+                        </div>
+                    </div>
+                </Html>
+            )}
         </group>
     );
 };
@@ -272,7 +331,6 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
 };
 
 const CameraController = () => {
-    // Fixed: useRef expects 1 argument (initial value). Adding null to satisfy TypeScript.
     const controlsRef = useRef<any>(null);
     const cameraTarget = useStore(state => state.cameraTarget);
     const setCameraTarget = useStore(state => state.setCameraTarget);
@@ -285,7 +343,6 @@ const CameraController = () => {
             const dist = camera.position.distanceTo(targetVec);
             if (dist > 100) {
                const dir = new THREE.Vector3(0, 0, 0).subVectors(camera.position, targetVec).normalize();
-               // Improved: Explicitly clone and calculate the ideal position to ensure correct typing and prevent original vector modification.
                const idealPos = new THREE.Vector3().copy(targetVec).add(dir.multiplyScalar(60));
                camera.position.lerp(idealPos, 2 * delta);
             }
@@ -327,6 +384,7 @@ const GameLoop = () => {
 const SceneContent = () => {
     const agents = useStore(state => state.agents);
     const monsters = useStore(state => state.monsters);
+    const resourceNodes = useStore(state => state.resourceNodes);
     const loadedChunks = useStore(state => state.loadedChunks);
     const stability = useStore(state => state.stability);
     const landParcels = useStore(state => state.landParcels);
@@ -355,6 +413,11 @@ const SceneContent = () => {
                 <group>
                     {landParcels.map(parcel => (
                         <ParcelMarker key={parcel.id} parcel={parcel} />
+                    ))}
+                </group>
+                <group>
+                    {resourceNodes.map(node => (
+                        <ResourceNodeMesh key={node.id} node={node} />
                     ))}
                 </group>
             </group>

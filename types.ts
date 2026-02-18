@@ -156,6 +156,7 @@ export interface Agent {
   loreSnippet?: string;
   isAwakened?: boolean;
   lastChoiceLogic?: string; 
+  lastScanTime: number; // Cooldown for scanning the Matrix
   
   memoryCache: string[];
   thinkingMatrix: {
