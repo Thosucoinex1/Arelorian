@@ -1,0 +1,24 @@
+# .github/workflows/n1-scheduler.yml
+name: N1 Scheduled Analysis
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Alle 6 Stunden
+
+jobs:
+  claude-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Game State
+        run: |
+          curl https://your-game-api.com/state > state.json
+      
+      - name: Claude Analysis (via GitHub Models)
+        uses: github/claude-action@v1
+        with:
+          prompt: "Analyze this game state and suggest N1 commands"
+          context: state.json
+      
+      - name: Send Commands
+        run: |
+          curl -X POST https://your-game-api.com/n1/command \
+            -d @claude-response.json
