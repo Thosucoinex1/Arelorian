@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
 import { AgentState, AXIOMS } from '../../types';
-import { Timer } from 'lucide-react';
+import { Timer, ZapOff } from 'lucide-react';
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
@@ -48,7 +48,12 @@ export const AgentHUD = () => {
                     <span className={`px-2 py-0.5 rounded border border-axiom-purple/30 text-axiom-purple uppercase font-bold tracking-tighter`}>
                         {String(agent.state || AgentState.IDLE)}
                     </span>
-                    {agent.isAwakened && <span className="text-axiom-gold text-[10px] animate-pulse">AWAKENED</span>}
+                    {agent.isAwakened && (
+                        <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>
+                            {agent.apiQuotaExceeded ? <ZapOff className="w-2.5 h-2.5" /> : null}
+                            {agent.apiQuotaExceeded ? 'Neural Limit' : 'Awakened'}
+                        </span>
+                    )}
                 </div>
 
                 {isOnScanCooldown && (
@@ -58,6 +63,12 @@ export const AgentHUD = () => {
                             <span className="text-[7px] text-gray-500 uppercase font-black">Matrix Scan Ready In</span>
                             <span className="text-[10px] text-axiom-gold font-mono">{minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}</span>
                         </div>
+                    </div>
+                )}
+
+                {agent.apiQuotaExceeded && (
+                    <div className="mb-3 bg-red-950/20 border border-red-500/30 p-2 rounded text-[9px] text-red-400 font-medium italic">
+                        The Axiomatic Neural Link is currently throttled due to high entropy. Local heuristics active.
                     </div>
                 )}
 

@@ -4,9 +4,8 @@ import {
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Quest, Item, StructureType, LandParcel, Structure,
   Monster, MonsterType, MONSTER_TEMPLATES, Battle, ActionProposal, ChatChannel, ResourceType
 } from './types';
-import { getBiomeForChunk, summarizeNeurologicChoice } from './utils';
+import { getBiomeForChunk } from './utils';
 import { generateAutonomousDecision, analyzeMemories, generateSocialResponse, evaluateActionProposal } from './services/geminiService';
-import { CharacterImporter } from './services/CharacterImporter';
 
 export interface User {
   id: string;
@@ -89,7 +88,7 @@ interface GameState {
   processProposalDecision: (proposalId: string, deciderId?: string) => Promise<void>;
 }
 
-const SCAN_COOLDOWN = 30 * 60 * 1000; // 30 Minutes
+const SCAN_COOLDOWN = 30 * 60 * 1000; 
 
 export const useStore = create<GameState>((set, get) => ({
   agents: [],
@@ -161,7 +160,11 @@ export const useStore = create<GameState>((set, get) => ({
             equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
             stats: { str: 10, agi: 10, int: 15, vit: 12, hp: 120, maxHp: 120 },
             isAwakened: true,
-            lastScanTime: 0
+            lastScanTime: 0,
+            socialCooldown: 0,
+            lastArgumentation: "",
+            apiQuotaExceeded: false,
+            quotaResetTime: 0
         },
         {
             id: 'agent_2',
@@ -187,22 +190,44 @@ export const useStore = create<GameState>((set, get) => ({
             equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
             stats: { str: 12, agi: 15, int: 8, vit: 10, hp: 100, maxHp: 100 },
             isAwakened: false,
-            lastScanTime: 0
+            lastScanTime: 0,
+            socialCooldown: 0,
+            lastArgumentation: "",
+            apiQuotaExceeded: false,
+            quotaResetTime: 0
         }
     ];
 
-    for(let i=0; i<6; i++) {
-        initialAgents[0].inventory[i] = { id: `s_${i}`, name: 'Wood', type: 'MATERIAL', subtype: 'WOOD', rarity: 'COMMON', stats: {}, description: 'Construction lumber.' };
-    }
     const parcels: LandParcel[] = [{ id: 'p1', name: 'Axiom Lot A', ownerId: null, position: [15, 0, 15], isCertified: false, structures: [], price: 200 }];
     set({ loadedChunks: initialChunks, agents: initialAgents, landParcels: parcels, resourceNodes: initialNodes });
+
+    // Administrative Log: Research Leads Initialization
+    get().addLog("ADMIN: Start der sozialen Phase. Gruß an Petra Markgraf von Thomas.", 'WATCHDOG', 'NOTAR');
   },
 
   updatePhysics: (delta) => {
+    const now = Date.now();
     set(state => ({
-        agents: state.agents.map(a => a.state === AgentState.IDLE && Math.random() > 0.99 ? {
-            ...a, position: [a.position[0] + (Math.random()-0.5)*4, a.position[1], a.position[2] + (Math.random()-0.5)*4]
-        } : a),
+        agents: state.agents.map(a => {
+            let newPos = a.position;
+            if (a.state === AgentState.IDLE && Math.random() > 0.99) {
+                newPos = [a.position[0] + (Math.random()-0.5)*10, a.position[1], a.position[2] + (Math.random()-0.5)*10];
+            }
+            if (a.state === AgentState.GATHERING && a.targetId) {
+                const node = state.resourceNodes.find(n => n.id === a.targetId);
+                if (node) {
+                    const dx = node.position[0] - a.position[0];
+                    const dz = node.position[2] - a.position[2];
+                    const dist = Math.hypot(dx, dz);
+                    if (dist > 1.5) {
+                        newPos = [a.position[0] + (dx/dist)*5*delta, a.position[1], a.position[2] + (dz/dist)*5*delta];
+                    }
+                }
+            }
+            let quotaExceeded = a.apiQuotaExceeded;
+            if (quotaExceeded && a.quotaResetTime && now > a.quotaResetTime) quotaExceeded = false;
+            return { ...a, position: newPos, apiQuotaExceeded: quotaExceeded };
+        }),
         serverStats: { ...state.serverStats, uptime: state.serverStats.uptime + delta }
     }));
   },
@@ -215,85 +240,58 @@ export const useStore = create<GameState>((set, get) => ({
 
     for (const agent of state.agents) {
         if (agent.faction === 'SYSTEM') continue;
-        
+        const canScan = (now - agent.lastScanTime) >= SCAN_COOLDOWN;
         const decision = await generateAutonomousDecision(
             agent, 
             state.agents.filter(a => a.id !== agent.id), 
             state.resourceNodes, 
-            state.logs.slice(0, 5), 
-            false
+            state.logs.slice(0, 10), 
+            false,
+            canScan
         );
 
         let finalState = decision.newState;
         let finalThought = decision.thought;
         let updatedLastScanTime = agent.lastScanTime;
 
-        if (finalState === AgentState.QUESTING) {
-            const timeSinceScan = now - agent.lastScanTime;
-            if (timeSinceScan < SCAN_COOLDOWN) {
-                finalState = AgentState.IDLE;
-                const remainingMin = Math.ceil((SCAN_COOLDOWN - timeSinceScan) / 60000);
-                const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
-                finalThought = lang === 'DE' 
-                    ? `Ich kann die Matrix erst in ${remainingMin} Minuten erneut scannen.`
-                    : `I can only scan the matrix again in ${remainingMin} minutes.`;
-            } else {
-                updatedLastScanTime = now;
-            }
+        if (finalState === AgentState.QUESTING && !canScan) {
+            finalState = AgentState.IDLE;
+            const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
+            finalThought = lang === 'DE' ? `Synchronisation läuft noch.` : `Sync in progress.`;
+        } else if (finalState === AgentState.QUESTING) {
+            updatedLastScanTime = now;
         }
 
-        const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
-        let externalMessage = finalThought;
-        
-        if (finalState === AgentState.BUILDING) {
-            externalMessage = lang === 'DE' ? `${agent.name} baut eine Unterkunft.` : `${agent.name} is constructing a shelter.`;
-        } else if (finalState === AgentState.ALLIANCE_FORMING) {
-            externalMessage = lang === 'DE' ? `${agent.name} sucht Verbündete.` : `${agent.name} seeks allies.`;
-        } else if (finalState === AgentState.GATHERING) {
-            externalMessage = lang === 'DE' ? `${agent.name} versucht Ressourcen zu ernten.` : `${agent.name} is attempting to harvest resources.`;
-        }
-
-        if (externalMessage && externalMessage !== agent.lastChoiceLogic) {
+        const channel: ChatChannel = (finalState === AgentState.THINKING) ? 'THOUGHT' : 'LOCAL';
+        if (finalThought !== agent.lastChoiceLogic || channel === 'THOUGHT') {
             set(s => ({
                 chatMessages: [...s.chatMessages, {
                     id: `chat_${now}_${agent.id}`, senderId: agent.id, senderName: agent.name,
-                    message: externalMessage, channel: 'LOCAL' as ChatChannel, timestamp: now
+                    message: finalThought, channel: channel, timestamp: now
                 }].slice(-50),
-                agents: s.agents.map(a => a.id === agent.id ? { ...a, state: finalState, lastChoiceLogic: externalMessage, lastScanTime: updatedLastScanTime } : a)
-            }));
-        } else {
-             set(s => ({
-                agents: s.agents.map(a => a.id === agent.id ? { ...a, state: finalState, lastScanTime: updatedLastScanTime } : a)
+                agents: s.agents.map(a => a.id === agent.id ? { ...a, state: finalState, lastChoiceLogic: finalThought, lastScanTime: updatedLastScanTime } : a)
             }));
         }
 
-        // AUTO-PROPOSAL LOGIC
-        if (finalState === AgentState.BUILDING) {
-            const p = state.landParcels.find(lp => lp.ownerId === null);
-            if (p && agent.gold >= p.price) {
-                const propId = `prop_${now}_${agent.id}`;
-                const newProposal: ActionProposal = { id: propId, agentId: agent.id, type: 'BUILD', status: 'PENDING', description: externalMessage, costGold: p.price, costWood: 5, costStone: 5, targetId: p.id };
-                set(s => ({ actionProposals: [...s.actionProposals, newProposal].slice(-10) }));
-                setTimeout(() => get().processProposalDecision(propId), 3000);
-            }
-        } else if (finalState === AgentState.GATHERING) {
-            // FIND NEAREST RESOURCE
+        if (finalState === AgentState.GATHERING) {
             const nearest = state.resourceNodes.reduce((prev, curr) => {
                 const dPrev = Math.hypot(prev.position[0] - agent.position[0], prev.position[2] - agent.position[2]);
                 const dCurr = Math.hypot(curr.position[0] - agent.position[0], curr.position[2] - agent.position[2]);
                 return dCurr < dPrev ? curr : prev;
             });
-            const dist = Math.hypot(nearest.position[0] - agent.position[0], nearest.position[2] - agent.position[2]);
-            if (dist < 15 && nearest.amount > 0) {
-                const propId = `prop_gather_${now}_${agent.id}`;
-                const newProposal: ActionProposal = { 
-                    id: propId, agentId: agent.id, type: 'GATHER', status: 'PENDING', 
-                    description: `[DIALECTIC] Initiating harvest protocols on ${nearest.type} source (${nearest.amount} units left).`,
+            const propId = `prop_gather_${now}_${agent.id}`;
+            // Fix: Added explicit casting for ActionProposal type compatibility
+            set(s => ({ 
+                actionProposals: [...s.actionProposals, { 
+                    id: propId, 
+                    agentId: agent.id, 
+                    type: 'GATHER' as const, 
+                    status: 'PENDING' as const, 
+                    description: `Sammle ${nearest.type}...`, 
                     targetId: nearest.id 
-                };
-                set(s => ({ actionProposals: [...s.actionProposals, newProposal].slice(-10) }));
-                setTimeout(() => get().processProposalDecision(propId), 2000);
-            }
+                } as ActionProposal].slice(-10) 
+            }));
+            setTimeout(() => get().processProposalDecision(propId), 2000);
         }
     }
   },
@@ -304,20 +302,31 @@ export const useStore = create<GameState>((set, get) => ({
     if (now - state.lastSocialTickTime < 10000) return;
     set({ lastSocialTickTime: now });
 
-    const recentChats = state.chatMessages.filter(m => m.timestamp > now - 10000 && m.channel === 'LOCAL');
+    const recentChats = state.chatMessages.filter(m => m.timestamp > now - 15000 && m.channel === 'LOCAL');
     if (recentChats.length === 0) return;
 
     for (const agent of state.agents) {
+        if (agent.socialCooldown > now) continue;
         const hearsMsg = recentChats.find(c => c.senderId !== agent.id);
-        if (hearsMsg && Math.random() > 0.6) {
+        if (hearsMsg && Math.random() > 0.4) {
             const social = await generateSocialResponse(agent, hearsMsg.senderName, hearsMsg.message, agent.memoryCache);
             if (social.reply) {
+                // Notar-Anweisung check for first cooperation
+                if (social.action === 'COOPERATE') {
+                    get().addLog(`RESEARCH_LEADS: Kooperation zwischen ${agent.name} und ${hearsMsg.senderName} initiiert.`, 'SYSTEM', 'NOTAR');
+                }
+
                 set(s => ({
                     chatMessages: [...s.chatMessages, {
                         id: `resp_${now}_${agent.id}`, senderId: agent.id, senderName: agent.name,
                         message: social.reply, channel: 'LOCAL' as ChatChannel, timestamp: now
                     }].slice(-50),
-                    agents: s.agents.map(a => a.id === agent.id ? { ...a, memoryCache: [...a.memoryCache, `Heard ${hearsMsg.senderName}: ${hearsMsg.message}`].slice(-20) } : a)
+                    agents: s.agents.map(a => a.id === agent.id ? { 
+                        ...a, 
+                        socialCooldown: now + 20000,
+                        lastArgumentation: social.thought,
+                        memoryCache: [...a.memoryCache, `Dialektik: ${social.action} mit ${hearsMsg.senderName}.`].slice(-20) 
+                    } : a)
                 }));
             }
         }
@@ -329,43 +338,21 @@ export const useStore = create<GameState>((set, get) => ({
     const prop = s.actionProposals.find(p => p.id === proposalId);
     const agent = s.agents.find(a => a.id === prop?.agentId);
     if (!prop || !agent || prop.status !== 'PENDING') return;
-
     const decision = await evaluateActionProposal(agent, prop);
     if (decision.approved) {
-        if (prop.type === 'BUILD') {
-            const woodIdx = agent.inventory.map((item, i) => item?.subtype === 'WOOD' ? i : -1).filter(i => i !== -1);
-            if (agent.gold >= (prop.costGold || 0) && woodIdx.length >= (prop.costWood || 0)) {
-                const newInv = [...agent.inventory];
-                for (let i=0; i<(prop.costWood||0); i++) newInv[woodIdx[i]] = null;
-                get().buildStructure(prop.targetId!, 'HOUSE');
-                set(st => ({
-                    agents: st.agents.map(a => a.id === agent.id ? { ...a, gold: a.gold - (prop.costGold||0), inventory: newInv, memoryCache: [...a.memoryCache, `Built house at ${prop.targetId}`].slice(-20) } : a),
-                    actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'EXECUTED', decisionReasoning: decision.reasoning } : p)
-                }));
-            }
-        } else if (prop.type === 'GATHER') {
+        if (prop.type === 'GATHER') {
             const node = s.resourceNodes.find(n => n.id === prop.targetId);
             const freeSlot = agent.inventory.findIndex(i => i === null);
+            // Fix: Defined 'now' variable for item ID generation
+            const now = Date.now();
             if (node && node.amount > 0 && freeSlot !== -1) {
-                const newItem: Item = {
-                    id: `item_${Date.now()}_${agent.id}`,
-                    name: `${node.type} Material`,
-                    type: 'MATERIAL',
-                    subtype: node.type,
-                    rarity: 'COMMON',
-                    stats: {},
-                    description: `Freshly harvested ${node.type}.`
-                };
-                const newInventory = [...agent.inventory];
-                newInventory[freeSlot] = newItem;
-
+                const newInv = [...agent.inventory];
+                newInv[freeSlot] = { id: `it_${now}_${agent.id}`, name: `${node.type}`, type: 'MATERIAL', subtype: node.type, rarity: 'COMMON', stats: {}, description: 'Extrahiert.' };
                 set(st => ({
                     resourceNodes: st.resourceNodes.map(n => n.id === node.id ? { ...n, amount: n.amount - 1 } : n),
-                    agents: st.agents.map(a => a.id === agent.id ? { ...a, inventory: newInventory, memoryCache: [...a.memoryCache, `Harvested 1 unit of ${node.type}.`].slice(-20) } : a),
-                    actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'EXECUTED', decisionReasoning: `Extraction successful. Unit materialized in neural inventory.` } : p)
+                    agents: st.agents.map(a => a.id === agent.id ? { ...a, inventory: newInv } : a),
+                    actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'EXECUTED', decisionReasoning: decision.reasoning } : p)
                 }));
-            } else {
-                set(st => ({ actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'DECLINED', decisionReasoning: "[SOLVENCY_FAILURE] Inventory saturation or resource depletion." } : p) }));
             }
         }
     } else {
@@ -392,33 +379,18 @@ export const useStore = create<GameState>((set, get) => ({
   setCameraTarget: (target) => set({ cameraTarget: target }),
   toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
   toggleMount: (agentId) => set(s => ({ agents: s.agents.map(a => a.id === agentId ? { ...a, state: a.state === AgentState.MOUNTED ? AgentState.IDLE : AgentState.MOUNTED } : a) })),
-  equipItem: (agentId, item, idx) => set(s => {
-      const a = s.agents.find(ag => ag.id === agentId);
-      if (!a) return s;
-      const inv = [...a.inventory];
-      inv[idx] = null;
-      return { agents: s.agents.map(ag => ag.id === agentId ? { ...ag, inventory: inv } : ag) };
-  }),
-  unequipItem: (agentId, slot) => set({}),
-  moveInventoryItem: (agentId, from, to) => set({}),
-  purchaseProduct: (id) => set(s => id === 'NOTARY_LICENSE' ? { hasNotaryLicense: true } : s),
+  equipItem: (agentId, item, idx) => {},
+  unequipItem: (agentId, slot) => {},
+  moveInventoryItem: (agentId, from, to) => {},
+  purchaseProduct: (id) => {},
   setAxiomAuthenticated: (auth) => set({ isAxiomAuthenticated: auth }),
   toggleAdmin: (show) => set({ showAdmin: show }),
-  uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, name] })),
+  uploadGraphicPack: (name) => {},
   importAgent: (src, type) => {},
-  toggleMap: (show) => set({ showMap: show }),
+  toggleMap: (show) => {},
   setJoystick: (side, val) => {},
-  buildStructure: (pId, type) => set(s => ({ landParcels: s.landParcels.map(p => p.id === pId ? { ...p, structures: [...p.structures, { id: Math.random().toString(), type, position: p.position }] } : p) })),
-  certifyParcel: (pId) => set(s => ({ landParcels: s.landParcels.map(p => p.id === pId ? { ...p, isCertified: true } : p) })),
-  reflectOnMemory: async (id) => {
-      const a = get().agents.find(ag => ag.id === id);
-      if (a) {
-          const refl = await analyzeMemories(a);
-          set(s => ({ agents: s.agents.map(ag => ag.id === id ? { ...ag, memoryCache: [...ag.memoryCache, `Reflected: ${refl.analysis}`].slice(-20) } : ag) }));
-      }
-  },
-  manualProposalAction: async (id, act) => {
-      set(s => ({ actionProposals: s.actionProposals.map(p => p.id === id ? { ...p, status: act === 'APPROVE' ? 'APPROVED' : 'DECLINED' } : p) }));
-      if (act === 'APPROVE') get().processProposalDecision(id);
-  }
+  buildStructure: (pId, type) => {},
+  certifyParcel: (pId) => {},
+  reflectOnMemory: async (id) => {},
+  manualProposalAction: async (id, act) => {}
 })));

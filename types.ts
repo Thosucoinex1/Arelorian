@@ -92,6 +92,7 @@ export interface ItemStats {
   hp?: number;
 }
 
+// Fix: Added missing ItemEffect type for set bonuses
 export interface ItemEffect {
   description: string;
   type: string;
@@ -127,10 +128,11 @@ export interface LandParcel {
   price: number;
 }
 
-export type ProductType = 'LAND' | 'LICENSE' | 'SKIN';
+// Fix: Added missing StoreProduct and ProductType types for Notary Dashboard
+export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE';
 
 export interface StoreProduct {
-  id: string;
+  id: ProductType;
   name: string;
   description: string;
   priceEUR: number;
@@ -156,8 +158,14 @@ export interface Agent {
   loreSnippet?: string;
   isAwakened?: boolean;
   lastChoiceLogic?: string; 
-  lastScanTime: number; // Cooldown for scanning the Matrix
+  lastScanTime: number;
+  socialCooldown: number;
+  lastSocialAction?: string;
+  lastArgumentation: string;
   
+  apiQuotaExceeded?: boolean;
+  quotaResetTime?: number;
+
   memoryCache: string[];
   thinkingMatrix: {
     personality: string;
@@ -181,8 +189,6 @@ export interface Agent {
   stats: { str: number; agi: number; int: number; vit: number; hp: number; maxHp: number };
   targetId?: string | null;
   alliedId?: string | null;
-  stuckTicks?: number; 
-  wanderTarget?: [number, number, number] | null;
 }
 
 export interface Chunk { 

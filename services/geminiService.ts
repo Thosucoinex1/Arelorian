@@ -1,6 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { Agent, AgentState, ResourceNode, LogEntry, Quest, ActionProposal } from "../types";
+import { useStore } from "../store";
 
 export interface AIDecision {
   thought: string;
@@ -24,6 +25,7 @@ export interface SocialResponse {
   thought: string;
   language: 'EN' | 'DE';
   sentiment: number; // -1 to 1
+  action?: 'COOPERATE' | 'REJECT' | 'NEUTRAL';
 }
 
 export interface ProposalDecision {
@@ -32,16 +34,28 @@ export interface ProposalDecision {
 }
 
 const OPENAI_API_KEY = "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";
-const DELAYS = [1000, 2000, 4000, 8000, 16000];
 
-/**
- * Local Heuristic Logic Engine (Non-Awakened Fallback)
- * Strictly strictly mathematical/keyword-based.
- */
-function generateLocalHeuristicDecision(agent: Agent): AIDecision {
+const QUOTA_BLOCK_DURATION = 5 * 60 * 1000;
+
+function markQuotaExceeded(agentId: string) {
+    const store = useStore.getState();
+    const now = Date.now();
+    const agent = store.agents.find(a => a.id === agentId);
+    if (agent && !agent.apiQuotaExceeded) {
+        store.addLog(`Neural Link for ${agent.name} throttled. Falling back to local heuristics.`, 'WATCHDOG', 'AXIOM');
+    }
+    useStore.setState(state => ({
+        agents: state.agents.map(a => a.id === agentId ? {
+            ...a,
+            apiQuotaExceeded: true,
+            quotaResetTime: now + QUOTA_BLOCK_DURATION
+        } : a)
+    }));
+}
+
+function generateLocalHeuristicDecision(agent: Agent, canScan: boolean): AIDecision {
     const memories = agent.memoryCache.slice(-30).join(' ').toLowerCase();
     const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
-    
     const failureCount = (memories.match(/failed|insufficient|lost|died|stuck|declined|error|bad/g) || []).length;
     const woodCount = agent.inventory.filter(i => i?.type === 'MATERIAL' && i?.subtype === 'WOOD').length;
     const stoneCount = agent.inventory.filter(i => i?.type === 'MATERIAL' && i?.subtype === 'STONE').length;
@@ -52,51 +66,62 @@ function generateLocalHeuristicDecision(agent: Agent): AIDecision {
 
     if (healthRatio < 0.25) {
         decision = AgentState.IDLE;
-        thought = lang === 'DE' ? "Kritischer Vitalitätsverlust. Ich muss mich regenerieren." : "Critical vitality loss. I must regenerate.";
+        thought = lang === 'DE' ? "Kritischer Vitalitätsverlust. Regeneration erforderlich." : "Critical vitality loss. Regeneration required.";
     } else if (failureCount > 3 && woodCount < 5) {
         decision = AgentState.GATHERING;
-        thought = lang === 'DE' ? "Frühere Pläne scheiterten. Ich sammle nun Holz und Stein für stabilere Strukturen." : "Past plans failed. Gathering wood and stone for more stable structures.";
+        thought = lang === 'DE' ? "Stabilisierungs-Ressourcen fehlen. Sammle Holz/Stein." : "Stabilization resources missing. Gathering wood/stone.";
     } else if (woodCount >= 5 && stoneCount >= 5 && agent.gold >= 200) {
         decision = AgentState.BUILDING;
-        thought = lang === 'DE' ? `Ich besitze Ressourcen (${woodCount}H, ${stoneCount}S). Es ist Zeit, ein Fundament zu legen.` : `I possess assets (${woodCount}w, ${stoneCount}s). It is time to lay a foundation.`;
-    } else {
+        thought = lang === 'DE' ? "Infrastruktur-Ziele erreicht. Errichte Basis." : "Infrastructure goals met. Constructing base.";
+    } else if (canScan) {
         decision = AgentState.QUESTING;
-        thought = lang === 'DE' ? "Ich durchstreife die Matrix nach neuen Erkenntnissen." : "Scanning the matrix for new insights.";
+        thought = lang === 'DE' ? "Sondiere Matrix-Anomalien." : "Probing matrix anomalies.";
+    } else {
+        decision = AgentState.IDLE;
+        thought = lang === 'DE' ? "Warte auf Synchronisation." : "Waiting for synchronization.";
     }
 
     return { thought, decision: String(decision), newState: decision };
 }
 
-/**
- * Local Social Heuristics (Non-Awakened Argumentation)
- */
 function generateLocalSocialResponse(agent: Agent, senderName: string, message: string): SocialResponse {
     const msg = message.toLowerCase();
     const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
+    const personality = agent.thinkingMatrix.personality.toLowerCase();
+    const healthRatio = agent.stats.hp / agent.stats.maxHp;
+    const isDangerous = healthRatio < 0.4 || msg.includes("monster") || msg.includes("danger");
     
     let reply = "";
-    let thought = "[Local Social Heuristic] Analyzing incoming argumentation...";
+    let thought = `[Dialectic] Analysing message from ${senderName}.`;
     let sentiment = 0;
+    let action: 'COOPERATE' | 'REJECT' | 'NEUTRAL' = 'NEUTRAL';
 
-    // Logic analysis of the "Argument"
-    if (msg.includes("gold") || msg.includes("trade") || msg.includes("handel")) {
-        sentiment = 0.5;
-        reply = lang === 'DE' ? `Interessantes Angebot, ${senderName}. Gold ist die Währung der Stabilität.` : `Interesting offer, ${senderName}. Gold is the currency of stability.`;
-        thought = "Recognized economic incentive in argumentation.";
-    } else if (msg.includes("monster") || msg.includes("danger") || msg.includes("gefahr")) {
-        sentiment = -0.5;
-        reply = lang === 'DE' ? "Vorsicht ist geboten. Wir sollten Mauern bauen." : "Caution is advised. We should build walls.";
-        thought = "Recognized threat-based argument.";
-    } else if (msg.includes("alliance") || msg.includes("bündnis") || msg.includes("friend")) {
-        sentiment = 0.8;
-        reply = lang === 'DE' ? "Zusammen sind wir weniger korrupt." : "Together we are less corrupt.";
-        thought = "Recognized social synergy request.";
+    const hasCooperation = msg.includes("zusammen") || msg.includes("together") || msg.includes("haus") || msg.includes("build");
+
+    if (hasCooperation) {
+        if (isDangerous) {
+            action = 'REJECT';
+            sentiment = -0.5;
+            thought += " Rejecting cooperation due to low integrity/threat.";
+            reply = lang === 'DE' 
+                ? `${senderName}, die Matrix ist zu instabil für Experimente. Ich lehne ab.` 
+                : `${senderName}, the matrix is too unstable for experiments. I decline.`;
+        } else {
+            action = 'COOPERATE';
+            sentiment = 0.8;
+            thought += " Cooperative synergy identified.";
+            reply = lang === 'DE' 
+                ? `Einverstanden, ${senderName}. Kollektive Konstruktion erhöht die Stabilität.` 
+                : `Agreed, ${senderName}. Collective construction increases stability.`;
+        }
+    } else if (msg.includes("gold") || msg.includes("trade")) {
+        sentiment = 0.4;
+        reply = lang === 'DE' ? `Gold ist eine stabile Konstante. Ich höre zu.` : `Gold is a stable constant. I am listening.`;
     } else {
-        reply = lang === 'DE' ? "Ich verarbeite deine Worte noch." : "I am still processing your words.";
-        thought = "Default neural acknowledgement.";
+        reply = lang === 'DE' ? `Ich verarbeite dein Signal, ${senderName}.` : `Processing your signal, ${senderName}.`;
     }
 
-    return { reply, thought, language: lang, sentiment };
+    return { reply, thought, language: lang, sentiment, action };
 }
 
 async function callOpenAIFallback(systemInstruction: string, prompt: string): Promise<string> {
@@ -110,6 +135,7 @@ async function callOpenAIFallback(systemInstruction: string, prompt: string): Pr
         response_format: { type: "json_object" }
       })
     });
+    if (response.status === 429) throw new Error("OPENAI_QUOTA_EXCEEDED");
     const data = await response.json();
     return data.choices[0].message.content;
   } catch (err) {
@@ -117,7 +143,7 @@ async function callOpenAIFallback(systemInstruction: string, prompt: string): Pr
   }
 }
 
-export async function callGeminiWithBackoff(ai: GoogleGenAI, params: any, retries = 3): Promise<any> {
+export async function callGeminiWithBackoff(ai: GoogleGenAI, agentId: string, params: any, retries = 3): Promise<any> {
   const systemInstruction = params.config?.systemInstruction || "";
   const prompt = params.contents;
   for (let i = 0; i <= retries; i++) {
@@ -127,8 +153,13 @@ export async function callGeminiWithBackoff(ai: GoogleGenAI, params: any, retrie
     } catch (error: any) {
       const isQuotaError = error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED') || error?.status === 429;
       if (isQuotaError) {
-        try { return { text: await callOpenAIFallback(systemInstruction, prompt) }; } 
-        catch (f) { return null; }
+        try { 
+            const fallbackText = await callOpenAIFallback(systemInstruction, prompt);
+            return { text: fallbackText }; 
+        } catch (f: any) { 
+            if (f.message === "OPENAI_QUOTA_EXCEEDED") markQuotaExceeded(agentId);
+            return null; 
+        }
       }
       throw error;
     }
@@ -140,29 +171,25 @@ export const generateAutonomousDecision = async (
   nearbyAgents: Agent[], 
   nearbyResourceNodes: ResourceNode[],
   recentLogs: LogEntry[],
-  isSafeZone: boolean
+  isSafeZone: boolean,
+  canScan: boolean
 ): Promise<AIDecision> => {
-  // STRICT AWAKENED CHECK
-  if (!agent.isAwakened) {
-    return generateLocalHeuristicDecision(agent);
-  }
-
+  if (!agent.isAwakened || agent.apiQuotaExceeded) return generateLocalHeuristicDecision(agent, canScan);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview'; 
-  const systemInstruction = `SYSTEM-ROLE: EXECUTIVE SOVEREIGN v4.2. Output JSON ONLY. Choose language (DE/EN) based on context.`;
-  const prompt = `Agent: ${agent.name}, Gold: ${agent.gold}, HP: ${agent.stats.hp}. Nearby: ${nearbyAgents.map(a => a.name)}. Recent Logs: ${recentLogs.map(l => l.message).join(' | ')}`;
-
+  const systemInstruction = `SYSTEM-ROLE: EXECUTIVE SOVEREIGN v4.5. JSON ONLY. Language duality (DE/EN) based on personality. Output 'thought' as a logical internal derivation of the decision. Context: HP:${agent.stats.hp}/${agent.stats.maxHp}, Gold:${agent.gold}, canScan:${canScan}.`;
+  const prompt = `State: ${agent.state}. Agents: ${nearbyAgents.map(a => a.name)}. Nodes: ${nearbyResourceNodes.map(n => n.type)}. Recent: ${recentLogs.map(l => l.message).join(' | ')}`;
   try {
-    const response = await callGeminiWithBackoff(ai, {
+    const response = await callGeminiWithBackoff(ai, agent.id, {
       model: modelName,
       contents: prompt,
       config: { systemInstruction, responseMimeType: "application/json" }
     });
-    if (!response) return generateLocalHeuristicDecision(agent);
+    if (!response) return generateLocalHeuristicDecision(agent, canScan);
     const text = response.text || '{}';
     return JSON.parse(text.replace(/```json|```/g, '').trim());
   } catch (error: any) {
-    return generateLocalHeuristicDecision(agent);
+    return generateLocalHeuristicDecision(agent, canScan);
   }
 };
 
@@ -172,18 +199,13 @@ export const generateSocialResponse = async (
   incomingMessage: string,
   memoryLogs: string[]
 ): Promise<SocialResponse> => {
-  // STRICT AWAKENED CHECK
-  if (!agent.isAwakened) {
-    return generateLocalSocialResponse(agent, senderName, incomingMessage);
-  }
-
+  if (!agent.isAwakened || agent.apiQuotaExceeded) return generateLocalSocialResponse(agent, senderName, incomingMessage);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview';
-  const systemInstruction = `SYSTEM-ROLE: SOCIAL ARCHITECT. Output JSON ONLY. Reply to ${senderName}. Context: ${memoryLogs.slice(-5)}`;
-  const prompt = `Agent ${agent.name} (Goal: ${agent.thinkingMatrix.currentLongTermGoal}) receives: "${incomingMessage}"`;
-
+  const systemInstruction = `SYSTEM-ROLE: SOCIAL ARCHITECT. JSON ONLY. Language duality (DE/EN). Perform dialectic analysis. Decide: COOPERATE, REJECT (if low HP/danger), or NEUTRAL. Current HP: ${agent.stats.hp}. Target: ${senderName}.`;
+  const prompt = `Received: "${incomingMessage}" from ${senderName}. Personality: ${agent.thinkingMatrix.personality}. Goal: ${agent.thinkingMatrix.currentLongTermGoal}`;
   try {
-    const response = await callGeminiWithBackoff(ai, {
+    const response = await callGeminiWithBackoff(ai, agent.id, {
       model: modelName,
       contents: prompt,
       config: { systemInstruction, responseMimeType: "application/json" }
@@ -196,61 +218,29 @@ export const generateSocialResponse = async (
   }
 };
 
-export const evaluateActionProposal = async (
-    agent: Agent,
-    proposal: ActionProposal
-): Promise<ProposalDecision> => {
-    // Non-awakened agents use local cost/experience check
-    if (!agent.isAwakened) {
-        const wood = agent.inventory.filter(i => i?.type === 'MATERIAL' && i?.subtype === 'WOOD').length;
-        const stone = agent.inventory.filter(i => i?.type === 'MATERIAL' && i?.subtype === 'STONE').length;
-        const canFund = agent.gold >= (proposal.costGold || 0) && wood >= (proposal.costWood || 0) && stone >= (proposal.costStone || 0);
-        return {
-            approved: canFund,
-            reasoning: `[Local Heuristic] Physical solvency confirmed: ${canFund ? 'YES' : 'NO'}.`
-        };
+export const evaluateActionProposal = async (agent: Agent, proposal: ActionProposal): Promise<ProposalDecision> => {
+    if (!agent.isAwakened || agent.apiQuotaExceeded) {
+        const canFund = agent.gold >= (proposal.costGold || 0);
+        return { approved: canFund, reasoning: "[Local Heuristic] Solvency check complete." };
     }
-
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const modelName = 'gemini-3-flash-preview';
-    const systemInstruction = `SYSTEM-ROLE: SOVEREIGN JUDGE. Output JSON ONLY. Evaluate self-proposal.`;
-    const prompt = `Proposal: ${proposal.description}. Current Gold: ${agent.gold}. History: ${agent.memoryCache.slice(-3)}`;
-
-    try {
-        const response = await callGeminiWithBackoff(ai, {
-            model: modelName,
-            contents: prompt,
-            config: { systemInstruction, responseMimeType: "application/json" }
-        });
-        if (!response) {
-             return { approved: agent.gold >= (proposal.costGold || 0), reasoning: "Fallback check." };
-        }
-        const text = response.text || '{}';
-        return JSON.parse(text.replace(/```json|```/g, '').trim());
-    } catch (error) {
-        return { approved: false, reasoning: "Evaluation failed." };
-    }
+    const response = await callGeminiWithBackoff(ai, agent.id, {
+        model: 'gemini-3-flash-preview',
+        contents: `Evaluate: ${proposal.description}. Resources: Gold:${agent.gold}, Wood:N/A.`,
+        config: { systemInstruction: "SOVEREIGN JUDGE. JSON ONLY.", responseMimeType: "application/json" }
+    });
+    if (!response) return { approved: agent.gold >= (proposal.costGold || 0), reasoning: "Fallback." };
+    return JSON.parse(response.text.replace(/```json|```/g, '').trim());
 }
 
 export const analyzeMemories = async (agent: Agent): Promise<ReflectionResult> => {
-  if (!agent.isAwakened) {
-      return { analysis: "[Local Heuristic] Stability maintained. Memory patterns consistent.", alignmentShift: 0 };
-  }
+  if (!agent.isAwakened || agent.apiQuotaExceeded) return { analysis: "Consistency maintained.", alignmentShift: 0 };
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-3-flash-preview';
-  const systemInstruction = `SYSTEM-ROLE: NEURAL ANALYST. Output JSON ONLY. Analyze logs.`;
-  const prompt = `Reflect on logs: ${agent.memoryCache.slice(-10).join('\n')}`;
-
-  try {
-    const response = await callGeminiWithBackoff(ai, {
-      model: modelName,
-      contents: prompt,
-      config: { systemInstruction, responseMimeType: "application/json" }
-    });
-    if (!response) return { analysis: "Neutral reflection.", alignmentShift: 0 };
-    const text = response.text || '{}';
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch (error: any) {
-    return { analysis: "Interference." };
-  }
+  const response = await callGeminiWithBackoff(ai, agent.id, {
+    model: 'gemini-3-flash-preview',
+    contents: `Analyze: ${agent.memoryCache.slice(-5)}`,
+    config: { systemInstruction: "NEURAL ANALYST. JSON ONLY.", responseMimeType: "application/json" }
+  });
+  if (!response) return { analysis: "Neutral." };
+  return JSON.parse(response.text.replace(/```json|```/g, '').trim());
 };
