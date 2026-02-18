@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
 
+const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
+
 export const AdminDashboard = () => {
     const showAdmin = useStore(state => state.showAdmin);
     const toggleAdmin = useStore(state => state.toggleAdmin);
@@ -11,13 +13,15 @@ export const AdminDashboard = () => {
     const uploadGraphicPack = useStore(state => state.uploadGraphicPack);
     const importAgent = useStore(state => state.importAgent);
     const agentsCount = useStore(state => state.agents.length);
+    const user = useStore(state => state.user);
     
     const [paypalKey, setPaypalKey] = useState("sk_test_123456789");
     const [newPackName, setNewPackName] = useState("");
     const [importSource, setImportSource] = useState("");
     const [importType, setImportType] = useState<'URL' | 'JSON'>('URL');
 
-    if (!showAdmin) return null;
+    // Security Gate: Only allow if visibility is true AND email matches authorized admin
+    if (!showAdmin || user?.email !== ADMIN_EMAIL) return null;
 
     const handleImport = () => {
         if (!importSource) return;
@@ -125,6 +129,9 @@ export const AdminDashboard = () => {
                             </div>
                         </div>
                     </div>
+                </div>
+                <div className="p-4 bg-black/40 text-center border-t border-white/5">
+                    <span className="text-[10px] text-gray-600 font-mono tracking-widest">{ADMIN_EMAIL}</span>
                 </div>
             </div>
         </div>

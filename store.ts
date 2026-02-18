@@ -11,6 +11,7 @@ import { CharacterImporter } from './services/CharacterImporter';
 export interface User {
   id: string;
   name: string;
+  email?: string;
 }
 
 export interface ServerStats {
@@ -45,6 +46,7 @@ interface GameState {
   lastCombatTick: number;
   
   user: User | null;
+  isAxiomAuthenticated: boolean;
   hasNotaryLicense: boolean;
   agentSlots: number;
   device: { isMobile: boolean };
@@ -67,6 +69,7 @@ interface GameState {
   selectAgent: (id: string | null) => void;
   setCameraTarget: (pos: [number, number, number] | null) => void;
   
+  setAxiomAuthenticated: (val: boolean) => void;
   buildStructure: (pId: string, sType: StructureType) => void;
   certifyParcel: (pId: string) => void;
   toggleCharacterSheet: (val: boolean) => void;
@@ -88,7 +91,12 @@ export const useStore = create<GameState>((set, get) => ({
   selectedAgentId: null, cameraTarget: null, loadedChunks: [],
   globalJackpot: 50000, stability: 1.0, lastLocalThinkTime: 0, lastCombatTick: 0,
   
-  user: { id: 'user_1', name: 'Observer_1' },
+  user: { 
+    id: 'user_1', 
+    name: 'Observer_Alpha', 
+    email: 'projectouroboroscollective@gmail.com' 
+  },
+  isAxiomAuthenticated: false,
   hasNotaryLicense: false,
   agentSlots: 15,
   device: { isMobile: window.innerWidth < 768 },
@@ -104,6 +112,7 @@ export const useStore = create<GameState>((set, get) => ({
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   setCameraTarget: (pos) => set({ cameraTarget: pos }),
+  setAxiomAuthenticated: (val) => set({ isAxiomAuthenticated: val }),
 
   addLog: (message, type, sender = 'SYSTEM') => set(state => ({ 
     logs: [{ 
@@ -396,14 +405,12 @@ export const useStore = create<GameState>((set, get) => ({
                      if (dist < minDist) { minDist = dist; bestTarget = r; }
                 }
             });
-            // Fix tuple assignment by adding explicit type cast
             if (bestTarget) { updates.wanderTarget = [...bestTarget.position] as [number, number, number]; updates.targetId = bestTarget.id; }
         }
         else if (summary.choice === AgentState.BUILDING) {
             let targetParcel = updatedParcels.find(p => p.ownerId === null);
             if (targetParcel) {
                 const dist = Math.hypot(targetParcel.position[0] - agent.position[0], targetParcel.position[2] - agent.position[2]);
-                // Fix tuple assignment by adding explicit type cast
                 if (dist > 5) { updates.wanderTarget = [...targetParcel.position] as [number, number, number]; } 
                 else {
                     if (agent.gold >= targetParcel.price) {
@@ -424,7 +431,6 @@ export const useStore = create<GameState>((set, get) => ({
         }
         else if (summary.choice === AgentState.ALLIANCE_FORMING) {
              const nearbyAlly = state.agents.find(a => a.id !== agent.id && !a.alliedId && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 15);
-             // Fix tuple assignment by adding explicit type cast
              if (nearbyAlly) { updates.alliedId = nearbyAlly.id; updates.wanderTarget = [...nearbyAlly.position] as [number, number, number]; }
         }
         else if (summary.choice === AgentState.TRADING) { updates.wanderTarget = [-5 + Math.random()*10, 0, -5 + Math.random()*10]; }
@@ -438,7 +444,6 @@ export const useStore = create<GameState>((set, get) => ({
                      rewardGold: Math.floor(Math.random() * 100) + 50,
                      timestamp: Date.now(),
                      issuerId: agent.id,
-                     // Fix tuple assignment by adding explicit type cast
                      position: [...agent.position] as [number, number, number]
                  });
             }
@@ -466,7 +471,6 @@ export const useStore = create<GameState>((set, get) => ({
       let nextLogs = [...s.logs];
 
       if (shouldRunLogic) {
-        // MONSTER AI
         nextMonsters = nextMonsters.map(m => {
           if (m.state === 'DEAD') return m;
           let target = nextAgents.find(a => a.id === m.targetId);
@@ -496,7 +500,6 @@ export const useStore = create<GameState>((set, get) => ({
           return m;
         });
 
-        // PROCESS BATTLES IMMUTABLY
         nextBattles = nextBattles.filter(b => {
             const mPart = b.participants.find(p => p.type === 'MONSTER');
             const aPart = b.participants.find(p => p.type === 'AGENT');
