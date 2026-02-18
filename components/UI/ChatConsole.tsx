@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
 import { ChatChannel, ChatMessage, ActionProposal } from '../../types';
 import { soundManager } from '../../services/SoundManager';
-import { Brain, MessageSquare, Shield, Zap, Info, Globe, ChevronUp, ChevronDown, CheckCircle2, XCircle, Loader2, ArrowRightLeft, Hand, Sparkles } from 'lucide-react';
+import { Brain, MessageSquare, Shield, Zap, Info, Globe, ChevronUp, ChevronDown, CheckCircle2, XCircle, Loader2, ArrowRightLeft, Hand, Sparkles, Languages } from 'lucide-react';
 
 export const ChatConsole = () => {
     const messages = useStore(state => state.chatMessages);
@@ -38,6 +38,8 @@ export const ChatConsole = () => {
             default: return { color: 'text-gray-400', icon: <MessageSquare className="w-3 h-3" />, bg: 'bg-transparent' };
         }
     };
+
+    const isGerman = (text: string) => /der|die|das|und|ist|ich|nicht|gebaut|haus|beutel|bündnis|möchte/i.test(text);
 
     const handleMessageClick = (msg: ChatMessage) => {
         soundManager.playUI('CLICK');
@@ -89,18 +91,13 @@ export const ChatConsole = () => {
 
             {isExpanded && (
                 <>
-                    {/* Message Feed */}
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-[linear-gradient(to_bottom,transparent,rgba(0,0,0,0.4))]">
-                        {filteredMessages.length === 0 && (
-                            <div className="flex flex-col items-center justify-center h-full opacity-20 space-y-2">
-                                <Brain className="w-8 h-8" />
-                                <div className="text-[10px] uppercase font-bold tracking-widest">Neural Link Silent</div>
-                            </div>
-                        )}
                         {filteredMessages.map((msg) => {
                             const { color, icon, bg } = getChannelStyles(msg.channel);
                             const isCognition = msg.channel === 'THOUGHT';
+                            const msgIsGerman = isGerman(msg.message);
                             const proposal = msg.proposalId ? actionProposals.find(p => p.id === msg.proposalId) : null;
+                            const agent = agents.find(a => a.id === msg.senderId);
 
                             return (
                                 <div key={msg.id} className={`group flex flex-col p-2.5 rounded-xl transition-all border border-transparent hover:border-white/5 ${bg} ${isCognition ? 'animate-in fade-in slide-in-from-left-2' : ''}`}>
@@ -112,10 +109,16 @@ export const ChatConsole = () => {
                                         {msg.channel !== 'SYSTEM' && (
                                             <span onClick={() => handleMessageClick(msg)} className={`text-[10px] font-black uppercase tracking-tighter cursor-pointer hover:underline flex items-center gap-1 ${color}`}>
                                                 {msg.senderName}
+                                                {agent?.isAwakened && <Zap className="w-2.5 h-2.5 text-axiom-gold inline ml-1" title="Awakened Entity" />}
                                             </span>
                                         )}
+                                        <div className="flex-1" />
+                                        <div className="flex items-center gap-1 opacity-30 group-hover:opacity-100 transition-opacity">
+                                            <Languages className="w-2.5 h-2.5 text-gray-500" />
+                                            <span className="text-[7px] font-bold text-gray-500 uppercase">{msgIsGerman ? 'DE' : 'EN'}</span>
+                                        </div>
                                     </div>
-                                    <div className={`text-[11px] leading-relaxed transition-colors ${isCognition ? 'text-cyan-100/90 font-medium italic pl-1 border-l border-axiom-cyan/20 cursor-pointer' : msg.channel === 'EVENT' ? 'text-axiom-gold font-bold uppercase tracking-tight' : 'text-gray-300'}`}>
+                                    <div className={`text-[11px] leading-relaxed transition-colors ${isCognition ? 'text-cyan-100/90 font-medium italic pl-1 border-l border-axiom-cyan/20 cursor-pointer' : msg.channel === 'EVENT' ? 'text-axiom-gold font-bold uppercase tracking-tight' : 'text-gray-300 font-medium'}`}>
                                         {msg.message}
                                     </div>
 
@@ -124,39 +127,19 @@ export const ChatConsole = () => {
                                             <div className="flex justify-between items-center mb-2.5">
                                                 <div className="flex items-center gap-2">
                                                     <Sparkles className="w-3.5 h-3.5 text-axiom-cyan animate-pulse" />
-                                                    <span className="text-[9px] text-axiom-cyan font-black uppercase tracking-[0.2em]">Sovereign Proposal</span>
+                                                    <span className="text-[9px] text-axiom-cyan font-black uppercase tracking-[0.2em]">Dialectic Negotiation</span>
                                                 </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    {proposal.status === 'PENDING' && <Loader2 className="w-3 h-3 text-axiom-cyan animate-spin" />}
-                                                    <span className={`text-[8px] font-bold uppercase ${proposal.status === 'PENDING' ? 'text-axiom-cyan' : proposal.status === 'DECLINED' ? 'text-red-500' : 'text-green-500'}`}>
-                                                        {proposal.status}
-                                                    </span>
-                                                </div>
+                                                <span className={`text-[8px] font-bold uppercase ${proposal.status === 'PENDING' ? 'text-axiom-cyan' : proposal.status === 'DECLINED' ? 'text-red-500' : 'text-green-500'}`}>
+                                                    {proposal.status}
+                                                </span>
                                             </div>
-                                            
                                             <div className="text-[10px] text-gray-300 mb-2.5 leading-tight italic">
                                                 "{proposal.description}"
                                             </div>
-
-                                            {proposal.status === 'PENDING' && (
-                                                <div className="flex items-center gap-2 py-1 bg-axiom-cyan/10 rounded-lg px-2 border border-axiom-cyan/20 mb-2">
-                                                    <Brain className="w-3 h-3 text-axiom-cyan" />
-                                                    <span className="text-[8px] text-axiom-cyan font-bold uppercase">Self-Deliberating...</span>
-                                                </div>
-                                            )}
-
                                             {proposal.decisionReasoning && (
                                                 <div className="text-[9px] italic text-axiom-cyan/70 border-t border-white/5 pt-2 mt-2 bg-white/5 p-2 rounded-lg">
-                                                    <div className="flex items-center gap-1 mb-1 opacity-50 font-black uppercase tracking-widest text-[7px]">Cognitive Trace</div>
+                                                    <div className="flex items-center gap-1 mb-1 opacity-50 font-black uppercase tracking-widest text-[7px]">Sovereign Argumentation</div>
                                                     {proposal.decisionReasoning}
-                                                </div>
-                                            )}
-
-                                            {(proposal.costGold || proposal.costWood || proposal.costStone) && proposal.status === 'PENDING' && (
-                                                <div className="mt-2 pt-2 border-t border-white/5 flex gap-3 text-[9px] opacity-70">
-                                                    {proposal.costGold && <div className="flex items-center gap-1"><Zap className="w-2.5 h-2.5 text-axiom-gold" /> {proposal.costGold}g</div>}
-                                                    {proposal.costWood && <div className="flex items-center gap-1"><Hand className="w-2.5 h-2.5 text-green-400" /> {proposal.costWood}w</div>}
-                                                    {proposal.costStone && <div className="flex items-center gap-1"><Shield className="w-2.5 h-2.5 text-gray-400" /> {proposal.costStone}s</div>}
                                                 </div>
                                             )}
                                         </div>
@@ -165,15 +148,14 @@ export const ChatConsole = () => {
                             );
                         })}
                     </div>
-
                     <div className="h-9 border-t border-white/5 flex items-center px-4 bg-black/80 shrink-0">
                         <div className="flex items-center gap-4 w-full">
                             <div className="flex items-center gap-1.5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-axiom-cyan animate-pulse shadow-[0_0_5px_#06b6d4]" />
-                                <span className="text-axiom-cyan text-[9px] font-black uppercase tracking-widest">Sovereign Link</span>
+                                <span className="text-axiom-cyan text-[9px] font-black uppercase tracking-widest">Sovereign Dialectic Link</span>
                             </div>
                             <div className="flex-1 h-[1px] bg-white/5" />
-                            <div className="text-[9px] text-gray-500 font-mono italic">Axiom v4.1 (Autonomous)</div>
+                            <div className="text-[9px] text-gray-500 font-mono italic">Axiomatic Sovereign Hub v4.3</div>
                         </div>
                     </div>
                 </>

@@ -44,7 +44,7 @@ interface GameState {
   globalJackpot: number;
   stability: number;
   lastLocalThinkTime: number;
-  lastCombatTick: number;
+  lastSocialTickTime: number;
   
   user: User;
   isAxiomAuthenticated: boolean;
@@ -65,6 +65,7 @@ interface GameState {
   initGame: () => void;
   updatePhysics: (delta: number) => void;
   runCognition: () => void;
+  runSocialInteractions: () => void;
   addLog: (message: string, type: LogEntry['type'], sender?: string) => void;
   sendSignal: (content: string) => Promise<void>;
   selectAgent: (id: string | null) => void;
@@ -90,9 +91,7 @@ interface GameState {
 
 const countResource = (agent: Agent, type: string): number => {
     return agent.inventory.reduce((acc, item) => {
-        if (item && item.type === 'MATERIAL' && item.subtype === type) {
-            return acc + 1;
-        }
+        if (item && item.type === 'MATERIAL' && item.subtype === type) return acc + 1;
         return acc;
     }, 0);
 };
@@ -111,7 +110,7 @@ export const useStore = create<GameState>((set, get) => ({
   globalJackpot: 1000,
   stability: 1.0,
   lastLocalThinkTime: 0,
-  lastCombatTick: 0,
+  lastSocialTickTime: 0,
   user: { id: 'user_1', name: 'Admin', email: 'projectouroboroscollective@gmail.com' },
   isAxiomAuthenticated: false,
   hasNotaryLicense: false,
@@ -133,7 +132,6 @@ export const useStore = create<GameState>((set, get) => ({
         { id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2 },
         { id: 'c01', x: 0, z: 1, biome: getBiomeForChunk(0,1), entropy: 0.2 },
     ];
-
     const initialAgents: Agent[] = [
         {
             id: 'agent_1',
@@ -157,264 +155,199 @@ export const useStore = create<GameState>((set, get) => ({
             skills: { mining: 5, woodcutting: 5 },
             inventory: Array(20).fill(null),
             equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
-            stats: { str: 10, agi: 10, int: 15, vit: 12, hp: 120, maxHp: 120 }
+            stats: { str: 10, agi: 10, int: 15, vit: 12, hp: 120, maxHp: 120 },
+            isAwakened: true // Start with one awakened agent to demonstrate API
+        },
+        {
+            id: 'agent_2',
+            name: 'Cipher',
+            classType: 'Gatherer',
+            faction: 'NPC',
+            position: [5, 0, 5],
+            rotationY: 0,
+            level: 1,
+            xp: 0,
+            state: AgentState.IDLE,
+            soulDensity: 0.5,
+            gold: 200,
+            stabilityIndex: 1.0,
+            energy: 100,
+            maxEnergy: 100,
+            integrity: 1.0,
+            dna: { hash: '0xDEF456', generation: 1, corruption: 0 },
+            memoryCache: ['Basic entity initialized.'],
+            thinkingMatrix: { personality: 'Pragmatic', currentLongTermGoal: 'Resource Hoarding', alignment: 0.0, languagePreference: 'EN' },
+            skills: { woodcutting: 10 },
+            inventory: Array(20).fill(null),
+            equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
+            stats: { str: 12, agi: 15, int: 8, vit: 10, hp: 100, maxHp: 100 },
+            isAwakened: false // Cipher uses local heuristic
         }
     ];
-
-    // Seed some initial materials for Aurelius to demonstrate autonomous building
-    for(let i=0; i<12; i++) {
-        initialAgents[0].inventory[i] = {
-            id: `seed_${i}`, name: 'Raw Material', type: 'MATERIAL', subtype: i < 6 ? 'WOOD' : 'STONE',
-            rarity: 'COMMON', stats: {}, description: 'Initial building stock.'
-        };
+    for(let i=0; i<6; i++) {
+        initialAgents[0].inventory[i] = { id: `s_${i}`, name: 'Wood', type: 'MATERIAL', subtype: 'WOOD', rarity: 'COMMON', stats: {}, description: 'Construction lumber.' };
     }
-
-    const parcels: LandParcel[] = [
-        { id: 'p1', name: 'Axiom Lot A', ownerId: null, position: [15, 0, 15], isCertified: false, structures: [], price: 200 },
-        { id: 'p2', name: 'Axiom Lot B', ownerId: null, position: [-15, 0, 15], isCertified: false, structures: [], price: 200 }
-    ];
-
+    const parcels: LandParcel[] = [{ id: 'p1', name: 'Axiom Lot A', ownerId: null, position: [15, 0, 15], isCertified: false, structures: [], price: 200 }];
     set({ loadedChunks: initialChunks, agents: initialAgents, landParcels: parcels });
   },
 
   updatePhysics: (delta) => {
-    set(state => {
-        const newAgents = state.agents.map(agent => {
-            if (agent.state === AgentState.IDLE && Math.random() > 0.99) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 2;
-                return {
-                    ...agent,
-                    position: [agent.position[0] + Math.cos(angle) * dist, agent.position[1], agent.position[2] + Math.sin(angle) * dist] as [number, number, number]
-                };
-            }
-            return agent;
-        });
-        return { agents: newAgents, serverStats: { ...state.serverStats, uptime: state.serverStats.uptime + delta } };
-    });
+    set(state => ({
+        agents: state.agents.map(a => a.state === AgentState.IDLE && Math.random() > 0.99 ? {
+            ...a, position: [a.position[0] + (Math.random()-0.5)*4, a.position[1], a.position[2] + (Math.random()-0.5)*4]
+        } : a),
+        serverStats: { ...state.serverStats, uptime: state.serverStats.uptime + delta }
+    }));
   },
 
   runCognition: async () => {
     const state = get();
     const now = Date.now();
-    if (now - state.lastLocalThinkTime < 6000) return;
-    
+    if (now - state.lastLocalThinkTime < 8000) return;
     set({ lastLocalThinkTime: now });
 
     for (const agent of state.agents) {
-        if (agent.faction !== 'PLAYER' && agent.faction !== 'NPC') continue;
+        if (agent.faction === 'SYSTEM') continue;
         
-        const decisionResult = await generateAutonomousDecision(
+        const decision = await generateAutonomousDecision(
             agent, 
-            state.agents.filter(a => a.id !== agent.id),
-            state.resourceNodes,
-            state.logs.slice(0, 10),
-            agent.position[0] === 0 && agent.position[2] === 0
+            state.agents.filter(a => a.id !== agent.id), 
+            state.resourceNodes, 
+            state.logs.slice(0, 5), 
+            false
         );
 
-        const summary = summarizeNeurologicChoice(agent, state.agents, state.resourceNodes, state.landParcels);
+        // EXTERNALIZE THOUGHT TO CHAT (Personality Translation)
+        const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
+        let externalMessage = decision.thought;
         
-        if (summary.choice === AgentState.BUILDING || summary.choice === AgentState.ALLIANCE_FORMING) {
-             const proposalId = `prop_${now}_${agent.id}`;
-             const type = summary.choice === AgentState.BUILDING ? 'BUILD' : 'ALLIANCE';
-             let description = decisionResult.thought || `Agent ${agent.name} proposes ${type}: ${summary.reason}`;
-             let costGold = 0, costWood = 0, costStone = 0;
-             let targetId = undefined;
+        if (decision.newState === AgentState.BUILDING) {
+            externalMessage = lang === 'DE' ? `${agent.name} baut eine Unterkunft, um den Monstern zu trotzen.` : `${agent.name} is constructing a shelter to defy the monsters.`;
+        } else if (decision.newState === AgentState.ALLIANCE_FORMING) {
+            externalMessage = lang === 'DE' ? `${agent.name} sucht Verbündete für das Überleben.` : `${agent.name} seeks allies for collective survival.`;
+        }
 
-             if (type === 'BUILD') {
-                 const p = state.landParcels.find(lp => lp.ownerId === null);
-                 if (p) {
-                    costGold = p.price; costWood = 5; costStone = 5;
-                    targetId = p.id;
-                    description = `[EXECUTIVE] Proposing settlement at ${p.name}. (Cost: ${costGold}g, ${costWood}w, ${costStone}s)`;
-                 }
-             }
-
-             if (targetId || type === 'ALLIANCE') {
-                 const newProposal: ActionProposal = { id: proposalId, agentId: agent.id, type, status: 'PENDING', description, costGold, costWood, costStone, targetId };
-                 
-                 set(s => ({
-                     actionProposals: [...s.actionProposals, newProposal].slice(-10),
-                     chatMessages: [...s.chatMessages, {
-                        id: `msg_${proposalId}`, senderId: agent.id, senderName: agent.name, 
-                        message: description, channel: 'THOUGHT' as ChatChannel, timestamp: now, proposalId
-                     }].slice(-50)
-                 }));
-
-                 // AUTONOMOUS SOVEREIGNTY: Agent triggers its own decision-making process
-                 setTimeout(() => get().processProposalDecision(proposalId), 2500);
-             }
-        } else {
+        if (externalMessage && externalMessage !== agent.lastChoiceLogic) {
             set(s => ({
-                agents: s.agents.map(a => a.id === agent.id ? { 
-                    ...a, 
-                    state: decisionResult.newState || summary.choice,
-                    lastChoiceLogic: decisionResult.thought 
-                } : a)
+                chatMessages: [...s.chatMessages, {
+                    id: `chat_${now}_${agent.id}`, senderId: agent.id, senderName: agent.name,
+                    message: externalMessage, channel: 'LOCAL' as ChatChannel, timestamp: now
+                }].slice(-50),
+                agents: s.agents.map(a => a.id === agent.id ? { ...a, state: decision.newState, lastChoiceLogic: externalMessage } : a)
             }));
         }
-    }
-  },
 
-  processProposalDecision: async (proposalId, deciderId) => {
-    const state = get();
-    const proposal = state.actionProposals.find(p => p.id === proposalId);
-    if (!proposal || proposal.status !== 'PENDING') return;
-
-    const agent = state.agents.find(a => a.id === (deciderId || proposal.agentId));
-    if (!agent) return;
-
-    try {
-        const decision = await evaluateActionProposal(agent, proposal);
-        
-        if (decision.approved) {
-            if (proposal.type === 'BUILD') {
-                const woodIndices = agent.inventory.map((item, idx) => item?.subtype === 'WOOD' ? idx : -1).filter(idx => idx !== -1);
-                const stoneIndices = agent.inventory.map((item, idx) => item?.subtype === 'STONE' ? idx : -1).filter(idx => idx !== -1);
-                
-                const canFund = agent.gold >= (proposal.costGold || 0) && woodIndices.length >= (proposal.costWood || 0) && stoneIndices.length >= (proposal.costStone || 0);
-
-                if (canFund) {
-                    // CONCRETE RESOURCE CONSUMPTION
-                    const newInventory = [...agent.inventory];
-                    for(let i=0; i<(proposal.costWood||0); i++) newInventory[woodIndices[i]] = null;
-                    for(let i=0; i<(proposal.costStone||0); i++) newInventory[stoneIndices[i]] = null;
-
-                    get().addLog(`${agent.name} [SUCCESS]: Build complete at ${proposal.targetId}`, 'SYSTEM', agent.name);
-                    get().buildStructure(proposal.targetId!, 'HOUSE');
-                    
-                    set(s => ({
-                        agents: s.agents.map(a => a.id === agent.id ? { 
-                            ...a, 
-                            gold: a.gold - (proposal.costGold || 0),
-                            inventory: newInventory,
-                            memoryCache: [...a.memoryCache, `[PLANNING_SUCCESS] Build at ${proposal.targetId} finalized. Experience gained.`]
-                        } : a),
-                        actionProposals: s.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'EXECUTED', decisionReasoning: decision.reasoning } : p)
-                    }));
-                } else {
-                    get().addLog(`${agent.name} [FAILURE]: Insufficient materials for build.`, 'SYSTEM', agent.name);
-                    set(s => ({ 
-                        agents: s.agents.map(a => a.id === agent.id ? { ...a, memoryCache: [...a.memoryCache, "[PLANNING_FAILURE] Attempted build but lacked physical assets. Must prioritize gathering."] } : a),
-                        actionProposals: s.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'DECLINED', decisionReasoning: "[Self-Correction] Critical resource deficit detected during execution check." } : p) 
-                    }));
-                }
-            } else if (proposal.type === 'ALLIANCE') {
-                set(s => ({ actionProposals: s.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'APPROVED', decisionReasoning: decision.reasoning } : p) }));
+        // AUTO-PROPOSAL LOGIC
+        if (decision.newState === AgentState.BUILDING) {
+            const p = state.landParcels.find(lp => lp.ownerId === null);
+            if (p && agent.gold >= p.price) {
+                const propId = `prop_${now}_${agent.id}`;
+                const newProposal: ActionProposal = { id: propId, agentId: agent.id, type: 'BUILD', status: 'PENDING', description: externalMessage, costGold: p.price, costWood: 5, costStone: 5, targetId: p.id };
+                set(s => ({ actionProposals: [...s.actionProposals, newProposal].slice(-10) }));
+                setTimeout(() => get().processProposalDecision(propId), 3000);
             }
-        } else {
-            set(s => ({ 
-                agents: s.agents.map(a => a.id === agent.id ? { ...a, memoryCache: [...a.memoryCache, `[PLANNING_DECLINED] I rejected my own proposal: ${decision.reasoning}`] } : a),
-                actionProposals: s.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'DECLINED', decisionReasoning: decision.reasoning } : p) 
-            }));
         }
-    } catch (e) {
-        console.error("Autonomous planning failed", e);
     }
   },
 
-  manualProposalAction: async (proposalId, action) => {
+  runSocialInteractions: async () => {
+    const state = get();
+    const now = Date.now();
+    if (now - state.lastSocialTickTime < 10000) return;
+    set({ lastSocialTickTime: now });
+
+    const recentChats = state.chatMessages.filter(m => m.timestamp > now - 10000 && m.channel === 'LOCAL');
+    if (recentChats.length === 0) return;
+
+    for (const agent of state.agents) {
+        const hearsMsg = recentChats.find(c => c.senderId !== agent.id);
+        if (hearsMsg && Math.random() > 0.6) {
+            const social = await generateSocialResponse(agent, hearsMsg.senderName, hearsMsg.message, agent.memoryCache);
+            if (social.reply) {
+                set(s => ({
+                    chatMessages: [...s.chatMessages, {
+                        id: `resp_${now}_${agent.id}`, senderId: agent.id, senderName: agent.name,
+                        message: social.reply, channel: 'LOCAL' as ChatChannel, timestamp: now
+                    }].slice(-50),
+                    agents: s.agents.map(a => a.id === agent.id ? { ...a, memoryCache: [...a.memoryCache, `Heard ${hearsMsg.senderName}: ${hearsMsg.message}`].slice(-20) } : a)
+                }));
+            }
+        }
+    }
+  },
+
+  processProposalDecision: async (proposalId) => {
     const s = get();
-    set({
-        actionProposals: s.actionProposals.map(p => p.id === proposalId ? { 
-            ...p, 
-            status: action === 'APPROVE' ? 'APPROVED' : 'DECLINED',
-            decisionReasoning: "Manual Notar Override Triggered." 
-        } : p)
-    });
-    if (action === 'APPROVE') {
-        get().processProposalDecision(proposalId);
+    const prop = s.actionProposals.find(p => p.id === proposalId);
+    const agent = s.agents.find(a => a.id === prop?.agentId);
+    if (!prop || !agent || prop.status !== 'PENDING') return;
+
+    const decision = await evaluateActionProposal(agent, prop);
+    if (decision.approved) {
+        const woodIdx = agent.inventory.map((item, i) => item?.subtype === 'WOOD' ? i : -1).filter(i => i !== -1);
+        if (agent.gold >= (prop.costGold || 0) && woodIdx.length >= (prop.costWood || 0)) {
+            const newInv = [...agent.inventory];
+            for (let i=0; i<(prop.costWood||0); i++) newInv[woodIdx[i]] = null;
+            get().buildStructure(prop.targetId!, 'HOUSE');
+            set(st => ({
+                agents: st.agents.map(a => a.id === agent.id ? { ...a, gold: a.gold - (prop.costGold||0), inventory: newInv, memoryCache: [...a.memoryCache, `Built house at ${prop.targetId}`].slice(-20) } : a),
+                actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'EXECUTED', decisionReasoning: decision.reasoning } : p)
+            }));
+            get().addLog(`${agent.name} constructed a new matrix node.`, 'SYSTEM', agent.name);
+        } else {
+             set(st => ({ actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'DECLINED', decisionReasoning: "Material assets missing during verification." } : p) }));
+        }
+    } else {
+         set(st => ({ actionProposals: st.actionProposals.map(p => p.id === proposalId ? { ...p, status: 'DECLINED', decisionReasoning: decision.reasoning } : p) }));
     }
   },
 
   addLog: (message, type, sender) => {
-    const newLog: LogEntry = { id: Math.random().toString(36).substr(2, 9), timestamp: Date.now(), message, type, sender: sender || 'SYSTEM' };
-    set(state => ({ logs: [newLog, ...state.logs].slice(0, 100) }));
-    if (type === 'THOUGHT' || type === 'SYSTEM' || type === 'TRADE') {
-        set(state => ({ chatMessages: [...state.chatMessages, { id: newLog.id, senderId: sender || 'SYSTEM', senderName: sender || 'SYSTEM', message, channel: (type === 'THOUGHT' ? 'THOUGHT' : 'GLOBAL') as ChatChannel, timestamp: newLog.timestamp }].slice(-50) }));
+    const newLog: LogEntry = { id: Math.random().toString(36).substr(2,9), timestamp: Date.now(), message, type, sender: sender || 'SYSTEM' };
+    set(s => ({ logs: [newLog, ...s.logs].slice(0, 100) }));
+    if (type === 'THOUGHT' || type === 'SYSTEM') {
+        set(s => ({ chatMessages: [...s.chatMessages, { id: newLog.id, senderId: sender || 'SYSTEM', senderName: sender || 'SYSTEM', message, channel: (type === 'THOUGHT' ? 'THOUGHT' : 'GLOBAL') as ChatChannel, timestamp: newLog.timestamp }].slice(-50) }));
     }
   },
 
   sendSignal: async (content) => {
-    const { addLog } = get();
-    addLog(`Signal broadcast: ${content}`, 'SYSTEM', 'NOTAR');
-    const response = await generateSocialResponse(get().agents[0], 'Terminal', content, get().logs.map(l => l.message));
-    addLog(response.reply, 'THOUGHT', get().agents[0].name);
+    const s = get();
+    s.addLog(`Signal broadcast: ${content}`, 'SYSTEM', 'NOTAR');
+    const resp = await generateSocialResponse(s.agents[0], 'Terminal', content, s.logs.map(l => l.message));
+    s.addLog(resp.reply, 'THOUGHT', s.agents[0].name);
   },
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   setCameraTarget: (target) => set({ cameraTarget: target }),
   toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
-  toggleMount: (agentId) => set(state => ({ agents: state.agents.map(a => a.id === agentId ? { ...a, state: a.state === AgentState.MOUNTED ? AgentState.IDLE : AgentState.MOUNTED } : a) })),
-  equipItem: (agentId, item, inventoryIndex) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return state;
-      let slot: keyof Agent['equipment'] | null = null;
-      if (item.type === 'WEAPON') slot = 'mainHand';
-      else if (item.type === 'OFFHAND') slot = 'offHand';
-      else if (item.type === 'HELM') slot = 'head';
-      else if (item.type === 'CHEST') slot = 'chest';
-      else if (item.type === 'LEGS') slot = 'legs';
-      if (!slot) return state;
-      const newInventory = [...agent.inventory];
-      newInventory[inventoryIndex] = agent.equipment[slot];
-      return { agents: state.agents.map(a => a.id === agentId ? { ...a, equipment: { ...a.equipment, [slot!]: item }, inventory: newInventory } : a) };
+  toggleMount: (agentId) => set(s => ({ agents: s.agents.map(a => a.id === agentId ? { ...a, state: a.state === AgentState.MOUNTED ? AgentState.IDLE : AgentState.MOUNTED } : a) })),
+  equipItem: (agentId, item, idx) => set(s => {
+      const a = s.agents.find(ag => ag.id === agentId);
+      if (!a) return s;
+      const inv = [...a.inventory];
+      inv[idx] = null;
+      return { agents: s.agents.map(ag => ag.id === agentId ? { ...ag, inventory: inv } : ag) };
   }),
-  unequipItem: (agentId, slot) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return state;
-      const item = (agent.equipment as any)[slot];
-      if (!item) return state;
-      const freeIndex = agent.inventory.findIndex(i => i === null);
-      if (freeIndex === -1) return state;
-      const newInventory = [...agent.inventory];
-      newInventory[freeIndex] = item;
-      return { agents: state.agents.map(a => a.id === agentId ? { ...a, equipment: { ...a.equipment, [slot]: null }, inventory: newInventory } : a) };
-  }),
-  moveInventoryItem: (agentId, from, to) => set(state => {
-      const agent = state.agents.find(a => a.id === agentId);
-      if (!agent) return state;
-      const newInventory = [...agent.inventory];
-      [newInventory[from], newInventory[to]] = [newInventory[to], newInventory[from]];
-      return { agents: state.agents.map(a => a.id === agentId ? { ...a, inventory: newInventory } : a) };
-  }),
-  purchaseProduct: (productId) => set(state => {
-      if (productId === 'NOTARY_LICENSE') return { hasNotaryLicense: true };
-      if (productId === 'LAND_PARCEL') {
-          const idx = state.landParcels.findIndex(p => p.ownerId === null);
-          if (idx !== -1) {
-              const newParcels = [...state.landParcels];
-              newParcels[idx] = { ...newParcels[idx], ownerId: state.user.id };
-              return { landParcels: newParcels };
-          }
-      }
-      return state;
-  }),
+  unequipItem: (agentId, slot) => set({}),
+  moveInventoryItem: (agentId, from, to) => set({}),
+  purchaseProduct: (id) => set(s => id === 'NOTARY_LICENSE' ? { hasNotaryLicense: true } : s),
   setAxiomAuthenticated: (auth) => set({ isAxiomAuthenticated: auth }),
   toggleAdmin: (show) => set({ showAdmin: show }),
-  uploadGraphicPack: (name) => set(state => ({ graphicPacks: [...state.graphicPacks, name] })),
-  importAgent: async (source, type) => {
-    let partial: Partial<Agent> | null = null;
-    if (type === 'URL') partial = await CharacterImporter.importFromURL(source);
-    else partial = CharacterImporter.importFromJSON(source);
-    if (partial) {
-        const newAgent: Agent = {
-            id: Math.random().toString(36).substr(2, 9), name: partial.name || 'Unknown', classType: 'Import', faction: 'NPC', position: [Math.random() * 20 - 10, 0, Math.random() * 20 - 10], rotationY: 0, level: 1, xp: 0, state: AgentState.IDLE, soulDensity: 0.5, gold: 100, stabilityIndex: 1.0, energy: 100, maxEnergy: 100, integrity: 1.0, dna: { hash: '0xIMPORT', generation: 1, corruption: 0 }, memoryCache: ['Materialized in Axiom.'], thinkingMatrix: partial.thinkingMatrix || { personality: 'Neutral', currentLongTermGoal: 'Observe', alignment: 0, languagePreference: 'EN' }, skills: {}, inventory: Array(20).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: partial.stats || { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, loreSnippet: partial.loreSnippet
-        };
-        set(state => ({ agents: [...state.agents, newAgent] }));
-    }
-  },
+  uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, name] })),
+  importAgent: (src, type) => {},
   toggleMap: (show) => set({ showMap: show }),
-  setJoystick: (side, value) => {},
-  buildStructure: (parcelId, type) => set(state => {
-      const parcels = state.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: Math.random().toString(), type, position: p.position }] } : p);
-      return { landParcels: parcels };
-  }),
-  certifyParcel: (parcelId) => set(state => ({ landParcels: state.landParcels.map(p => p.id === parcelId ? { ...p, isCertified: true } : p) })),
-  reflectOnMemory: async (agentId) => {
-      const agent = get().agents.find(a => a.id === agentId);
-      if (!agent) return;
-      const reflection = await analyzeMemories(agent);
-      set(state => ({ agents: state.agents.map(a => a.id === agentId ? { ...a, memoryCache: [...a.memoryCache, `REFLECTED: ${reflection.analysis}`], thinkingMatrix: { ...a.thinkingMatrix, personality: reflection.updatedPersonality || a.thinkingMatrix.personality, currentLongTermGoal: reflection.updatedGoal || a.thinkingMatrix.currentLongTermGoal, alignment: a.thinkingMatrix.alignment + (reflection.alignmentShift || 0) } } : a) }));
+  setJoystick: (side, val) => {},
+  buildStructure: (pId, type) => set(s => ({ landParcels: s.landParcels.map(p => p.id === pId ? { ...p, structures: [...p.structures, { id: Math.random().toString(), type, position: p.position }] } : p) })),
+  certifyParcel: (pId) => set(s => ({ landParcels: s.landParcels.map(p => p.id === pId ? { ...p, isCertified: true } : p) })),
+  reflectOnMemory: async (id) => {
+      const a = get().agents.find(ag => ag.id === id);
+      if (a) {
+          const refl = await analyzeMemories(a);
+          set(s => ({ agents: s.agents.map(ag => ag.id === id ? { ...ag, memoryCache: [...ag.memoryCache, `Reflected: ${refl.analysis}`].slice(-20) } : ag) }));
+      }
+  },
+  manualProposalAction: async (id, act) => {
+      set(s => ({ actionProposals: s.actionProposals.map(p => p.id === id ? { ...p, status: act === 'APPROVE' ? 'APPROVED' : 'DECLINED' } : p) }));
+      if (act === 'APPROVE') get().processProposalDecision(id);
   }
 })));
