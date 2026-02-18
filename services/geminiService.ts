@@ -18,10 +18,11 @@ const DELAYS = [1000, 2000, 4000, 8000, 16000];
  * Robust API caller with Exponential Backoff
  * Handles 429 (Resource Exhausted) and 503 (Service Unavailable)
  */
+// Fix: Ensure correct usage of GoogleGenAI and handle errors gracefully.
 export async function callGeminiWithBackoff(ai: GoogleGenAI, params: any, retries = 5): Promise<any> {
   for (let i = 0; i <= retries; i++) {
     try {
-      // Create a fresh request for each attempt
+      // Fix: Use ai.models.generateContent directly as per guidelines.
       const response = await ai.models.generateContent(params);
       return response;
     } catch (error: any) {
@@ -52,20 +53,8 @@ export const generateAutonomousDecision = async (
   recentLogs: LogEntry[],
   isSafeZone: boolean
 ): Promise<AIDecision> => {
-  const apiKey = process.env.API_KEY;
-  
-  // Fallback if no API key is present
-  if (!apiKey) {
-      return {
-          thought: "No Neural Link (API Key missing). Using local fallback.",
-          decision: "IDLE",
-          newState: AgentState.IDLE,
-          message: "..."
-      };
-  }
-
-  // Fix: Use 'gemini-3-flash-preview' for advanced agent reasoning tasks.
-  const ai = new GoogleGenAI({ apiKey });
+  // Fix: Initialize GoogleGenAI with the correct parameter name and directly from process.env.API_KEY.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-flash-preview'; 
   
   const systemInstruction = `

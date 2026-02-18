@@ -1,12 +1,15 @@
+
 import React from 'react';
 import { useStore } from '../../store';
 
 export const WorldMap = () => {
-    const { showMap, toggleMap, loadedChunks, agents } = useStore();
+    const showMap = useStore(state => state.showMap);
+    const toggleMap = useStore(state => state.toggleMap);
+    const loadedChunks = useStore(state => state.loadedChunks);
+    const agents = useStore(state => state.agents);
 
     if (!showMap) return null;
 
-    // Map bounds calculation (simplified center)
     const mapSize = 400; // px
     const scale = 2; // px per unit
 
@@ -19,15 +22,14 @@ export const WorldMap = () => {
                     className="relative bg-[#0a0a0f] overflow-hidden border border-white/10"
                     style={{ width: mapSize, height: mapSize }}
                 >
-                    {/* Render Chunks */}
                     {loadedChunks.map(chunk => (
                         <div 
                             key={chunk.id}
                             className="absolute border border-white/5 bg-green-900/20"
                             style={{
-                                width: 80 * scale, // 80 units size
+                                width: 80 * scale,
                                 height: 80 * scale,
-                                left: (mapSize / 2) + (chunk.x * 80 * scale) - (40 * scale), // Center offset
+                                left: (mapSize / 2) + (chunk.x * 80 * scale) - (40 * scale),
                                 top: (mapSize / 2) + (chunk.z * 80 * scale) - (40 * scale),
                             }}
                         >
@@ -37,13 +39,12 @@ export const WorldMap = () => {
                         </div>
                     ))}
 
-                    {/* Render Agents */}
                     {agents.map(agent => {
                         const agentColor = agent.faction === 'PLAYER' 
                             ? 'bg-axiom-cyan' 
                             : agent.faction === 'CREATURE' 
                                 ? 'bg-red-500' 
-                                : 'bg-soul-fire'; // ANOMALY
+                                : 'bg-soul-fire';
 
                         return (
                             <div
@@ -54,12 +55,11 @@ export const WorldMap = () => {
                                     top: (mapSize / 2) + (agent.position[2] * scale),
                                     transform: 'translate(-50%, -50%)'
                                 }}
-                                title={`${agent.name} (${agent.faction})`}
+                                title={`${String(agent.name)} (${String(agent.faction)})`}
                             />
                         );
                     })}
 
-                    {/* Crosshair Center */}
                     <div className="absolute top-1/2 left-1/2 w-4 h-0.5 bg-white/20 -translate-x-1/2 -translate-y-1/2" />
                     <div className="absolute top-1/2 left-1/2 w-0.5 h-4 bg-white/20 -translate-x-1/2 -translate-y-1/2" />
                 </div>

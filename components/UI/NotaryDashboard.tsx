@@ -11,7 +11,10 @@ const storeProducts: StoreProduct[] = [
 ];
 
 const WatchdogMonitor: React.FC = () => {
-    const { serverStats, logs } = useStore();
+    // Fix: Use selectors
+    const serverStats = useStore(state => state.serverStats);
+    const logs = useStore(state => state.logs);
+    
     const watchdogLogs = logs.filter(l => l.type === 'WATCHDOG').slice(0, 10);
     const threatColor = serverStats.threatLevel > 0.7 ? 'text-red-500' : serverStats.threatLevel > 0.3 ? 'text-yellow-500' : 'text-axiom-cyan';
 
@@ -20,12 +23,12 @@ const WatchdogMonitor: React.FC = () => {
             <div className="bg-black/40 border border-white/10 p-4 rounded-lg text-center">
                 <h3 className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mb-1">System Entropy</h3>
                 <div className={`text-3xl font-serif ${threatColor} font-bold`}>
-                    {(serverStats.threatLevel * 100).toFixed(1)}%
+                    {String((serverStats.threatLevel * 100).toFixed(1))}%
                 </div>
                 <div className="w-full h-1 bg-gray-800 rounded-full mt-3 overflow-hidden">
                     <div 
                         className={`h-full transition-all duration-500 ${serverStats.threatLevel > 0.5 ? 'bg-red-500' : 'bg-axiom-cyan'}`}
-                        style={{ width: `${serverStats.threatLevel * 100}%` }}
+                        style={{ width: `${(serverStats.threatLevel * 100).toFixed(0)}%` }}
                     ></div>
                 </div>
             </div>
@@ -38,15 +41,11 @@ const WatchdogMonitor: React.FC = () => {
                     watchdogLogs.map(log => (
                         <div key={log.id} className="text-[9px] border-l border-axiom-gold/30 pl-2 py-1 leading-tight">
                             <span className="text-axiom-gold/50 mr-2">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                            <span className="text-gray-300">{log.message}</span>
+                            <span className="text-gray-300">{String(log.message)}</span>
                         </div>
                     ))
                 )}
             </div>
-
-            <button className="w-full bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-500 text-[10px] font-bold py-2 rounded uppercase tracking-widest transition-all">
-                EMERGENCY FLUSH PROTOCOL
-            </button>
         </div>
     );
 };
@@ -61,13 +60,13 @@ const Developments: React.FC<{ parcels: LandParcel[]; user: User | null; build: 
             {owned.map(p => (
                 <div key={p.id} className="bg-white/5 border border-white/10 rounded p-2 text-xs">
                     <div className="flex justify-between items-center">
-                        <h4 className="font-bold text-white">{p.name}</h4>
+                        <h4 className="font-bold text-white">{String(p.name)}</h4>
                         {p.isCertified ? 
                             <span className="text-axiom-cyan text-[10px] font-bold bg-axiom-cyan/10 px-2 rounded">CERTIFIED</span> :
                             <button onClick={() => certify(p.id)} className="text-[9px] border border-axiom-cyan text-axiom-cyan px-2 rounded hover:bg-axiom-cyan/20">Certify Settlement</button>
                         }
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-2">Structures: {p.structures?.length || 0}</div>
+                    <div className="text-[10px] text-gray-400 mt-2">Structures: {String(p.structures?.length || 0)}</div>
                     <div className="flex space-x-2 mt-2">
                         <button onClick={() => build(p.id, 'HOUSE')} className="flex-1 text-[10px] bg-gray-500/20 hover:bg-gray-400/30 py-1 rounded">Build House</button>
                         <button onClick={() => build(p.id, 'BANK')} className="flex-1 text-[10px] bg-axiom-gold/20 hover:bg-axiom-gold/30 py-1 rounded">Build Bank</button>
@@ -79,7 +78,17 @@ const Developments: React.FC<{ parcels: LandParcel[]; user: User | null; build: 
 };
 
 export const NotaryDashboard = () => {
-  const { user, agents, hasNotaryLicense, agentSlots, device, serverStats, landParcels, buildStructure, certifyParcel } = useStore();
+  // Use specific selectors for all properties to avoid generic useStore() errors
+  const agents = useStore(state => state.agents);
+  const hasNotaryLicense = useStore(state => state.hasNotaryLicense);
+  const agentSlots = useStore(state => state.agentSlots);
+  const device = useStore(state => state.device);
+  const serverStats = useStore(state => state.serverStats);
+  const landParcels = useStore(state => state.landParcels);
+  const buildStructure = useStore(state => state.buildStructure);
+  const certifyParcel = useStore(state => state.certifyParcel);
+  const user = useStore(state => state.user);
+
   const [isMinimized, setIsMinimized] = useState(device.isMobile);
   const [isPayPalOpen, setPayPalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<StoreProduct | null>(null);
@@ -119,9 +128,9 @@ export const NotaryDashboard = () => {
                       <h3 className="text-xs uppercase text-gray-500 font-bold tracking-wider mb-2">World Stability</h3>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                           <div className="flex justify-between"><span>Status:</span><span className="text-green-400">Stable</span></div>
-                          <div className="flex justify-between"><span>Tick Rate:</span><span className="text-white">{serverStats.tickRate} Hz</span></div>
-                          <div className="flex justify-between"><span>Souls:</span><span className="text-white">{agents.length} / {agentSlots}</span></div>
-                          <div className="flex justify-between"><span>Awakened:</span><span className="text-axiom-cyan">{awakenedCount}</span></div>
+                          <div className="flex justify-between"><span>Tick Rate:</span><span className="text-white">{String(serverStats.tickRate)} Hz</span></div>
+                          <div className="flex justify-between"><span>Souls:</span><span className="text-white">{String(agents.length)} / {String(agentSlots)}</span></div>
+                          <div className="flex justify-between"><span>Awakened:</span><span className="text-axiom-cyan">{String(awakenedCount)}</span></div>
                       </div>
                     </div>
                     <div className="border-t border-white/10 pt-4">
@@ -144,7 +153,7 @@ export const NotaryDashboard = () => {
 
 const TabButton: React.FC<{ label: string; isActive: boolean; onClick: () => void }> = ({ label, isActive, onClick }) => (
     <button onClick={onClick} className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'bg-white/10 text-axiom-cyan' : 'text-gray-500 hover:bg-white/5'}`}>
-        {label}
+        {String(label)}
     </button>
 );
 
@@ -152,11 +161,11 @@ const ProductCard: React.FC<{ product: StoreProduct; onClick: () => void; isDisa
     <div className={`p-2 rounded border transition-all ${isDisabled ? 'bg-green-800/20 border-green-500/30' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>
         <div className="flex justify-between items-center">
             <div>
-                <h4 className={`font-serif text-xs ${isDisabled ? 'text-green-400' : 'text-white'}`}>{product.name}</h4>
-                <p className="text-[10px] text-gray-400">{product.description}</p>
+                <h4 className={`font-serif text-xs ${isDisabled ? 'text-green-400' : 'text-white'}`}>{String(product.name)}</h4>
+                <p className="text-[10px] text-gray-400">{String(product.description)}</p>
             </div>
             <button onClick={onClick} disabled={isDisabled} className={`text-xs px-2 py-1 rounded border whitespace-nowrap ${isDisabled ? 'border-green-500/50 text-green-500 cursor-default' : 'border-axiom-gold text-axiom-gold hover:bg-axiom-gold hover:text-black'}`}>
-                {isDisabled ? 'ACQUIRED' : `€${product.priceEUR.toFixed(2)}`}
+                {isDisabled ? 'ACQUIRED' : `€${String(product.priceEUR.toFixed(2))}`}
             </button>
         </div>
     </div>

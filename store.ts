@@ -62,7 +62,7 @@ interface GameState {
   initGame: () => void;
   updatePhysics: (delta: number) => void;
   runCognition: () => void;
-  addLog: (message: string, type: LogEntry['type'], sender?: string) => void;
+  addLog: (message: any, type: LogEntry['type'], sender?: string) => void;
   sendSignal: (content: string) => Promise<void>;
   selectAgent: (id: string | null) => void;
   setCameraTarget: (pos: [number, number, number] | null) => void;
@@ -106,18 +106,21 @@ export const useStore = create<GameState>((set, get) => ({
   setCameraTarget: (pos) => set({ cameraTarget: pos }),
 
   addLog: (message, type, sender = 'SYSTEM') => set(state => ({ 
-    logs: [{ id: Math.random().toString(), timestamp: Date.now(), message: String(message), type, sender: String(sender) }, ...state.logs].slice(0, 60) 
+    logs: [{ 
+      id: Math.random().toString(), 
+      timestamp: Date.now(), 
+      message: typeof message === 'object' ? JSON.stringify(message) : String(message), 
+      type, 
+      sender: String(sender) 
+    }, ...state.logs].slice(0, 60) 
   })),
 
   initGame: () => {
-    // --- OUROBOROS GRID GENERATION ---
-    // Instead of random scattering, we generate a grid of chunks with specific room types
     const newChunks: Chunk[] = [];
     const resources: ResourceNode[] = [];
     const newMonsters: Monster[] = [];
     
-    const GRID_SIZE = 5; // 5x5 chunks = 400x400 units (80 units per chunk)
-    const OFFSET = 2; // -2 to +2
+    const OFFSET = 2; 
     const CHUNK_SIZE = 80;
 
     for (let x = -OFFSET; x <= OFFSET; x++) {
@@ -126,14 +129,13 @@ export const useStore = create<GameState>((set, get) => ({
         const rand = Math.random();
         
         let roomType: Chunk['roomType'] = 'NORMAL';
-        if (x === 0 && z === 0) roomType = 'SAFE'; // Center city
+        if (x === 0 && z === 0) roomType = 'SAFE'; 
         else if (rand < 0.1) roomType = 'DUNGEON';
         else if (rand < 0.2) roomType = 'RESOURCE_RICH';
         else if (rand < 0.25) roomType = 'BOSS';
 
         newChunks.push({ id: `${x},${z}`, x, z, biome, entropy: Math.random(), roomType });
 
-        // --- RESOURCE GENERATION ---
         const resCount = roomType === 'RESOURCE_RICH' ? 8 : roomType === 'NORMAL' ? 2 : 0;
         for(let i=0; i<resCount; i++) {
            let type: any = 'WOOD';
@@ -154,12 +156,9 @@ export const useStore = create<GameState>((set, get) => ({
            });
         }
 
-        // --- MONSTER SPAWNING ---
         if (roomType !== 'SAFE') {
             const monsterChance = roomType === 'DUNGEON' ? 0.8 : 0.3;
             if (Math.random() < monsterChance) {
-                const types: MonsterType[] = Object.keys(MONSTER_TEMPLATES) as MonsterType[];
-                // Biome preference
                 let preferredType: MonsterType = 'GOBLIN';
                 if (biome === 'MOUNTAIN') preferredType = 'ORC';
                 if (roomType === 'BOSS') preferredType = 'BOSS_DEMON';
@@ -170,7 +169,7 @@ export const useStore = create<GameState>((set, get) => ({
                 newMonsters.push({
                     id: `mob_${x}_${z}_${Math.random().toString(36).substr(2,4)}`,
                     type: preferredType,
-                    name: template.name,
+                    name: String(template.name),
                     position: [
                         x * CHUNK_SIZE + (Math.random() - 0.5) * 60,
                         0,
@@ -189,7 +188,6 @@ export const useStore = create<GameState>((set, get) => ({
       }
     }
 
-    // Initialize Land Parcels in a ring formation
     const parcels: LandParcel[] = [];
     const parcelCount = 12;
     const radius = 50;
@@ -202,7 +200,7 @@ export const useStore = create<GameState>((set, get) => ({
             position: [Math.sin(angle) * radius, 0, Math.cos(angle) * radius],
             isCertified: false,
             structures: [],
-            price: 300 // Gold cost to build
+            price: 300 
         });
     }
 
@@ -233,14 +231,12 @@ export const useStore = create<GameState>((set, get) => ({
     }));
     
     set({ loadedChunks: newChunks, agents, monsters: newMonsters, resourceNodes: resources, landParcels: parcels });
-    
     get().addLog('Ouroboros Grid Initialized. Monsters Spawned.', 'SYSTEM');
   },
 
   importAgent: async (source, type) => {
       get().addLog(`Initiating Neural Import...`, 'SYSTEM');
       let data: Partial<Agent> | null = null;
-      
       if (type === 'URL') {
           data = await CharacterImporter.importFromURL(source);
       } else {
@@ -250,10 +246,10 @@ export const useStore = create<GameState>((set, get) => ({
       if (data) {
           const newAgent: Agent = {
               id: `imported_${Date.now()}`,
-              name: data.name || 'Unknown',
+              name: String(data.name || 'Unknown'),
               classType: 'Traveler',
               faction: 'PLAYER',
-              position: [0, 5, 0], // Spawn in air
+              position: [0, 5, 0], 
               rotationY: 0,
               level: 1, xp: 0,
               state: AgentState.IDLE,
@@ -272,7 +268,7 @@ export const useStore = create<GameState>((set, get) => ({
               inventory: Array(10).fill(null),
               equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
               stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100, ...data.stats },
-              loreSnippet: data.loreSnippet
+              loreSnippet: String(data.loreSnippet || "")
           };
 
           set(s => ({ agents: [...s.agents, newAgent] }));
@@ -283,7 +279,6 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   sendSignal: async (content) => {
-    // ... existing implementation ...
     const { agents, addLog, resourceNodes, logs } = get();
     addLog(String(content), 'EVENT', 'NOTAR');
 
@@ -311,10 +306,9 @@ export const useStore = create<GameState>((set, get) => ({
         return;
     }
     
-    // Pick a random agent to respond
     const respondent = agents[Math.floor(Math.random() * agents.length)];
-    
-    // Attempt to use Gemini AI for response
+    if (!respondent) return;
+
     try {
         const aiResponse = await generateAutonomousDecision(
             respondent, 
@@ -328,33 +322,33 @@ export const useStore = create<GameState>((set, get) => ({
             agents: s.agents.map(a => a.id === respondent.id ? {
                 ...a,
                 isAwakened: true,
-                lastChoiceLogic: `[AI]: ${aiResponse.thought.slice(0, 30)}...`,
-                memoryCache: [...a.memoryCache, `Signal: ${String(content).slice(0, 15)}`, `Thought: ${aiResponse.thought}`].slice(-10)
+                lastChoiceLogic: `[AI]: ${typeof aiResponse.thought === 'object' ? JSON.stringify(aiResponse.thought) : String(aiResponse.thought).slice(0, 30)}...`,
+                memoryCache: [...a.memoryCache, `Signal: ${String(content).slice(0, 15)}`, `Thought: ${String(aiResponse.thought)}`].slice(-10)
             } : a)
         }));
 
         if (aiResponse.message) {
-            addLog(aiResponse.message, 'THOUGHT', respondent.name);
+             const safeMsg = typeof aiResponse.message === 'object' ? JSON.stringify(aiResponse.message) : String(aiResponse.message);
+             addLog(safeMsg, 'THOUGHT', respondent.name);
              set(s => ({
                 chatMessages: [...s.chatMessages, {
                     id: Math.random().toString(),
                     senderId: respondent.id,
-                    senderName: respondent.name,
-                    message: aiResponse.message || '...',
+                    senderName: String(respondent.name),
+                    message: safeMsg,
                     channel: 'LOCAL',
                     timestamp: Date.now()
                 }]
             }));
         }
-    } catch (e) {
-        // Fallback to local logic if AI fails completely (backoff exhausted)
+    } catch (error: any) {
+        console.warn("Gemini result fallback triggered", error);
         const summary = summarizeNeurologicChoice(respondent, agents.filter(a => a.id !== respondent.id), resourceNodes, get().landParcels);
-        
         set(s => ({
             agents: s.agents.map(a => a.id === respondent.id ? {
                 ...a,
                 isAwakened: true,
-                lastChoiceLogic: summary.logic,
+                lastChoiceLogic: String(summary.logic),
                 memoryCache: [...a.memoryCache, `Signal: ${String(content).slice(0, 15)}`].slice(-10)
             } : a)
         }));
@@ -363,8 +357,7 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   runCognition: () => {
-      // ... existing implementation ...
-      const state = get();
+    const state = get();
     const now = Date.now();
     if (now - state.lastLocalThinkTime < 4000) return;
 
@@ -379,22 +372,17 @@ export const useStore = create<GameState>((set, get) => ({
         if (agent.state === AgentState.THINKING) nextIntegrity = Math.min(1.0, agent.integrity + 0.08);
         else nextIntegrity = Math.max(0.1, agent.integrity - 0.002); 
 
-        // Get AI decision based on utility math
         const summary = summarizeNeurologicChoice(agent, state.agents.filter(a => a.id !== agent.id), state.resourceNodes, state.landParcels);
         
         let updates: Partial<Agent> = {
             state: summary.choice,
             integrity: nextIntegrity,
-            lastChoiceLogic: summary.logic
+            lastChoiceLogic: String(summary.logic)
         };
 
-        // --- EMERGENT BEHAVIORS (Copied from previous store.ts) ---
-        // 1. Proactive Resource Seeking based on Skills
         if (summary.choice === AgentState.GATHERING) {
             const hasMining = (agent.skills.mining || 0) > 2;
             const hasWood = (agent.skills.woodcutting || 0) > 2;
-            
-            // Filter appropriate resources based on skill dominance
             let bestTarget: ResourceNode | undefined;
             let minDist = Infinity;
 
@@ -403,36 +391,21 @@ export const useStore = create<GameState>((set, get) => ({
                 if (hasMining && (r.type.includes('STONE') || r.type.includes('ORE'))) matchesSkill = true;
                 if (hasWood && (r.type.includes('WOOD') || r.type.includes('TREE'))) matchesSkill = true;
                 if (!hasMining && !hasWood && (agent.skills.gathering || 0) > 1) matchesSkill = true;
-
                 if (matchesSkill) {
                      const dist = Math.hypot(r.position[0] - agent.position[0], r.position[2] - agent.position[2]);
-                     if (dist < minDist) {
-                         minDist = dist;
-                         bestTarget = r;
-                     }
+                     if (dist < minDist) { minDist = dist; bestTarget = r; }
                 }
             });
-            
-            if (!bestTarget && state.resourceNodes.length > 0) {
-                 bestTarget = state.resourceNodes.reduce((prev, curr) => {
-                     const prevDist = Math.hypot(prev.position[0]-agent.position[0], prev.position[2]-agent.position[2]);
-                     const currDist = Math.hypot(curr.position[0]-agent.position[0], curr.position[2]-agent.position[2]);
-                     return prevDist < currDist ? prev : curr;
-                 });
-            }
-
-            if (bestTarget) {
-                updates.wanderTarget = bestTarget.position;
-                updates.targetId = bestTarget.id;
-            }
+            // Fix tuple assignment by adding explicit type cast
+            if (bestTarget) { updates.wanderTarget = [...bestTarget.position] as [number, number, number]; updates.targetId = bestTarget.id; }
         }
         else if (summary.choice === AgentState.BUILDING) {
             let targetParcel = updatedParcels.find(p => p.ownerId === null);
             if (targetParcel) {
                 const dist = Math.hypot(targetParcel.position[0] - agent.position[0], targetParcel.position[2] - agent.position[2]);
-                if (dist > 5) {
-                    updates.wanderTarget = targetParcel.position;
-                } else {
+                // Fix tuple assignment by adding explicit type cast
+                if (dist > 5) { updates.wanderTarget = [...targetParcel.position] as [number, number, number]; } 
+                else {
                     if (agent.gold >= targetParcel.price) {
                         updates.gold = agent.gold - targetParcel.price;
                         const pIndex = updatedParcels.findIndex(p => p.id === targetParcel!.id);
@@ -440,90 +413,36 @@ export const useStore = create<GameState>((set, get) => ({
                             updatedParcels[pIndex] = {
                                 ...updatedParcels[pIndex],
                                 ownerId: agent.id,
-                                name: `${agent.name}'s Estate`,
-                                structures: [{
-                                    id: Math.random().toString(),
-                                    type: 'HOUSE',
-                                    position: [0, 0, 0]
-                                }]
+                                name: `${String(agent.name)}'s Estate`,
+                                structures: [{ id: Math.random().toString(), type: 'HOUSE', position: [0, 0, 0] }]
                             };
-                            newLogs.push({
-                                id: Math.random().toString(),
-                                timestamp: Date.now(),
-                                message: `${agent.name} claimed territory and built a House!`,
-                                type: 'AXIOM',
-                                sender: agent.name
-                            });
+                            newLogs.push({ id: Math.random().toString(), timestamp: Date.now(), message: `${String(agent.name)} claimed territory and built a House!`, type: 'AXIOM', sender: String(agent.name) });
                         }
-                    } else {
-                        updates.state = AgentState.QUESTING;
-                    }
+                    } else { updates.state = AgentState.QUESTING; }
                 }
             }
         }
         else if (summary.choice === AgentState.ALLIANCE_FORMING) {
              const nearbyAlly = state.agents.find(a => a.id !== agent.id && !a.alliedId && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 15);
-             if (nearbyAlly) {
-                 updates.alliedId = nearbyAlly.id;
-                 updates.wanderTarget = nearbyAlly.position;
-                 if (Math.random() < 0.2) {
-                     newLogs.push({
-                         id: Math.random().toString(),
-                         timestamp: Date.now(),
-                         message: `${agent.name} formed an alliance with ${nearbyAlly.name}`,
-                         type: 'AXIOM',
-                         sender: agent.name
-                     });
-                 }
-             }
+             // Fix tuple assignment by adding explicit type cast
+             if (nearbyAlly) { updates.alliedId = nearbyAlly.id; updates.wanderTarget = [...nearbyAlly.position] as [number, number, number]; }
         }
-        else if (summary.choice === AgentState.TRADING) {
-            updates.wanderTarget = [-5 + Math.random()*10, 0, -5 + Math.random()*10];
-        }
+        else if (summary.choice === AgentState.TRADING) { updates.wanderTarget = [-5 + Math.random()*10, 0, -5 + Math.random()*10]; }
         else if (summary.choice === AgentState.QUESTING) {
-            const invCount = agent.inventory.filter(i => i).length;
-            const isRich = agent.gold > 500;
-            const isPoor = agent.gold < 100;
-
             if (Math.random() < 0.3) {
                  const qId = Math.random().toString();
-                 let title = `${agent.name}'s Request`;
-                 let desc = "I require assistance.";
-                 let type = "GENERIC";
-
-                 if (invCount > 8) {
-                     title = "Excess Material Logistics";
-                     desc = "My inventory is overflowing. I need a courier to transport goods to the Market.";
-                     type = "TRADE";
-                 } else if (isPoor) {
-                     title = "Desperate Funds Needed";
-                     desc = "I am low on resources. Offering labor for gold.";
-                     type = "LABOR";
-                 } else if (isRich) {
-                     title = "Rare Artifact Hunt";
-                     desc = "I have the capital to fund an expedition for Ancient Relics.";
-                     type = "EXPLORATION";
-                 }
-
                  newQuests.push({
                      id: qId,
-                     title: title,
-                     description: `${desc} Location: [${agent.position[0].toFixed(0)}, ${agent.position[2].toFixed(0)}]`,
+                     title: `${String(agent.name)}'s Request`,
+                     description: `I require assistance at [${agent.position[0].toFixed(0)}, ${agent.position[2].toFixed(0)}]`,
                      rewardGold: Math.floor(Math.random() * 100) + 50,
                      timestamp: Date.now(),
                      issuerId: agent.id,
-                     position: agent.position
-                 });
-                 newLogs.push({
-                     id: Math.random().toString(),
-                     timestamp: Date.now(),
-                     message: `NEW QUEST (${type}): ${agent.name} posted: ${title}`,
-                     type: 'EVENT',
-                     sender: 'SYSTEM'
+                     // Fix tuple assignment by adding explicit type cast
+                     position: [...agent.position] as [number, number, number]
                  });
             }
         }
-
         return { ...agent, ...updates };
     });
 
@@ -537,52 +456,35 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   updatePhysics: (delta) => {
-    // 1. Process Monster Logic & Combat (Throttled to 1s)
     const now = Date.now();
     const shouldRunLogic = now - get().lastCombatTick > 1000;
     
     set(s => {
-      let nextMonsters = [...s.monsters];
-      let nextBattles = [...s.battles];
-      let nextAgents = [...s.agents];
+      let nextMonsters = s.monsters.map(m => ({ ...m, position: [...m.position] as [number, number, number], stats: { ...m.stats } }));
+      let nextBattles = s.battles.map(b => ({ ...b }));
+      let nextAgents = s.agents.map(a => ({ ...a, position: [...a.position] as [number, number, number], stats: { ...a.stats } }));
       let nextLogs = [...s.logs];
 
       if (shouldRunLogic) {
         // MONSTER AI
         nextMonsters = nextMonsters.map(m => {
           if (m.state === 'DEAD') return m;
-          
-          // Find nearest player
           let target = nextAgents.find(a => a.id === m.targetId);
           if (!target) {
-            const nearest = nextAgents.find(a => {
-              const dist = Math.hypot(a.position[0] - m.position[0], a.position[2] - m.position[2]);
-              return dist < 15; // Aggro range
-            });
+            const nearest = nextAgents.find(a => Math.hypot(a.position[0] - m.position[0], a.position[2] - m.position[2]) < 15);
             if (nearest) {
               m.targetId = nearest.id;
               m.state = 'COMBAT';
-              target = nearest;
-              
-              // Start Battle
               if (!nextBattles.find(b => b.participants.some(p => p.id === m.id))) {
-                  nextBattles.push({
-                      id: `battle_${now}_${m.id}`,
-                      participants: [{ id: m.id, type: 'MONSTER' }, { id: nearest.id, type: 'AGENT' }],
-                      turn: 0,
-                      lastTick: now
-                  });
-                  nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `${m.name} attacked ${nearest.name}!`, type: 'COMBAT', sender: m.name });
+                  nextBattles.push({ id: `battle_${now}_${m.id}`, participants: [{ id: m.id, type: 'MONSTER' }, { id: nearest.id, type: 'AGENT' }], turn: 0, lastTick: now });
+                  nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `${String(m.name)} attacked ${String(nearest.name)}!`, type: 'COMBAT', sender: String(m.name) });
               }
             }
           }
-
-          // Move towards target
           if (target && m.state === 'COMBAT') {
             const dx = target.position[0] - m.position[0];
             const dz = target.position[2] - m.position[2];
             const dist = Math.hypot(dx, dz);
-            
             if (dist > 2) {
                const speed = 3 * delta;
                const angle = Math.atan2(dx, dz);
@@ -591,132 +493,74 @@ export const useStore = create<GameState>((set, get) => ({
                m.rotationY = angle;
             }
           }
-
           return m;
         });
 
-        // PROCESS BATTLES
+        // PROCESS BATTLES IMMUTABLY
         nextBattles = nextBattles.filter(b => {
             const mPart = b.participants.find(p => p.type === 'MONSTER');
             const aPart = b.participants.find(p => p.type === 'AGENT');
             if(!mPart || !aPart) return false;
 
-            const monster = nextMonsters.find(m => m.id === mPart.id);
-            const agent = nextAgents.find(a => a.id === aPart.id);
+            const monsterIdx = nextMonsters.findIndex(m => m.id === mPart.id);
+            const agentIdx = nextAgents.findIndex(a => a.id === aPart.id);
 
-            if (!monster || !agent || monster.state === 'DEAD' || agent.stats.hp <= 0) {
-                // Battle over
-                if (monster && monster.stats.hp <= 0 && monster.state !== 'DEAD') {
-                    monster.state = 'DEAD';
-                    agent!.xp += monster.xpReward;
-                    agent!.gold += 20;
-                    nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `${agent!.name} defeated ${monster.name}! +${monster.xpReward} XP`, type: 'COMBAT', sender: 'SYSTEM' });
+            if (monsterIdx === -1 || agentIdx === -1 || nextMonsters[monsterIdx].state === 'DEAD' || nextAgents[agentIdx].stats.hp <= 0) {
+                if (monsterIdx !== -1 && nextMonsters[monsterIdx].stats.hp <= 0 && nextMonsters[monsterIdx].state !== 'DEAD') {
+                    nextMonsters[monsterIdx] = { ...nextMonsters[monsterIdx], state: 'DEAD' };
+                    nextAgents[agentIdx] = { 
+                        ...nextAgents[agentIdx], 
+                        xp: nextAgents[agentIdx].xp + nextMonsters[monsterIdx].xpReward,
+                        gold: nextAgents[agentIdx].gold + 20
+                    };
+                    nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `${String(nextAgents[agentIdx].name)} defeated ${String(nextMonsters[monsterIdx].name)}!`, type: 'COMBAT', sender: 'SYSTEM' });
                 }
                 return false;
             }
 
-            // Damage Step
+            const monster = nextMonsters[monsterIdx];
+            const agent = nextAgents[agentIdx];
+
             const dmgToAgent = Math.max(1, monster.stats.atk - (agent.stats.vit / 2));
             const dmgToMonster = Math.max(1, agent.stats.str - (monster.stats.def / 2));
             
-            agent.stats.hp -= dmgToAgent;
-            monster.stats.hp -= dmgToMonster;
-
-            // Visual feedback via logs occasionally
-            if (Math.random() < 0.3) {
-                 nextLogs.push({ id: Math.random().toString(), timestamp: now, message: `Combat: ${agent.name} (-${dmgToAgent}) vs ${monster.name} (-${dmgToMonster})`, type: 'COMBAT', sender: 'SYSTEM' });
-            }
-
+            nextAgents[agentIdx] = {
+                ...agent,
+                stats: { ...agent.stats, hp: Math.max(0, agent.stats.hp - dmgToAgent) }
+            };
+            nextMonsters[monsterIdx] = {
+                ...monster,
+                stats: { ...monster.stats, hp: Math.max(0, monster.stats.hp - dmgToMonster) }
+            };
+            
             return true;
         });
       }
 
-      // 2. Physics Update (Movement) for Agents
       nextAgents = nextAgents.map(agent => {
         let nextPos = [...agent.position] as [number, number, number];
         let nextEnergy = agent.energy;
         let nextRotation = agent.rotationY;
-        let nextInventory = agent.inventory;
-        let nextEquipment = agent.equipment;
-        
         const isMoving = !!agent.wanderTarget || agent.state === AgentState.GATHERING || agent.state === AgentState.TRADING || agent.state === AgentState.ALLIANCE_FORMING || agent.state === AgentState.BUILDING;
-        
         if (isMoving) {
           nextEnergy = Math.max(0, agent.energy - 1.5 * delta);
           const speed = 4 * delta * (nextEnergy > 0 ? 1 : 0.2);
-          
           let target = agent.wanderTarget;
-          
-          // If no specific target but moving state, pick random point
           if (!target && (agent.state === AgentState.GATHERING)) {
-              // Should have been set by cognition, but fail-safe
               target = [agent.position[0] + (Math.random()-0.5)*10, 0, agent.position[2] + (Math.random()-0.5)*10];
           }
-
           if (target) {
             const dx = target[0] - agent.position[0];
             const dz = target[2] - agent.position[2];
             const dist = Math.hypot(dx, dz);
-
             if (dist > 1) {
                 nextRotation = Math.atan2(dx, dz);
                 nextPos[0] += Math.sin(nextRotation) * speed;
                 nextPos[2] += Math.cos(nextRotation) * speed;
-            } else {
-                if (agent.state !== AgentState.GATHERING && agent.state !== AgentState.ALLIANCE_FORMING && agent.state !== AgentState.BUILDING) {
-                    target = null; 
-                }
             }
-          } else {
-               if (Math.random() < 0.05) {
-                   agent.wanderTarget = [(Math.random() - 0.5) * 60, 0, (Math.random() - 0.5) * 60];
-               }
           }
-        } else {
-          nextEnergy = Math.min(agent.maxEnergy, agent.energy + 6 * delta);
-        }
-
-        // Equipment Auto-Upgrade logic (Existing)
-        if (Math.random() < 0.002) { 
-            const getRarityValue = (r: string) => {
-                const map: any = { 'COMMON': 1, 'UNCOMMON': 2, 'RARE': 3, 'EPIC': 4, 'LEGENDARY': 5, 'AXIOMATIC': 6 };
-                return map[r] || 0;
-            };
-
-            const tempInv = [...nextInventory];
-            const tempEquip = {...nextEquipment};
-            let didSwap = false;
-
-            tempInv.forEach((item, idx) => {
-                if (!item) return;
-
-                let slot: keyof typeof agent.equipment | null = null;
-                if (item.type === 'WEAPON') slot = 'mainHand';
-                else if (item.type === 'OFFHAND') slot = 'offHand';
-                else if (item.type === 'HELM') slot = 'head';
-                else if (item.type === 'CHEST') slot = 'chest';
-                else if (item.type === 'LEGS') slot = 'legs';
-
-                if (slot) {
-                    const current = tempEquip[slot];
-                    const currentScore = current ? (getRarityValue(current.rarity) * 10 + (current.stats.str||0) + (current.stats.int||0) + (current.stats.agi||0)) : -1;
-                    const newScore = (getRarityValue(item.rarity) * 10 + (item.stats.str||0) + (item.stats.int||0) + (item.stats.agi||0));
-
-                    if (newScore > currentScore) {
-                        tempEquip[slot] = item;
-                        tempInv[idx] = current;
-                        didSwap = true;
-                    }
-                }
-            });
-
-            if (didSwap) {
-                nextInventory = tempInv;
-                nextEquipment = tempEquip;
-            }
-        }
-
-        return { ...agent, position: nextPos, rotationY: nextRotation, energy: nextEnergy, inventory: nextInventory, equipment: nextEquipment };
+        } else { nextEnergy = Math.min(agent.maxEnergy, agent.energy + 6 * delta); }
+        return { ...agent, position: nextPos, rotationY: nextRotation, energy: nextEnergy };
       });
 
       return {
@@ -743,7 +587,7 @@ export const useStore = create<GameState>((set, get) => ({
       landParcels: s.landParcels.map(p => p.id === pId ? { ...p, isCertified: true } : p)
     }));
   },
-  toggleCharacterSheet: (val) => set({ showCharacterSheet: val }),
+  toggleCharacterSheet: (val) => set({ showCharacterSheet: !!val }),
   toggleMount: (agentId) => {
     set(s => ({
       agents: s.agents.map(a => a.id === agentId ? {
@@ -798,8 +642,8 @@ export const useStore = create<GameState>((set, get) => ({
   purchaseProduct: (productId) => {
     if (productId === 'NOTARY_LICENSE') set({ hasNotaryLicense: true });
   },
-  toggleAdmin: (val) => set({ showAdmin: val }),
+  toggleAdmin: (val) => set({ showAdmin: !!val }),
   uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, String(name)] })),
-  toggleMap: (val) => set({ showMap: val }),
+  toggleMap: (val) => set({ showMap: !!val }),
   setJoystick: (side, values) => {}
 }));

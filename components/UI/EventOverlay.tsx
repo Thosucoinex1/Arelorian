@@ -3,7 +3,7 @@ import React from 'react';
 import { useStore } from '../../store';
 
 export const EventOverlay = () => {
-    const { activeEvents } = useStore();
+    const activeEvents = useStore(state => state.activeEvents);
     const raid = activeEvents.find(e => e.type === 'RAID' && e.active);
 
     if (!raid) return null;
@@ -15,8 +15,8 @@ export const EventOverlay = () => {
                     <span className="text-red-200 font-serif text-lg font-bold tracking-[0.3em] uppercase">WAR PROTOCOL</span>
                     <span className="text-white text-xs bg-red-600 px-2 py-0.5 rounded font-bold">RAID ACTIVE</span>
                 </div>
-                <h2 className="text-white text-2xl font-serif font-black mb-1">{raid.title}</h2>
-                <p className="text-red-100 text-xs italic mb-3 opacity-80">"{raid.description}"</p>
+                <h2 className="text-white text-2xl font-serif font-black mb-1">{String(raid.title)}</h2>
+                <p className="text-red-100 text-xs italic mb-3 opacity-80">"{String(raid.description)}"</p>
                 <div className="h-1.5 w-full bg-red-950 rounded-full overflow-hidden">
                     <div className="h-full bg-white animate-[shimmer_2s_infinite]" style={{ width: '100%' }}></div>
                 </div>

@@ -14,7 +14,6 @@ export const QuestLog = () => {
         return () => clearInterval(interval);
     }, []);
 
-    // Only show quests that are at least 15 seconds old to ensure they feel "discovered"
     const visibleQuests = quests.filter(q => (now - q.timestamp) > 15000);
 
     const handleQuestClick = (quest: any) => {
@@ -23,7 +22,6 @@ export const QuestLog = () => {
             setCameraTarget([...quest.position]);
             soundManager.playCombat('MAGIC');
         } else {
-            // Fallback to jumping to issuer if no objective position
             const issuer = useStore.getState().agents.find(a => a.id === quest.issuerId);
             if (issuer) {
                 setCameraTarget([...issuer.position]);
@@ -44,12 +42,12 @@ export const QuestLog = () => {
                     className="bg-black/80 border-l-2 border-axiom-gold p-2 md:p-3 rounded shadow-lg backdrop-blur-sm animate-[fadeIn_0.5s_ease-in-out] cursor-pointer hover:bg-axiom-gold/10 transition-all border border-white/5"
                 >
                     <h4 className="text-axiom-gold font-serif text-xs md:text-sm font-bold flex justify-between items-center">
-                        {quest.title}
+                        {String(quest.title)}
                         <span className="text-[9px] bg-yellow-900/50 px-1 rounded text-yellow-200 ml-2">NAV</span>
                     </h4>
-                    <p className="text-gray-300 text-[10px] md:text-xs mt-1 italic leading-tight">"{quest.description}"</p>
+                    <p className="text-gray-300 text-[10px] md:text-xs mt-1 italic leading-tight">"{String(quest.description)}"</p>
                     <div className="mt-2 flex justify-between items-center text-[10px] text-gray-500 uppercase">
-                         <span>Bounty: {quest.rewardGold}g</span>
+                         <span>Bounty: {String(quest.rewardGold)}g</span>
                          <span className="text-axiom-cyan">Focus Uplink</span>
                     </div>
                 </div>

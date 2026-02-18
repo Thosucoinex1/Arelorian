@@ -28,56 +28,53 @@ export const AgentHUD = () => {
                     ✕
                 </button>
                 
-                <h2 className="text-lg md:text-xl font-serif text-white mb-1">{agent.name}</h2>
+                <h2 className="text-lg md:text-xl font-serif text-white mb-1">{String(agent.name || "Unknown")}</h2>
                 <div className="flex items-center space-x-2 text-[10px] mb-3">
-                    <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan uppercase">Level {agent.level}</span>
+                    <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan uppercase">Level {String(agent.level || 1)}</span>
                     <span className={`px-2 py-0.5 rounded border border-axiom-purple/30 text-axiom-purple uppercase font-bold tracking-tighter`}>
-                        {agent.state}
+                        {String(agent.state || AgentState.IDLE)}
                     </span>
                     {agent.isAwakened && <span className="text-axiom-gold text-[10px] animate-pulse">AWAKENED</span>}
                 </div>
 
                 <div className="space-y-3 mb-4">
-                    {/* Reality Integrity / Coherence */}
                     <div>
                         <div className="flex justify-between text-[10px] text-gray-500 uppercase font-bold">
-                            <span title={AXIOMS.EROSION}>Reality Integrity</span>
-                            <span className={agent.integrity < 0.3 ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}>
-                                {(agent.integrity * 100).toFixed(1)}%
+                            <span title={String(AXIOMS.EROSION)}>Reality Integrity</span>
+                            <span className={(agent.integrity || 0) < 0.3 ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}>
+                                {String(((agent.integrity || 0) * 100).toFixed(1))}%
                             </span>
                         </div>
                         <div className="h-1 w-full bg-gray-800 rounded-full mt-1 overflow-hidden">
                             <div 
                                 className="h-full bg-axiom-gold transition-all duration-500"
-                                style={{ width: `${agent.integrity * 100}%` }}
+                                style={{ width: `${((agent.integrity || 0) * 100).toFixed(0)}%` }}
                             ></div>
                         </div>
                     </div>
 
-                    {/* Neurologic Energy */}
                     <div>
                         <div className="flex justify-between text-[10px] text-gray-500 uppercase font-bold">
-                            <span title={AXIOMS.ENERGY}>Axiomatic Energy</span>
-                            <span className="text-axiom-cyan">{(agent.energy).toFixed(0)} / {agent.maxEnergy}</span>
+                            <span title={String(AXIOMS.ENERGY)}>Axiomatic Energy</span>
+                            <span className="text-axiom-cyan">{String((agent.energy || 0).toFixed(0))} / {String(agent.maxEnergy || 100)}</span>
                         </div>
                         <div className="h-1 w-full bg-gray-800 rounded-full mt-1 overflow-hidden">
                             <div 
                                 className="h-full bg-axiom-cyan transition-all duration-300 shadow-[0_0_5px_#06b6d4]"
-                                style={{ width: `${(agent.energy / agent.maxEnergy) * 100}%` }}
+                                style={{ width: `${(((agent.energy || 0) / (agent.maxEnergy || 100)) * 100).toFixed(0)}%` }}
                             ></div>
                         </div>
                     </div>
 
-                    {/* Soul Density */}
                     <div>
                         <div className="flex justify-between text-[10px] text-gray-400 uppercase">
                             <span>Soul Density</span>
-                            <span>{(agent.soulDensity * 100).toFixed(0)}%</span>
+                            <span>{String(((agent.soulDensity || 0.5) * 100).toFixed(0))}%</span>
                         </div>
                         <div className="h-1 w-full bg-gray-800 rounded-full mt-1 overflow-hidden">
                             <div 
                                 className="h-full bg-gradient-to-r from-axiom-purple to-soul-fire"
-                                style={{ width: `${agent.soulDensity * 100}%` }}
+                                style={{ width: `${((agent.soulDensity || 0.5) * 100).toFixed(0)}%` }}
                             ></div>
                         </div>
                     </div>
@@ -107,8 +104,8 @@ export const AgentHUD = () => {
             </div>
             
             <div className="bg-white/5 p-2 flex justify-between items-center text-[9px] text-gray-600 font-mono">
-                <span>DNA: {agent.dna.hash.slice(0,12)}...</span>
-                <span>COORD: [{agent.position[0].toFixed(0)}, {agent.position[2].toFixed(0)}]</span>
+                <span>DNA: {String((agent.dna?.hash || "0x0").slice(0,12))}...</span>
+                <span>COORD: {`[${String((agent.position?.[0] || 0).toFixed(0))}, ${String((agent.position?.[2] || 0).toFixed(0))}]`}</span>
             </div>
         </div>
     </div>

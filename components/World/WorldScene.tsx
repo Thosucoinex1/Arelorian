@@ -1,6 +1,5 @@
-
 import React, { useRef, useMemo, Suspense, useState, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { OrbitControls, Stars, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '../../store';
@@ -8,12 +7,29 @@ import { Chunk, Agent, StructureType, AgentState, LandParcel, Monster } from '..
 import { axiomVertexShader, axiomFragmentShader } from './AxiomShader';
 import { soundManager } from '../../services/SoundManager';
 
-// Fix: Use a permissive string indexer for IntrinsicElements to allow both HTML and R3F tags globally.
-// This prevents "Property 'div' does not exist on type 'JSX.IntrinsicElements'" errors by merging with the existing React types.
 declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      [elemName: string]: any;
+  namespace React {
+    namespace JSX {
+      interface IntrinsicElements extends ThreeElements {
+        group: any;
+        mesh: any;
+        boxGeometry: any;
+        meshStandardMaterial: any;
+        coneGeometry: any;
+        pointLight: any;
+        dodecahedronGeometry: any;
+        octahedronGeometry: any;
+        ringGeometry: any;
+        sphereGeometry: any;
+        meshBasicMaterial: any;
+        planeGeometry: any;
+        shaderMaterial: any;
+        ambientLight: any;
+        directionalLight: any;
+        color: any;
+        fog: any;
+        [elemName: string]: any;
+      }
     }
   }
 }
@@ -30,7 +46,7 @@ const SpeechBubble = ({ agentId }: { agentId: string }) => {
             const latest = agentMessages[agentMessages.length - 1];
             if (latest.id !== lastProcessedId.current) {
                 lastProcessedId.current = latest.id;
-                setDisplayMessage(latest.message);
+                setDisplayMessage(String(latest.message || ""));
                 setOpacity(1);
                 setTimeout(() => setOpacity(0), 4000);
                 setTimeout(() => setDisplayMessage(null), 6000);
@@ -45,7 +61,7 @@ const SpeechBubble = ({ agentId }: { agentId: string }) => {
             <Html center distanceFactor={15} zIndexRange={[100, 0]}>
                 <div className="bg-axiom-dark/90 border border-axiom-cyan/40 text-white px-4 py-2 rounded-xl text-[10px] md:text-xs font-medium shadow-[0_0_20px_rgba(6,182,212,0.3)] backdrop-blur-md relative text-center transition-opacity duration-1000" style={{ opacity }}>
                     <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-axiom-dark/90 border-r border-b border-axiom-cyan/40 rotate-45"></div>
-                    {displayMessage}
+                    {String(displayMessage)}
                 </div>
             </Html>
         </group>
@@ -65,7 +81,7 @@ const DemeterCave: React.FC<{ position: [number, number, number] }> = ({ positio
         </mesh>
         <Html position={[0, 7, 0]} center distanceFactor={30}>
             <div className="text-green-500 font-serif text-[10px] font-bold tracking-[0.2em] uppercase bg-black/80 px-2 py-1 border border-green-500/30 whitespace-nowrap">
-                Demeter Cave (Lvl 20)
+                {String("Demeter Cave (Lvl 20)")}
             </div>
         </Html>
     </group>
@@ -84,7 +100,7 @@ const DarkChurch: React.FC<{ position: [number, number, number] }> = ({ position
         <pointLight color="#ef4444" intensity={8} distance={25} position={[0, 12, 0]} />
         <Html position={[0, 18, 0]} center distanceFactor={40}>
             <div className="text-red-500 font-serif text-[10px] font-bold tracking-[0.2em] uppercase bg-black/80 px-2 py-1 border border-red-500/30 whitespace-nowrap">
-                Dark Church (Hellgate)
+                {String("Dark Church (Hellgate)")}
             </div>
         </Html>
     </group>
@@ -93,7 +109,6 @@ const DarkChurch: React.FC<{ position: [number, number, number] }> = ({ position
 const CityStructure: React.FC<{ type: StructureType, position: [number, number, number], name?: string }> = ({ type, position, name }) => {
     const color = type === 'SMITH' ? '#d97706' : type === 'BANK' ? '#06b6d4' : type === 'HOUSE' ? '#8b5cf6' : '#6366f1';
     
-    // Custom geometry for houses
     if (type === 'HOUSE') {
         return (
             <group position={position}>
@@ -108,7 +123,7 @@ const CityStructure: React.FC<{ type: StructureType, position: [number, number, 
                  {name && (
                     <Html position={[0, 6, 0]} center distanceFactor={25}>
                         <div className="bg-black/80 px-2 py-0.5 rounded border border-purple-500/30 text-[8px] font-sans text-purple-200 whitespace-nowrap">
-                            {name}
+                            {String(name)}
                         </div>
                     </Html>
                  )}
@@ -128,7 +143,7 @@ const CityStructure: React.FC<{ type: StructureType, position: [number, number, 
             </mesh>
             <Html position={[0, 9, 0]} center distanceFactor={25}>
                 <div className="bg-black/90 px-2 py-1 rounded border border-white/10 text-[8px] font-serif font-bold text-white whitespace-nowrap uppercase tracking-widest shadow-lg">
-                    {type}
+                    {String(type)}
                 </div>
             </Html>
         </group>
@@ -152,7 +167,7 @@ const ParcelMarker: React.FC<{ parcel: LandParcel }> = ({ parcel }) => {
     return (
         <group>
             {hasStructure ? (
-                <CityStructure type="HOUSE" position={parcel.position} name={parcel.name} />
+                <CityStructure type="HOUSE" position={parcel.position} name={String(parcel.name)} />
             ) : (
                 <group position={parcel.position}>
                     <mesh position={[0, 0.5, 0]}>
@@ -160,7 +175,7 @@ const ParcelMarker: React.FC<{ parcel: LandParcel }> = ({ parcel }) => {
                         <meshStandardMaterial color="#8b5cf6" wireframe />
                     </mesh>
                     <Html position={[0, 2, 0]} center distanceFactor={20}>
-                        <div className="text-[8px] text-purple-400 bg-black/50 px-1 rounded">CLAIMED</div>
+                        <div className="text-[8px] text-purple-400 bg-black/50 px-1 rounded">{String("CLAIMED")}</div>
                     </Html>
                 </group>
             )}
@@ -170,15 +185,15 @@ const ParcelMarker: React.FC<{ parcel: LandParcel }> = ({ parcel }) => {
 
 const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, stability }) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  
-  // Create uniforms with Fog parameters to match scene
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uAwakeningDensity: { value: 1.0 - stability },
     uBiome: { value: chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 },
     uFogColor: { value: new THREE.Color('#050505') },
     uFogNear: { value: 80 },
-    uFogFar: { value: 350 }
+    uFogNearValue: 80,
+    uFogFar: { value: 350 },
+    uFogFarValue: 350
   }), [chunk.id, stability]);
 
   useFrame((state) => {
@@ -204,7 +219,6 @@ const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
                 <sphereGeometry args={[monster.scale, 16, 16]} />
                 <meshStandardMaterial color={monster.color} roughness={0.8} />
             </mesh>
-            {/* Eyes */}
             <mesh position={[monster.scale * 0.4, monster.scale * 0.5, monster.scale * 0.8]}>
                 <sphereGeometry args={[monster.scale * 0.2, 8, 8]} />
                 <meshStandardMaterial color="red" emissive="red" emissiveIntensity={1} />
@@ -213,13 +227,11 @@ const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
                 <sphereGeometry args={[monster.scale * 0.2, 8, 8]} />
                 <meshStandardMaterial color="red" emissive="red" emissiveIntensity={1} />
             </mesh>
-
-            {/* Health Bar */}
             <Html position={[0, monster.scale * 2, 0]} center distanceFactor={15}>
                  <div className="w-12 h-1 bg-gray-800 border border-black">
                      <div 
                         className="h-full bg-red-600 transition-all duration-200" 
-                        style={{ width: `${(monster.stats.hp / monster.stats.maxHp) * 100}%` }}
+                        style={{ width: `${String(((monster.stats.hp / (monster.stats.maxHp || 1)) * 100).toFixed(0))}%` }}
                      />
                  </div>
             </Html>
@@ -234,33 +246,25 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
     return (
         <group position={agent.position} rotation={[0, agent.rotationY, 0]} onClick={(e) => { e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}>
             <SpeechBubble agentId={agent.id} />
-            
-            {/* Base Body */}
             <mesh castShadow position={[0, agent.state === AgentState.MOUNTED ? 1.5 : 0.9, 0]}>
                 <boxGeometry args={[0.8, 1.8, 0.8]} />
                 <meshStandardMaterial color={isPlayer ? '#06b6d4' : '#ef4444'} roughness={0.7} emissive={isPlayer ? '#06b6d4' : '#000'} emissiveIntensity={0.2} />
             </mesh>
-
-            {/* Alliance Aura */}
             {hasAlliance && (
                 <mesh position={[0, 0.9, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                     <ringGeometry args={[1, 1.2, 32]} />
                     <meshBasicMaterial color="#d97706" transparent opacity={0.3} side={THREE.DoubleSide} />
                 </mesh>
             )}
-
-            {/* Mount Visual */}
             {agent.state === AgentState.MOUNTED && (
                 <mesh position={[0, 0.5, 0.2]} castShadow>
                     <boxGeometry args={[1, 1, 2]} />
                     <meshStandardMaterial color="#5d4037" />
                 </mesh>
             )}
-
-            {/* Nameplate */}
             <Html position={[0, agent.state === AgentState.MOUNTED ? 3.5 : 2.5, 0]} center distanceFactor={20}>
                  <div className={`${isPlayer ? 'text-axiom-cyan' : 'text-red-500'} text-[8px] font-bold uppercase tracking-wider bg-black/50 px-1 rounded backdrop-blur-sm whitespace-nowrap`}>
-                    {agent.name} {hasAlliance ? '🤝' : ''}
+                    {String(agent.name)} {hasAlliance ? String('🤝') : ''}
                  </div>
             </Html>
         </group>
@@ -268,30 +272,23 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
 };
 
 const CameraController = () => {
-    const controlsRef = useRef<any>();
+    // Fixed: useRef expects 1 argument (initial value). Adding null to satisfy TypeScript.
+    const controlsRef = useRef<any>(null);
     const cameraTarget = useStore(state => state.cameraTarget);
     const setCameraTarget = useStore(state => state.setCameraTarget);
-    const { camera } = useThree();
+    const camera = useThree(state => state.camera);
 
-    // Smooth navigation logic
     useFrame((_state, delta) => {
         if (cameraTarget && controlsRef.current) {
-            // Explicitly pass arguments to Vector3 constructor to avoid spread on potential null/array issues in strict mode
             const targetVec = new THREE.Vector3(cameraTarget[0], cameraTarget[1], cameraTarget[2]);
-            
-            // Interpolate controls target
             controlsRef.current.target.lerp(targetVec, 5 * delta);
-            
-            // Adjust camera position slightly to maintain view but move toward target
             const dist = camera.position.distanceTo(targetVec);
             if (dist > 100) {
-               // If too far, nudge camera closer for a dramatic "jump" effect
-               const dir = new THREE.Vector3().subVectors(camera.position, targetVec).normalize();
-               const idealPos = targetVec.clone().add(dir.multiplyScalar(60));
+               const dir = new THREE.Vector3(0, 0, 0).subVectors(camera.position, targetVec).normalize();
+               // Improved: Explicitly clone and calculate the ideal position to ensure correct typing and prevent original vector modification.
+               const idealPos = new THREE.Vector3().copy(targetVec).add(dir.multiplyScalar(60));
                camera.position.lerp(idealPos, 2 * delta);
             }
-
-            // If we are close enough, clear the target to return control to user
             if (controlsRef.current.target.distanceTo(targetVec) < 0.1) {
                 setCameraTarget(null);
             }
@@ -311,13 +308,22 @@ const CameraController = () => {
 
 const GameLoop = () => {
     const updatePhysics = useStore(state => state.updatePhysics);
+    const runCognition = useStore(state => state.runCognition);
+    
     useFrame((_state, delta) => {
         updatePhysics(delta);
     });
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            runCognition();
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [runCognition]);
+
     return null;
 };
 
-// Internal component to handle scene content requiring Store access
 const SceneContent = () => {
     const agents = useStore(state => state.agents);
     const monsters = useStore(state => state.monsters);
@@ -331,13 +337,10 @@ const SceneContent = () => {
             <GameLoop />
             <color attach="background" args={['#050505']} /> 
             <fog attach="fog" args={['#050505', 80, 350]} />
-            
             <CameraController />
-            
             <ambientLight intensity={0.4} />
             <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow shadow-mapSize={[2048, 2048]} />
             <Stars radius={300} count={6000} factor={4} fade speed={1} />
-            
             <group>
                 {loadedChunks.map(chunk => (
                     <TerrainChunk key={chunk.id} chunk={chunk} stability={stability} />
@@ -355,11 +358,9 @@ const SceneContent = () => {
                     ))}
                 </group>
             </group>
-
             {monsters.map((monster) => (
                 <MonsterMesh key={monster.id} monster={monster} />
             ))}
-
             {agents.map((agent) => (
               <AgentMesh key={agent.id} agent={agent} onSelect={selectAgent} />
             ))}
@@ -367,16 +368,12 @@ const SceneContent = () => {
     );
 };
 
-// Define stable props outside component to prevent re-creation causing Canvas resets
-const CAMERA_CONFIG = { position: [60, 80, 60], fov: 45 } as const;
-const DPR_CONFIG = [1, 1.5] as const;
-
 const WorldScene = () => {
   return (
     <Canvas 
       shadows 
-      camera={CAMERA_CONFIG} 
-      dpr={DPR_CONFIG}
+      camera={{ position: [60, 80, 60], fov: 45 }} 
+      dpr={[1, 1.5]}
     >
         <SceneContent />
     </Canvas>

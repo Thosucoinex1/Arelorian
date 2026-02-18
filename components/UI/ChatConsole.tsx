@@ -39,20 +39,16 @@ export const ChatConsole = () => {
 
     const handleMessageClick = (msg: ChatMessage) => {
         soundManager.playUI('CLICK');
-        
-        // Jump to event position if provided
         if (msg.channel === 'EVENT' && msg.eventPosition) {
             setCameraTarget([...msg.eventPosition]);
             soundManager.playCombat('MAGIC');
             return;
         }
-
-        // Default agent jump
         const targetAgent = agents.find(a => a.id === msg.senderId);
         if (targetAgent) {
             setCameraTarget([...targetAgent.position]);
             selectAgent(targetAgent.id);
-            soundManager.playCombat('MAGIC'); // Neural link feedback
+            soundManager.playCombat('MAGIC');
         }
     };
 
@@ -71,7 +67,7 @@ export const ChatConsole = () => {
                             onClick={() => { setActiveTab(tab as any); setIsExpanded(true); }}
                             className={`px-3 py-1 text-[10px] md:text-xs font-bold uppercase transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-white/10 text-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
                         >
-                            {tab}
+                            {String(tab)}
                         </button>
                     ))}
                 </div>
@@ -94,14 +90,14 @@ export const ChatConsole = () => {
                                         onClick={() => handleMessageClick(msg)}
                                         className="font-bold text-gray-300 mr-1 cursor-pointer hover:underline text-[10px] md:text-xs group-hover:text-axiom-cyan transition-colors"
                                     >
-                                        [{msg.senderName}]:
+                                        [{String(msg.senderName)}]:
                                     </span>
                                 )}
                                 <span 
                                     onClick={() => msg.channel === 'EVENT' ? handleMessageClick(msg) : null}
                                     className={`${getChannelColor(msg.channel)} text-[10px] md:text-xs ${msg.channel === 'EVENT' ? 'cursor-pointer hover:underline' : ''}`}
                                 >
-                                    {msg.message}
+                                    {String(msg.message)}
                                 </span>
                             </div>
                         ))}
