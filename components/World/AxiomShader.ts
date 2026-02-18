@@ -84,7 +84,7 @@ void main() {
 }
 `;
 
-// Fragment Shader - Advanced Procedural Texturing & Fog of War
+// Fragment Shader - Advanced Procedural Texturing & Neural Fog of War
 export const axiomFragmentShader = `
 varying vec2 vUv;
 varying vec3 vPosition;
@@ -102,7 +102,7 @@ uniform float uFogFar;
 // Scouting System Uniforms
 uniform vec3 uAgentPositions[10];
 uniform float uAgentVisionRanges[10];
-uniform float uExplorationLevel; // 0.0 to 1.0 (Gradient persistence)
+uniform float uExplorationLevel; // Current chunk knowledge persistent factor
 
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 float snoise(vec2 v){
@@ -177,37 +177,44 @@ void main() {
         finalColor = mix(grassLush, grassDry, smoothstep(0.2, 0.7, noiseBase));
     }
 
-    // --- SCOUTING / FOG OF WAR ---
+    // --- REFINED NEURAL FOG OF WAR ---
     float visibility = 0.0;
+    float instantVis = 0.0;
 
-    // FORCE VISIBILITY FOR CITY / SANCTUARY
-    if (abs(uBiome - 0.0) < 0.1) {
-        visibility = 1.0;
-    } else {
-        float instantVis = 0.0;
-        for(int i = 0; i < 10; i++) {
-            float dist = distance(vPosition.xz, uAgentPositions[i].xz);
-            float v = 1.0 - smoothstep(uAgentVisionRanges[i] * 0.4, uAgentVisionRanges[i], dist);
-            instantVis = max(instantVis, v);
-        }
-
-        // Shimmering discovery effect
-        float shimmer = sin(uTime * 3.0 + vPosition.x * 0.5 + vPosition.z * 0.5) * 0.05 * instantVis;
-        
-        // Final visibility: Combine instant scout beam + persistent mapped knowledge (uExplorationLevel)
-        visibility = max(instantVis + shimmer, uExplorationLevel * 0.35);
+    // 1. Instant Neural Link Proximity
+    for(int i = 0; i < 10; i++) {
+        float dist = distance(vPosition.xz, uAgentPositions[i].xz);
+        // Smoother, gradual proximity fade-in
+        float v = smoothstep(uAgentVisionRanges[i], uAgentVisionRanges[i] * 0.35, dist);
+        instantVis = max(instantVis, v);
     }
 
-    // Apply visibility to color
+    // Digital neural pulse overlay
+    float pulse = (sin(uTime * 3.5 + vPosition.x * 0.3 + vPosition.z * 0.3) * 0.5 + 0.5) * 0.08 * instantVis;
+    
+    // 2. Persistent Scan knowledge (Exploration Level)
+    // Uses high-frequency noise to simulate "cached" digital memory of the environment
+    float cacheNoise = fbm(vPosition.xz * 0.8 + uTime * 0.05);
+    float persistentVis = uExplorationLevel * (0.2 + 0.15 * cacheNoise);
+
+    // Combine current link + persistent scan knowledge
+    visibility = max(instantVis + pulse, persistentVis);
+
+    // Sanctuary Override (Axiom Core is always stable)
+    if (abs(uBiome - 0.0) < 0.1) {
+        visibility = 1.0;
+    }
+
+    // Apply visibility to final fragment color
     finalColor *= visibility;
 
-    // --- Grid Overlay ---
+    // --- Digital Grid Overlay ---
     vec2 grid_uv = vPosition.xz * 0.5;
     vec2 grid_lines = abs(fract(grid_uv - 0.5) - 0.5) / fwidth(grid_uv);
     float grid_pattern = 1.0 - min(min(grid_lines.x, grid_lines.y), 1.0);
-    finalColor = mix(finalColor, vec3(0.0, 0.9, 1.0), grid_pattern * 0.05 * visibility);
+    finalColor = mix(finalColor, vec3(0.0, 0.8, 1.0), grid_pattern * 0.06 * visibility);
 
-    // Fog Calculation (Global atmosphere)
+    // Global Atmospheric Fog
     float fogFactor = smoothstep(uFogNear, uFogFar, vFogDepth);
     gl_FragColor = vec4(mix(finalColor, uFogColor, fogFactor), 1.0);
 }

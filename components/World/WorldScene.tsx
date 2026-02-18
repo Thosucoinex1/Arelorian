@@ -1,5 +1,5 @@
 
-import { Html, OrbitControls, Stars } from '@react-three/drei';
+import { Html, OrbitControls, Sky } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -11,8 +11,33 @@ import { axiomFragmentShader, axiomVertexShader } from './AxiomShader';
 const isPosInSanctuary = (pos: [number, number, number], chunks: Chunk[]) => {
     const chunkX = Math.floor((pos[0] + 40) / 80);
     const chunkZ = Math.floor((pos[2] + 40) / 80);
-    const chunk = chunks.find(c => c.x === chunkX && c.z === chunkZ);
+    const chunk = chunks.find(c => c.x === chunkX && chunkZ === chunkZ);
     return chunk?.biome === 'CITY';
+};
+
+const DynamicSky = () => {
+    const serverStats = useStore(state => state.serverStats);
+    const threat = serverStats.threatLevel || 0.05;
+    const uptime = serverStats.uptime || 0;
+    
+    // Time of day cycle: 0 to 1
+    const dayCycle = (uptime % 300) / 300; 
+    const sunPos = new THREE.Vector3().setFromSphericalCoords(
+        1,
+        Math.PI * (0.1 + dayCycle * 0.8), // Elevation
+        Math.PI * 0.5 // Azimuth
+    );
+
+    return (
+        <Sky 
+            distance={450000} 
+            sunPosition={sunPos} 
+            turbidity={8 + threat * 20} 
+            rayleigh={3 + threat * 10} 
+            mieCoefficient={0.005 + threat * 0.05} 
+            mieDirectionalG={0.8} 
+        />
+    );
 };
 
 const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
@@ -61,7 +86,7 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
     };
 
     return (
-        <group position={poi.position} ref={meshRef}>
+        <group position={[poi.position[0], poi.position[1], poi.position[2]]} ref={meshRef}>
             <mesh scale={[isVisible ? 1 : 0.8, isVisible ? 1 : 0.8, isVisible ? 1 : 0.8]}>
                 {poi.type === 'MARKET_STALL' && (
                     <mesh castShadow>
@@ -117,7 +142,7 @@ const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
     if (!isVisible || monster.state === 'DEAD') return null;
 
     return (
-        <group position={monster.position}>
+        <group position={[monster.position[0], monster.position[1], monster.position[2]]}>
             <mesh castShadow scale={[monster.scale, monster.scale, monster.scale]} position={[0, monster.scale, 0]}>
                 <dodecahedronGeometry args={[1, 0]} />
                 <meshStandardMaterial color={monster.color} emissive={monster.color} emissiveIntensity={0.5} />
@@ -208,7 +233,7 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
     if (!isVisible) return null;
 
     return (
-        <group position={agent.position} rotation={[0, agent.rotationY, 0]} onClick={(e) => { e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}>
+        <group position={[agent.position[0], agent.position[1], agent.position[2]]} rotation={[0, agent.rotationY, 0]} onClick={(e) => { e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}>
             <mesh castShadow position={[0, 0.9, 0]}>
                 <boxGeometry args={[0.7, 1.8, 0.7]} />
                 <meshStandardMaterial color={agent.faction === 'PLAYER' ? '#06b6d4' : '#ef4444'} roughness={0.7} />
@@ -227,22 +252,20 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
     );
 };
 
-/**
- * SceneManager - Host component for R3F-specific lifecycle hooks.
- * This MUST be rendered inside the <Canvas> component.
- */
 const SceneManager = () => {
     const updatePhysics = useStore(state => state.updatePhysics);
     const runCognition = useStore(state => state.runCognition);
+    const runSocialInteractions = useStore(state => state.runSocialInteractions);
 
-    // Call updatePhysics every frame within the R3F render loop
     useFrame((_state, delta) => updatePhysics(delta));
 
-    // Simulation intervals (Cognition)
     useEffect(() => { 
-        const i = setInterval(runCognition, 8000); 
+        const i = setInterval(() => {
+            runCognition();
+            runSocialInteractions();
+        }, 8000); 
         return () => clearInterval(i); 
-    }, [runCognition]);
+    }, [runCognition, runSocialInteractions]);
 
     return null;
 };
@@ -257,15 +280,12 @@ const WorldScene = () => {
     return (
         <Canvas shadows camera={{ position: [60, 80, 60], fov: 45 }} dpr={[1, 1.5]}>
             <Suspense fallback={null}>
-                {/* Simulation Logic Host */}
                 <SceneManager />
-
                 <color attach="background" args={['#050505']} /> 
                 <OrbitControls maxDistance={300} minDistance={10} enableDamping />
                 <ambientLight intensity={0.4} />
                 <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow />
-                <Stars radius={300} count={6000} factor={4} fade />
-                
+                <DynamicSky />
                 <group>
                     {chunks.map(c => <TerrainChunk key={c.id} chunk={c} stability={1} />)}
                     {pois.map(p => <POIMesh key={p.id} poi={p} />)}

@@ -2,6 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { Agent, AgentState, ResourceNode, LogEntry, ActionProposal, Quest } from "../types";
 import { useStore } from "../store";
+import { summarizeNeurologicChoice } from "../utils";
 
 export interface AIDecision {
   justification: string;
@@ -15,25 +16,14 @@ export interface AIDecision {
 
 const OPENAI_API_KEY = "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";
 
-function generateLocalHeuristicDecision(agent: Agent, canScan: boolean): AIDecision {
-    const lang = agent.thinkingMatrix.languagePreference === 'DE' ? 'DE' : 'EN';
-    const healthRatio = agent.stats.hp / agent.stats.maxHp;
-    
-    let decision = AgentState.IDLE;
-    let justification = "";
-
-    if (healthRatio < 0.25) {
-        decision = AgentState.IDLE;
-        justification = lang === 'DE' ? "Kritischer Vitalitätsverlust. Regeneration erforderlich (Heuristik)." : "Critical vitality loss. Regeneration required (Heuristic).";
-    } else if (canScan) {
-        decision = AgentState.QUESTING;
-        justification = lang === 'DE' ? "Heuristische Matrix-Sondierung gestartet." : "Heuristic matrix probing initiated.";
-    } else {
-        decision = AgentState.IDLE;
-        justification = lang === 'DE' ? "Eingeschränkter Modus: Warte auf Synchronisation." : "Restricted mode: Waiting for synchronization.";
-    }
-
-    return { justification, decision: String(decision), newState: decision };
+function generateLocalHeuristicDecision(agent: Agent, agents: Agent[], resources: ResourceNode[], pois: any[]): AIDecision {
+    const summary = summarizeNeurologicChoice(agent, agents, resources, [], pois);
+    return { 
+        justification: summary.reason, 
+        decision: String(summary.choice), 
+        newState: summary.choice,
+        message: summary.reason
+    };
 }
 
 async function callOpenAIFallback(systemInstruction: string, prompt: string): Promise<string> {
@@ -69,11 +59,11 @@ export const generateAutonomousDecision = async (
 ): Promise<AIDecision> => {
   // FALLBACK CHECK
   if (!canUseApi) {
-      return generateLocalHeuristicDecision(agent, true);
+      return generateLocalHeuristicDecision(agent, nearbyAgents, nearbyResourceNodes, []);
   }
 
   const effectiveKey = userApiKey || process.env.API_KEY;
-  if (!effectiveKey) return generateLocalHeuristicDecision(agent, true);
+  if (!effectiveKey) return generateLocalHeuristicDecision(agent, nearbyAgents, nearbyResourceNodes, []);
 
   const ai = new GoogleGenAI({ apiKey: effectiveKey });
   const modelName = 'gemini-3-flash-preview'; 
@@ -93,7 +83,6 @@ export const generateAutonomousDecision = async (
     const isRateLimit = errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED");
     
     if (isRateLimit) {
-        // Trigger global cooldown to avoid further spamming
         useStore.getState().setGlobalApiCooldown(Date.now() + 60000); // 1 minute cooldown
         useStore.getState().addLog("Neural Link quota exhausted. Switching to local heuristics for 60s.", 'WATCHDOG', 'SYSTEM');
     }
@@ -101,11 +90,10 @@ export const generateAutonomousDecision = async (
     console.warn("Gemini Link interrupted:", errorMsg);
     
     try {
-        // Attempt OpenAI fallback if available
         const fallbackText = await callOpenAIFallback(systemInstruction, prompt);
         return JSON.parse(fallbackText);
     } catch (f) {
-        return generateLocalHeuristicDecision(agent, true);
+        return generateLocalHeuristicDecision(agent, nearbyAgents, nearbyResourceNodes, []);
     }
   }
 };

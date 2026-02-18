@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
-import { ChatChannel, ChatMessage, ActionProposal } from '../../types';
-import { soundManager } from '../../services/SoundManager';
+import { ChatChannel, ChatMessage } from '../../types';
 import { Brain, MessageSquare, Shield, Zap, Info, Globe, ChevronUp, ChevronDown, Sparkles, Languages } from 'lucide-react';
 
 export const ChatConsole = () => {
@@ -19,16 +18,6 @@ export const ChatConsole = () => {
 
     const filteredMessages = activeTab === 'ALL' ? messages : messages.filter(m => m.channel === activeTab);
 
-    const getChannelStyles = (channel: ChatChannel) => {
-        switch(channel) {
-            case 'GLOBAL': return { color: 'text-red-400', icon: <Globe className="w-3 h-3" />, bg: 'bg-red-500/5' };
-            case 'LOCAL': return { color: 'text-white', icon: <MessageSquare className="w-3 h-3" />, bg: 'bg-white/5' };
-            case 'THOUGHT': return { color: 'text-axiom-cyan', icon: <Brain className="w-3 h-3" />, bg: 'bg-axiom-cyan/10 border-axiom-cyan/20' };
-            case 'SYSTEM': return { color: 'text-blue-400', icon: <Info className="w-3 h-3" />, bg: 'bg-blue-500/5' };
-            default: return { color: 'text-gray-400', icon: <MessageSquare className="w-3 h-3" />, bg: 'bg-transparent' };
-        }
-    };
-
     const isGerman = (text: string) => /der|die|das|und|ist|ich|nicht|beutel|bündnis|uns|wir/i.test(text);
 
     return (
@@ -37,7 +26,7 @@ export const ChatConsole = () => {
                 <div className="flex overflow-x-auto scrollbar-hide gap-1">
                     {['ALL', 'LOCAL', 'THOUGHT', 'SYSTEM'].map((tab) => (
                         <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest transition-all rounded-md flex items-center gap-1.5 ${activeTab === tab ? 'bg-axiom-cyan/20 text-axiom-cyan' : 'text-gray-500'}`}>
-                            {getChannelStyles(tab as ChatChannel).icon} {tab === 'THOUGHT' ? 'Kognition' : String(tab)}
+                            {String(tab)}
                         </button>
                     ))}
                 </div>
@@ -46,26 +35,18 @@ export const ChatConsole = () => {
             {isExpanded && (
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
                     {filteredMessages.map((msg) => {
-                        const { color, icon, bg } = getChannelStyles(msg.channel);
                         const isCognition = msg.channel === 'THOUGHT';
                         const agent = agents.find(a => a.id === msg.senderId);
                         return (
-                            <div key={msg.id} className={`flex flex-col p-2 rounded-xl border ${isCognition ? 'border-axiom-cyan/20' : 'border-transparent'} ${bg}`}>
+                            <div key={msg.id} className={`flex flex-col p-2 rounded-xl border ${isCognition ? 'bg-axiom-cyan/5 border-axiom-cyan/20' : 'bg-white/5 border-transparent'}`}>
                                 <div className="flex items-center gap-2 mb-1">
-                                    <div className={`${color} opacity-70`}>{icon}</div>
-                                    <span className="text-[10px] font-black uppercase text-gray-400">{String(msg.senderName)}</span>
-                                    {agent?.isAwakened && <Zap className="w-2.5 h-2.5 text-axiom-gold" />}
+                                    <span className="text-[9px] font-black uppercase text-gray-500">{String(msg.senderName)}</span>
                                     <div className="flex-1" />
-                                    <span className="text-[7px] font-bold text-gray-600 uppercase flex items-center gap-1"><Languages className="w-2 h-2" />{isGerman(String(msg.message)) ? 'DE' : 'EN'}</span>
+                                    <span className="text-[7px] font-bold text-gray-700 uppercase">{isGerman(String(msg.content)) ? 'DE' : 'EN'}</span>
                                 </div>
-                                <div className={`text-[11px] leading-relaxed ${isCognition ? 'text-cyan-100 italic border-l-2 border-axiom-cyan/30 pl-2' : 'text-gray-300'}`}>
-                                    {String(msg.message)}
+                                <div className={`text-[11px] leading-relaxed ${isCognition ? 'text-cyan-100 italic' : 'text-gray-300'}`}>
+                                    <span>{String(msg.content || "")}</span>
                                 </div>
-                                {isCognition && agent?.lastDecision && (
-                                    <div className="mt-1 text-[9px] text-axiom-cyan/50 italic font-mono pl-2">
-                                        Logic Trace: {String(agent.lastDecision.decision)} - {String(agent.lastDecision.justification)}
-                                    </div>
-                                )}
                             </div>
                         );
                     })}

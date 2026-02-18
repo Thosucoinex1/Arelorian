@@ -1,7 +1,9 @@
 
+
 import React, { useState } from 'react';
 import { useStore } from '../../store';
-import { Agent, Item, ItemStats, ItemEffect } from '../../types';
+// Cleaned up imports to reflect the current state of exported members in types.ts
+import { Agent, Item, ItemEffect } from '../../types';
 import { ITEM_SETS } from '../../utils';
 import { AgentMemoryDisplay } from './AgentMemoryDisplay';
 

@@ -1,7 +1,9 @@
 
+
 import React, { useState } from 'react';
 import { useStore } from '../../store';
-import { LandParcel, StoreProduct, ProductType, Structure, StructureType } from '../../types';
+// Fixed: Removed ProductType which is not exported from types
+import { LandParcel, StoreProduct, Structure, StructureType } from '../../types';
 import { soundManager } from '../../services/SoundManager';
 import { PayPalModal } from './PayPalModal';
 import { ShoppingBag, Zap, Key, Activity, Home, Database } from 'lucide-react';

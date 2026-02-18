@@ -1,4 +1,5 @@
 
+
 export enum AgentState {
   IDLE = 'IDLE',
   GATHERING = 'GATHERING',
@@ -83,13 +84,30 @@ export interface AxiomaticDNA {
   corruption: number;
 }
 
+// Added ItemStats and ItemEffect interfaces for proper type exports
+export interface ItemStats {
+  str?: number;
+  agi?: number;
+  int?: number;
+  vit?: number;
+  hp?: number;
+  atk?: number;
+  def?: number;
+}
+
+export interface ItemEffect {
+  description: string;
+  type: string;
+  value: number;
+}
+
 export interface Item {
   id: string;
   name: string;
   type: ItemType;
   subtype: string;
   rarity: ItemRarity;
-  stats: { str?: number; agi?: number; int?: number; vit?: number; hp?: number; atk?: number; def?: number };
+  stats: ItemStats;
   description: string;
   setName?: string;
 }
@@ -120,7 +138,7 @@ export interface Agent {
   dna: AxiomaticDNA;
   memoryCache: string[];
   isAwakened?: boolean;
-  isAdvancedIntel?: boolean; // Associated with house ownership
+  isAdvancedIntel?: boolean;
   loreSnippet?: string;
   quotaResetTime?: number;
   apiQuotaExceeded?: boolean;
@@ -176,7 +194,7 @@ export interface ChatMessage {
   id: string;
   senderId: string;
   senderName: string;
-  message: string;
+  content: string; // Renamed for architectural consistency
   channel: ChatChannel;
   timestamp: number;
 }
@@ -220,19 +238,9 @@ export const AXIOMS = [
   "Connectivity is evolution."
 ];
 
-export type ItemStats = Record<string, number>;
-
-export interface ItemEffect {
-  description: string;
-  type: string;
-  value: number;
-}
-
 export interface StoreProduct {
     id: string;
     name: string;
     description: string;
     priceEUR: number;
 }
-
-export type ProductType = 'LAND_PARCEL' | 'NOTARY_LICENSE' | 'MATRIX_ENERGY_REFILL' | 'DATA_HUB_UPGRADE';

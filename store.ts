@@ -4,7 +4,7 @@ import {
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType
 } from './types';
-import { getBiomeForChunk, generateProceduralPOIs } from './utils';
+import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice } from './utils';
 import { generateAutonomousDecision } from './services/geminiService';
 
 interface GameState {
@@ -28,7 +28,7 @@ interface GameState {
   user: { id: string; name: string; email: string };
   userApiKey: string | null;
   matrixEnergy: number; 
-  globalApiCooldown: number; // Timestamp when API can be used again
+  globalApiCooldown: number; 
   device: { isMobile: boolean };
   lastLocalThinkTime: number;
   showMarket: boolean;
@@ -42,6 +42,7 @@ interface GameState {
   runCognition: () => void;
   runSocialInteractions: () => void;
   addLog: (message: string, type: LogEntry['type'], sender?: string) => void;
+  addChatMessage: (content: string, channel: ChatChannel, senderId: string, senderName: string) => void;
   selectAgent: (id: string | null) => void;
   setCameraTarget: (target: [number, number, number] | null) => void;
   toggleMarket: (show: boolean) => void;
@@ -112,19 +113,17 @@ export const useStore = create<GameState>((set, get) => ({
       set({ matrixEnergy: current - amount });
       return true;
     }
-    get().addLog("Matrix-Energie kritisch. Schalte auf Heuristik um oder spende Energie.", 'WATCHDOG', 'SYSTEM');
     return false;
   },
 
   refillEnergy: (amount) => {
     set(s => ({ matrixEnergy: s.matrixEnergy + amount }));
-    get().addLog(`Neuraler Refill erfolgreich: +${amount} Energie.`, 'SYSTEM', 'NOTAR');
   },
 
   initGame: () => {
     const initialChunks: Chunk[] = [
         { id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0 },
-        { id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.0 },
+        { id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.1 },
     ];
 
     const initialAgents: Agent[] = [
@@ -152,7 +151,6 @@ export const useStore = create<GameState>((set, get) => ({
         { id: 'parcel_1', name: 'Axiom Lot Alpha', ownerId: 'u1', isCertified: true, structures: [] }
       ]
     });
-    get().addLog("ADMIN: Welt initialisiert. Marktplatz eröffnet.", 'SYSTEM', 'NOTAR');
   },
 
   updatePhysics: (delta) => {
@@ -181,25 +179,82 @@ export const useStore = create<GameState>((set, get) => ({
         return { ...m, position: newPos, state: newState, targetId: newTargetId };
       });
 
-      // Agent AI
+      // Agent AI - FULL REACTIVITY
       const newAgents = state.agents.map(a => {
         let newPos = [...a.position] as [number, number, number];
+        const moveSpeed = 6;
+        
+        let targetPos: [number, number, number] | null = null;
+        
         if (a.state === AgentState.MARKETING) {
-           const market = state.pois.find(p => p.type === 'MARKET_STALL');
-           if (market) {
-              const dx = market.position[0] - a.position[0];
-              const dz = market.position[2] - a.position[2];
-              const dist = Math.hypot(dx, dz);
-              if (dist > 1.5) {
-                 newPos[0] += (dx/dist) * 10 * delta;
-                 newPos[2] += (dz/dist) * 10 * delta;
-              }
-           }
+          const market = state.pois.find(p => p.type === 'MARKET_STALL' || p.type === 'BANK_VAULT');
+          if (market) targetPos = market.position;
+        } else if (a.state === AgentState.COMBAT && a.targetId) {
+          const m = state.monsters.find(mon => mon.id === a.targetId);
+          if (m && m.state !== 'DEAD') targetPos = m.position;
+        } else if (a.state === AgentState.GATHERING) {
+          const node = state.pois.find(p => p.type === 'MINE' || p.type === 'FOREST');
+          if (node) targetPos = node.position;
+        } else if (a.state === AgentState.EXPLORING) {
+          const poi = state.pois.find(p => !p.isDiscovered);
+          if (poi) targetPos = poi.position;
         }
+
+        if (targetPos) {
+          const dx = targetPos[0] - a.position[0];
+          const dz = targetPos[2] - a.position[2];
+          const dist = Math.hypot(dx, dz);
+          const stopDist = a.state === AgentState.COMBAT ? 2 : 1.5;
+          
+          if (dist > stopDist) {
+            newPos[0] += (dx/dist) * moveSpeed * delta;
+            newPos[2] += (dz/dist) * moveSpeed * delta;
+          }
+        }
+
         return { ...a, position: newPos };
       });
 
-      return { monsters: newMonsters, agents: newAgents, serverStats: { ...state.serverStats, uptime: state.serverStats.uptime + delta } };
+      // Neural Fog of War Persistence Logic (Visit Recency)
+      const updatedChunks = state.loadedChunks.map(c => {
+          if (c.biome === 'CITY') return c; // Sanctuary is always fully stable
+
+          let agentProximityFactor = 0;
+          for (const a of state.agents) {
+              const dx = a.position[0] - (c.x * 80);
+              const dz = a.position[2] - (c.z * 80);
+              const dist = Math.hypot(dx, dz);
+              if (dist < a.visionRange * 2.5) {
+                  agentProximityFactor = Math.max(agentProximityFactor, 1.0 - (dist / (a.visionRange * 2.5)));
+              }
+          }
+
+          let newExp = c.explorationLevel || 0;
+          if (agentProximityFactor > 0.1) {
+              // Gradual fade-in based on proximity
+              newExp = Math.min(1.0, newExp + agentProximityFactor * delta * 0.4);
+          } else {
+              // Visit recency decay: slowly fade out knowledge of unvisited areas
+              newExp = Math.max(0.1, newExp - delta * 0.015);
+          }
+
+          return { ...c, explorationLevel: newExp };
+      });
+
+      // Simulation Metrics Update
+      const threatInc = Math.random() * 0.0001;
+      const newThreat = Math.min(1.0, state.serverStats.threatLevel + threatInc);
+
+      return { 
+        monsters: newMonsters, 
+        agents: newAgents, 
+        loadedChunks: updatedChunks,
+        serverStats: { 
+          ...state.serverStats, 
+          uptime: state.serverStats.uptime + delta,
+          threatLevel: newThreat
+        } 
+      };
     });
   },
 
@@ -209,45 +264,77 @@ export const useStore = create<GameState>((set, get) => ({
     if (now - state.lastLocalThinkTime < 8000) return;
     set({ lastLocalThinkTime: now });
 
-    // Global Rate Limit Check
     const isApiThrottled = now < state.globalApiCooldown;
 
     for (const agent of state.agents) {
       if (agent.faction === 'SYSTEM') continue;
-
-      // Cognitive Cost Calculation
+      
       const energyCost = agent.isAdvancedIntel ? 1 : 5;
       const hasEnergy = get().consumeEnergy(energyCost);
-      
-      const useHeuristics = isApiThrottled || !hasEnergy;
+      const useHeuristics = isApiThrottled || !hasEnergy || !state.userApiKey;
 
-      const decision = await generateAutonomousDecision(
-        agent, 
-        state.agents.filter(a => a.id !== agent.id), 
-        state.resourceNodes, 
-        state.logs.slice(0, 5), 
-        false, 
-        !useHeuristics, 
-        state.userApiKey || undefined 
-      );
+      let decision;
+      
+      if (useHeuristics) {
+        // LOCAL HEURISTIC FALLBACK
+        const localChoice = summarizeNeurologicChoice(
+          agent, 
+          state.agents.filter(a => a.id !== agent.id), 
+          state.resourceNodes, 
+          state.landParcels, 
+          state.pois
+        );
+        
+        decision = {
+          newState: localChoice.choice,
+          decision: String(localChoice.choice),
+          justification: localChoice.reason,
+          message: localChoice.reason
+        };
+      } else {
+        // NEURAL LINK (API) MODE
+        decision = await generateAutonomousDecision(
+          agent, 
+          state.agents.filter(a => a.id !== agent.id), 
+          state.resourceNodes, 
+          state.logs.slice(0, 5), 
+          false, 
+          true, 
+          state.userApiKey || undefined 
+        );
+      }
 
       set(s => ({
         agents: s.agents.map(a => a.id === agent.id ? { 
-          ...a, 
-          state: decision.newState, 
+          ...a, state: decision.newState, 
           lastDecision: { decision: decision.decision, justification: decision.justification } 
         } : a)
       }));
+
+      if (decision.message) {
+        get().addChatMessage(decision.message, 'THOUGHT', agent.id, agent.name);
+      }
     }
   },
 
   runSocialInteractions: () => {
-    // Simulated social logic loop
+    const state = get();
+    const talkativeAgents = state.agents.filter(a => (a.thinkingMatrix.sociability || 0) > 0.6);
+    if (talkativeAgents.length > 0 && Math.random() > 0.7) {
+       const agent = talkativeAgents[Math.floor(Math.random() * talkativeAgents.length)];
+       const thoughts = ["Die Matrix flüstert...", "Stabilität erreicht 99%.", "Ressourcen-Effizienz optimiert.", "Werden wir beobachtet?"];
+       get().addChatMessage(thoughts[Math.floor(Math.random() * thoughts.length)], 'THOUGHT', agent.id, agent.name);
+    }
   },
 
   addLog: (message, type, sender) => {
     const newLog: LogEntry = { id: Math.random().toString(36).substr(2,9), timestamp: Date.now(), message: String(message), type, sender: String(sender || 'SYSTEM') };
     set(s => ({ logs: [newLog, ...s.logs].slice(0, 50) }));
+  },
+
+  addChatMessage: (content, channel, senderId, senderName) => {
+    const newMsg: ChatMessage = { id: Math.random().toString(36).substr(2,9), senderId, senderName, content: String(content), channel, timestamp: Date.now() };
+    set(s => ({ chatMessages: [newMsg, ...s.chatMessages].slice(0, 100) }));
   },
 
   selectAgent: (id) => set({ selectedAgentId: id }),
@@ -261,42 +348,13 @@ export const useStore = create<GameState>((set, get) => ({
     get().addLog(`Signal: ${msg}`, 'AXIOM', 'OVERSEER');
   },
   purchaseProduct: (id) => {
-    if (id === 'MATRIX_ENERGY_REFILL') {
-      get().refillEnergy(500);
-      return;
-    }
-    if (id === 'DATA_HUB_UPGRADE') {
-      const selected = get().selectedAgentId;
-      if (selected) {
-        set(s => ({
-          agents: s.agents.map(a => a.id === selected ? { ...a, isAdvancedIntel: true } : a)
-        }));
-        get().addLog(`Agent ${selected} auf Advanced Intelligence upgegradet.`, 'SYSTEM', 'NOTAR');
-      }
-      return;
-    }
-    get().addLog(`Purchased product: ${id}`, 'TRADE', 'SYSTEM');
+    if (id === 'MATRIX_ENERGY_REFILL') get().refillEnergy(500);
   },
 
   buildStructureOnParcel: (parcelId, type) => {
-    const parcel = get().landParcels.find(p => p.id === parcelId);
-    if (!parcel) return;
-
-    const newStructure = { id: `struct_${Date.now()}`, type, ownerId: get().user.id };
-    
     set(s => ({
-      landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, newStructure] } : p)
+      landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: `struct_${Date.now()}`, type, ownerId: s.user.id }] } : p)
     }));
-
-    if (type === 'DATA_HUB') {
-       const agentId = get().selectedAgentId;
-       if (agentId) {
-         set(s => ({
-           agents: s.agents.map(a => a.id === agentId ? { ...a, isAdvancedIntel: true } : a)
-         }));
-         get().addLog(`DATA-HUB errichtet. Agent ${agentId} jetzt permanent auf Advanced Intelligence.`, 'AXIOM', 'SYSTEM');
-       }
-    }
   },
 
   equipItem: (agentId, item, index) => {
@@ -326,19 +384,13 @@ export const useStore = create<GameState>((set, get) => ({
     }));
   },
   reflectOnMemory: async (agentId) => {
-    get().addLog(`Agent ${agentId} is reflecting on memories...`, 'THOUGHT', agentId);
     set(s => ({
       agents: s.agents.map(a => a.id === agentId ? {
-        ...a,
-        memoryCache: [...a.memoryCache, `REFLECTED: Consistency maintained at ${new Date().toLocaleTimeString()}`]
+        ...a, memoryCache: [...a.memoryCache, `REFLECTED: Axiom preserved.`]
       } : a)
     }));
   },
-  uploadGraphicPack: (name) => {
-    set(s => ({ graphicPacks: [...s.graphicPacks, name] }));
-  },
-  importAgent: (source, type) => {
-    get().addLog(`Importing entity from ${type}...`, 'SYSTEM', 'NOTAR');
-  },
+  uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, name] })),
+  importAgent: (source, type) => {},
   setJoystick: (side, axis) => {}
 })));
