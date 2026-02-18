@@ -14,10 +14,6 @@ export enum AgentState {
   ALLIANCE_FORMING = 'ALLIANCE_FORMING'
 }
 
-/**
- * --- OUROBOROS AXIOMS ---
- * Fundamental mathematical grounding for the simulation.
- */
 export const AXIOMS = {
   ENERGY: 'Verbrauch = ΔRealität / Kapazität',
   EROSION: 'Aktion + Zeit = ↑Korruption',
@@ -68,6 +64,19 @@ export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' |
 export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE';
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
 export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT' | 'EVENT' | 'X_BRIDGE';
+
+export interface ActionProposal {
+    id: string;
+    agentId: string;
+    type: 'BUILD' | 'ALLIANCE' | 'TRADE' | 'GATHER';
+    status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'EXECUTED';
+    description: string;
+    costGold?: number;
+    costWood?: number;
+    costStone?: number;
+    targetId?: string;
+    decisionReasoning?: string;
+}
 
 export interface AxiomaticDNA {
   hash: string;
@@ -154,7 +163,6 @@ export interface Agent {
     currentLongTermGoal: string;
     alignment: number;
     languagePreference: 'EN' | 'DE' | 'MIXED';
-    // Extended stats for importer compatibility
     sociability?: number;
     aggression?: number;
   };
@@ -208,6 +216,7 @@ export interface ChatMessage {
   channel: ChatChannel;
   timestamp: number;
   eventPosition?: [number, number, number];
+  proposalId?: string;
 }
 
 export interface Quest {

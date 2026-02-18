@@ -17,7 +17,7 @@ export const AgentHUD = () => {
   if (!agent) return null;
 
   return (
-    <div className={`relative pointer-events-auto transition-all duration-300 ${isMobile ? 'w-64' : 'w-72'}`}>
+    <div className={`fixed top-8 left-8 pointer-events-auto transition-all duration-300 z-50 ${isMobile ? 'w-64' : 'w-72'}`}>
         <div className={`bg-axiom-dark/95 backdrop-blur-xl border border-axiom-cyan/30 rounded-lg overflow-hidden shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all ${isOpen ? 'opacity-50 blur-sm hover:opacity-100 hover:blur-0' : 'opacity-100'}`}>
             <div className="h-1 bg-axiom-cyan w-full"></div>
             <div className="p-3 md:p-4 relative">

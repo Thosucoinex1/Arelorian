@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useStore } from '../../store';
 import { Agent, Item, ItemStats, ItemEffect } from '../../types';
 import { ITEM_SETS } from '../../utils';
+import { AgentMemoryDisplay } from './AgentMemoryDisplay';
 
 type EquipmentSlotType = keyof Agent['equipment'];
 
@@ -192,6 +193,7 @@ export const CharacterSheet = () => {
     
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [tooltip, setTooltip] = useState<{item: Item, pos: {x: number, y: number}} | null>(null);
+    const [activeTab, setActiveTab] = useState<'GEAR' | 'MEMORY'>('GEAR');
 
     if (!showCharacterSheet || !agent) return null;
 
@@ -217,63 +219,84 @@ export const CharacterSheet = () => {
     };
 
     return (
-        <div className="w-[90vw] md:w-[700px] h-[85vh] max-h-[800px] bg-axiom-dark border border-axiom-purple/50 rounded-lg shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl pointer-events-auto">
-            {tooltip && <ItemTooltip item={tooltip.item} agent={agent} position={tooltip.pos} />}
-            <div className="p-4 bg-axiom-purple/20 border-b border-axiom-purple/30 flex justify-between items-center">
-                <h2 className="text-xl font-serif text-white tracking-widest">{String(agent.name)}'s Awareness</h2>
-                <button onClick={() => toggleCharacterSheet(false)} className="text-gray-400 hover:text-white">✕</button>
-            </div>
-
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-white/10 p-4 flex flex-col justify-between">
-                     <div>
-                        <h3 className="text-axiom-cyan text-xs font-bold uppercase mb-4 tracking-widest">Equipment</h3>
-                        <div className="grid grid-cols-3 gap-y-4">
-                            <div></div><EquipmentSlot agent={agent} slot="head" onUnequip={handleUnequip} /><div></div>
-                            <EquipmentSlot agent={agent} slot="mainHand" onUnequip={handleUnequip} />
-                            <EquipmentSlot agent={agent} slot="chest" onUnequip={handleUnequip} />
-                            <EquipmentSlot agent={agent} slot="offHand" onUnequip={handleUnequip} />
-                            <div></div><EquipmentSlot agent={agent} slot="legs" onUnequip={handleUnequip} /><div></div>
-                        </div>
-                     </div>
-                     <div>
-                        <div className="mt-6">
-                            <h3 className="text-axiom-gold text-xs font-bold uppercase mb-2 tracking-widest">Core Matrix</h3>
-                            <div className="space-y-1 text-sm bg-black/20 p-2 rounded">
-                                <div className="flex justify-between"><span>STR</span> <span className="text-white">{String(agent.stats.str)}</span></div>
-                                <div className="flex justify-between"><span>AGI</span> <span className="text-white">{String(agent.stats.agi)}</span></div>
-                                <div className="flex justify-between"><span>INT</span> <span className="text-white">{String(agent.stats.int)}</span></div>
-                                <div className="flex justify-between"><span>VIT</span> <span className="text-white">{String(agent.stats.vit)}</span></div>
-                            </div>
-                        </div>
-                        <ActiveSetBonuses agent={agent} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4 md:p-10">
+            <div className="w-full max-w-[800px] h-full max-h-[700px] bg-axiom-dark border border-axiom-purple/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl pointer-events-auto shadow-[0_0_50px_rgba(79,70,229,0.3)]">
+                {tooltip && <ItemTooltip item={tooltip.item} agent={agent} position={tooltip.pos} />}
+                
+                {/* Header with Tabs */}
+                <div className="p-1 bg-axiom-purple/20 border-b border-axiom-purple/30 flex items-center">
+                    <div className="flex-1 flex gap-1 px-4">
+                        <button 
+                            onClick={() => setActiveTab('GEAR')}
+                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'GEAR' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            Neural Gear
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('MEMORY')}
+                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MEMORY' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            Axiom Memory
+                        </button>
                     </div>
+                    <button onClick={() => toggleCharacterSheet(false)} className="text-gray-500 hover:text-white p-4">✕</button>
                 </div>
 
-                <div className="flex-1 p-4 overflow-y-auto touch-scroll">
-                    <h3 className="text-axiom-cyan text-xs font-bold uppercase mb-4 tracking-widest">Inventory ({String(agent.inventory.filter(i => i).length)}/{String(agent.inventory.length)})</h3>
-                    <div className="grid grid-cols-4 gap-2">
-                        {agent.inventory.map((item, index) => (
-                             <div 
-                                key={index} 
-                                onDrop={(e) => handleDrop(e, index)}
-                                onDragOver={(e) => e.preventDefault()}
-                            >
-                                <InventoryItem 
-                                    item={item} 
-                                    index={index} 
-                                    onEquip={handleEquip}
-                                    onDragStart={handleDragStart}
-                                    onMouseEnter={(item, e) => setTooltip({item, pos: {x: e.clientX, y: e.clientY}})}
-                                    onMouseLeave={() => setTooltip(null)}
-                                />
+                <div className="flex-1 overflow-hidden p-6">
+                    {activeTab === 'GEAR' ? (
+                        <div className="flex flex-col md:flex-row h-full gap-6">
+                            <div className="w-full md:w-1/2 border-r border-white/5 pr-6 flex flex-col justify-between">
+                                 <div>
+                                    <h3 className="text-axiom-cyan text-[10px] font-bold uppercase mb-4 tracking-widest">Equipment Grid</h3>
+                                    <div className="grid grid-cols-3 gap-y-4">
+                                        <div></div><EquipmentSlot agent={agent} slot="head" onUnequip={handleUnequip} /><div></div>
+                                        <EquipmentSlot agent={agent} slot="mainHand" onUnequip={handleUnequip} />
+                                        <EquipmentSlot agent={agent} slot="chest" onUnequip={handleUnequip} />
+                                        <EquipmentSlot agent={agent} slot="offHand" onUnequip={handleUnequip} />
+                                        <div></div><EquipmentSlot agent={agent} slot="legs" onUnequip={handleUnequip} /><div></div>
+                                    </div>
+                                 </div>
+                                 <div className="mt-6">
+                                    <h3 className="text-axiom-gold text-[10px] font-bold uppercase mb-2 tracking-widest">Core Matrix</h3>
+                                    <div className="grid grid-cols-2 gap-2 text-xs bg-black/40 p-3 rounded-xl border border-white/5">
+                                        <div className="flex justify-between"><span>STR</span> <span className="text-white font-bold">{String(agent.stats.str)}</span></div>
+                                        <div className="flex justify-between"><span>AGI</span> <span className="text-white font-bold">{String(agent.stats.agi)}</span></div>
+                                        <div className="flex justify-between"><span>INT</span> <span className="text-white font-bold">{String(agent.stats.int)}</span></div>
+                                        <div className="flex justify-between"><span>VIT</span> <span className="text-white font-bold">{String(agent.stats.vit)}</span></div>
+                                    </div>
+                                    <ActiveSetBonuses agent={agent} />
+                                </div>
                             </div>
-                        ))}
-                    </div>
-                     <section className="bg-axiom-purple/5 p-4 rounded-lg border border-axiom-purple/20 italic text-sm text-gray-400 mt-6">
-                      <h4 className="text-[10px] text-axiom-purple not-italic font-bold mb-2 uppercase">Neural Monologue</h4>
-                      "{String(agent.loreSnippet || "The consciousness is still forming...")}"
-                    </section>
+
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                <h3 className="text-axiom-cyan text-[10px] font-bold uppercase mb-4 tracking-widest">Neural Inventory ({String(agent.inventory.filter(i => i).length)}/{String(agent.inventory.length)})</h3>
+                                <div className="grid grid-cols-4 gap-2 overflow-y-auto pr-2 custom-scrollbar">
+                                    {agent.inventory.map((item, index) => (
+                                         <div 
+                                            key={index} 
+                                            onDrop={(e) => handleDrop(e, index)}
+                                            onDragOver={(e) => e.preventDefault()}
+                                        >
+                                            <InventoryItem 
+                                                item={item} 
+                                                index={index} 
+                                                onEquip={handleEquip}
+                                                onDragStart={handleDragStart}
+                                                onMouseEnter={(item, e) => setTooltip({item, pos: {x: e.clientX, y: e.clientY}})}
+                                                onMouseLeave={() => setTooltip(null)}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                                 <section className="mt-6 bg-axiom-purple/10 p-4 rounded-xl border border-axiom-purple/20 italic text-[11px] text-gray-400 leading-relaxed shadow-inner">
+                                  <h4 className="text-[10px] text-axiom-purple not-italic font-black mb-2 uppercase tracking-widest">Neural Monologue</h4>
+                                  "{String(agent.loreSnippet || "The consciousness is still forming, grasping at fragmented data streams...")}"
+                                </section>
+                            </div>
+                        </div>
+                    ) : (
+                        <AgentMemoryDisplay agentId={agent.id} />
+                    )}
                 </div>
             </div>
         </div>
