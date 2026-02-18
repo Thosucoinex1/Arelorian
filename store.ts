@@ -11,7 +11,7 @@ import { CharacterImporter } from './services/CharacterImporter';
 export interface User {
   id: string;
   name: string;
-  email?: string;
+  email: string;
 }
 
 export interface ServerStats {
@@ -45,7 +45,7 @@ interface GameState {
   lastLocalThinkTime: number;
   lastCombatTick: number;
   
-  user: User | null;
+  user: User; // Changed from User | null to ensure it always exists
   isAxiomAuthenticated: boolean;
   hasNotaryLicense: boolean;
   agentSlots: number;
@@ -91,6 +91,7 @@ export const useStore = create<GameState>((set, get) => ({
   selectedAgentId: null, cameraTarget: null, loadedChunks: [],
   globalJackpot: 50000, stability: 1.0, lastLocalThinkTime: 0, lastCombatTick: 0,
   
+  // Reinforced user initialization with explicit email property
   user: { 
     id: 'user_1', 
     name: 'Observer_Alpha', 

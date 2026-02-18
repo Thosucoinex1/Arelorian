@@ -7,7 +7,9 @@ import {
   Terminal,
   BrainCircuit,
   Activity,
-  Infinity as InfinityIcon
+  Infinity as InfinityIcon,
+  Lock,
+  AlertTriangle
 } from 'lucide-react';
 import { useStore } from './store';
 import { AXIOMS } from './types';
@@ -30,55 +32,86 @@ const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
 
 /**
  * AxiomHandshakeModal handles the administrative authentication logic.
- * Only visible to the project administrator.
+ * Only visible and accessible to the project administrator.
  */
 const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
   const [keyInput, setKeyInput] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState(false);
   const setAxiomAuthenticated = useStore(state => state.setAxiomAuthenticated);
+  const user = useStore(state => state.user);
+
+  // Component-level identity validation
+  if (user?.email !== ADMIN_EMAIL) {
+    return null;
+  }
 
   const handleHandshake = () => {
     if (String(keyInput).trim() === UNIVERSAL_KEY) {
       setIsSuccess(true);
+      setError(false);
       setAxiomAuthenticated(true);
       // Brief delay for visual confirmation before closing
-      setTimeout(onClose, 1200);
+      setTimeout(onClose, 1500);
+    } else {
+      setError(true);
+      // Reset error state after animation
+      setTimeout(() => setError(false), 2000);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-6 font-sans backdrop-blur-2xl pointer-events-auto animate-in fade-in duration-500">
-      <div className="max-w-md w-full bg-[#0a0a0f]/95 border-2 border-axiom-cyan/40 p-12 rounded-[3rem] text-center shadow-[0_0_80px_rgba(6,182,212,0.2)] relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-axiom-cyan to-transparent animate-pulse" />
+    <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[100] p-6 font-sans backdrop-blur-3xl pointer-events-auto animate-in fade-in duration-700">
+      <div className={`max-w-md w-full bg-[#0a0a0f] border-2 rounded-[3.5rem] p-12 text-center shadow-2xl relative overflow-hidden transition-all duration-500 ${
+        isSuccess ? 'border-green-500/50 shadow-green-500/20' : 
+        error ? 'border-red-500/50 shadow-red-500/20 animate-[shake_0.5s_ease-in-out]' : 
+        'border-axiom-cyan/40 shadow-axiom-cyan/20'
+      }`}>
+        {/* Dynamic Scan Line */}
+        <div className={`absolute top-0 left-0 w-full h-1 transition-colors duration-500 ${
+          isSuccess ? 'bg-green-500' : error ? 'bg-red-500' : 'bg-axiom-cyan'
+        } animate-[scan_3s_linear_infinite] shadow-[0_0_15px_currentColor]`} />
         
         <button 
           onClick={onClose} 
-          className="absolute top-8 right-8 text-gray-600 hover:text-white transition-colors p-2"
+          className="absolute top-8 right-8 text-gray-700 hover:text-white transition-all p-2 rounded-full hover:bg-white/5 active:scale-90"
         >
           ✕
         </button>
         
-        <div className="mb-10">
-          <ShieldCheck className={`w-16 h-16 mx-auto transition-all duration-1000 ${isSuccess ? 'text-green-400 scale-125' : 'text-axiom-cyan animate-pulse'}`} />
+        <div className="mb-12 relative">
+          <div className={`absolute inset-0 blur-3xl opacity-20 transition-colors duration-1000 ${isSuccess ? 'bg-green-500' : error ? 'bg-red-500' : 'bg-axiom-cyan'}`} />
+          {isSuccess ? (
+            <BrainCircuit className="w-20 h-20 mx-auto text-green-400 animate-[bounce_2s_infinite]" />
+          ) : error ? (
+            <AlertTriangle className="w-20 h-20 mx-auto text-red-500 animate-pulse" />
+          ) : (
+            <Lock className="w-20 h-20 mx-auto text-axiom-cyan animate-pulse" />
+          )}
         </div>
         
-        <h2 className="text-3xl font-serif font-black text-white mb-3 uppercase tracking-tighter">
-          {isSuccess ? 'ACCESS GRANTED' : 'AXIOM HANDSHAKE'}
+        <h2 className={`text-3xl font-serif font-black mb-3 uppercase tracking-tighter transition-colors duration-500 ${
+          isSuccess ? 'text-green-400' : error ? 'text-red-500' : 'text-white'
+        }`}>
+          {isSuccess ? 'IDENTITY VERIFIED' : error ? 'ACCESS DENIED' : 'AXIOM HANDSHAKE'}
         </h2>
-        <p className="text-[10px] text-gray-500 mb-10 uppercase tracking-[0.4em] font-bold">
-          {isSuccess ? 'Singularity Link Established' : 'Neural Verification Protocol Required'}
+        
+        <p className="text-[10px] text-gray-500 mb-10 uppercase tracking-[0.4em] font-bold leading-relaxed">
+          {isSuccess ? 'Singularity Link Established' : error ? 'Checksum Mismatch Detected' : 'Restricted Administrative Access Only'}
         </p>
         
         {!isSuccess ? (
           <>
-            <div className="relative mb-8">
-              <div className="absolute left-5 top-5">
+            <div className="relative mb-8 group">
+              <div className="absolute left-6 top-6 transition-colors group-focus-within:text-axiom-cyan">
                 <Key className="w-5 h-5 text-gray-700" />
               </div>
               <input 
                 type="password" 
                 placeholder="UNIVERSAL KEY..." 
-                className="w-full bg-black border border-white/10 rounded-2xl py-5 pl-14 pr-4 text-sm text-axiom-cyan placeholder:text-gray-800 focus:border-axiom-cyan/60 outline-none transition-all shadow-inner font-mono"
+                className={`w-full bg-black/60 border rounded-3xl py-6 pl-16 pr-6 text-sm transition-all shadow-inner font-mono focus:outline-none ${
+                  error ? 'border-red-500/50 text-red-400 placeholder:text-red-900' : 'border-white/10 text-axiom-cyan placeholder:text-gray-800 focus:border-axiom-cyan/60'
+                }`}
                 value={String(keyInput)} 
                 onChange={e => setKeyInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleHandshake()}
@@ -87,26 +120,44 @@ const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
             
             <button 
               onClick={handleHandshake}
-              className="w-full bg-axiom-cyan py-6 rounded-2xl font-black text-xs text-black hover:bg-white transition-all shadow-xl shadow-cyan-950/40 active:scale-95 uppercase tracking-[0.2em]"
+              className={`w-full py-6 rounded-3xl font-black text-xs transition-all shadow-xl active:scale-[0.98] uppercase tracking-[0.3em] ${
+                error 
+                ? 'bg-red-600/20 text-red-500 border border-red-500/30' 
+                : 'bg-axiom-cyan text-black hover:bg-white shadow-cyan-900/40'
+              }`}
             >
-              Initialize Handshake
+              {error ? 'RETRY HANDSHAKE' : 'GRANT ACCESS'}
             </button>
           </>
         ) : (
-          <div className="py-12 space-y-3">
-            <div className="text-green-400 text-xs font-mono animate-pulse uppercase tracking-[0.3em]">
-              [SINGULARITY STATUS: ACTIVE]
+          <div className="py-10 space-y-4 animate-in fade-in zoom-in duration-500">
+            <div className="text-green-400 text-xs font-mono animate-pulse uppercase tracking-[0.4em]">
+              [OVERSEER STATUS: ACTIVE]
             </div>
-            <div className="text-green-400/40 text-[9px] font-mono uppercase">
-              Root privileges materialized in matrix
+            <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl text-[10px] text-green-400/80 font-mono uppercase leading-loose">
+                Matrix stabilization complete.<br/>
+                Root privileges materialized.<br/>
+                Uplink: projectouroboros_001
             </div>
           </div>
         )}
 
-        <div className="mt-12 pt-8 border-t border-white/5 text-[9px] text-gray-700 font-mono italic tracking-widest">
-          {ADMIN_EMAIL}
+        <div className="mt-14 pt-10 border-t border-white/5">
+            <div className="text-[9px] text-gray-700 font-mono mb-2 uppercase tracking-[0.5em]">Target Administrative ID</div>
+            <div className={`text-xs font-bold transition-colors duration-500 ${isSuccess ? 'text-green-500' : 'text-axiom-cyan'}`}>
+                {ADMIN_EMAIL}
+            </div>
         </div>
       </div>
+      
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          50% { transform: translateX(10px); }
+          75% { transform: translateX(-5px); }
+        }
+      `}</style>
     </div>
   );
 };
@@ -124,10 +175,8 @@ const NeuralTerminal = () => {
   const [showHandshake, setShowHandshake] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Identity logic for the current session
   const user = useMemo(() => {
-    if (storeUser && !storeUser.email) {
-      return { ...storeUser, email: ADMIN_EMAIL };
-    }
     return storeUser;
   }, [storeUser]);
 
@@ -140,7 +189,11 @@ const NeuralTerminal = () => {
 
   return (
     <>
-      {showHandshake && <AxiomHandshakeModal onClose={() => setShowHandshake(false)} />}
+      {/* Refined conditional rendering for admin handshake in terminal */}
+      {showHandshake && user?.email === ADMIN_EMAIL && (
+        <AxiomHandshakeModal onClose={() => setShowHandshake(false)} />
+      )}
+      
       <div className="fixed bottom-8 left-8 w-[450px] pointer-events-auto font-sans z-50 hidden md:flex">
         <div className="bg-[#050505]/95 border-2 border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col h-[550px] backdrop-blur-3xl">
           <div className="bg-white/5 p-5 border-b border-white/5 flex justify-between items-center">
@@ -230,13 +283,33 @@ const NeuralTerminal = () => {
  */
 const App = () => {
   const initGame = useStore(state => state.initGame);
+  const storeUser = useStore(state => state.user);
+  const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
+  const [showInitialHandshake, setShowInitialHandshake] = useState(false);
+
+  // Initialization: Verify identity
+  const user = useMemo(() => {
+    return storeUser;
+  }, [storeUser]);
 
   useEffect(() => {
     initGame();
   }, [initGame]);
 
+  useEffect(() => {
+    // Admin user should trigger handshake if not already authenticated
+    if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) {
+      setShowInitialHandshake(true);
+    }
+  }, [user?.email, isAxiomAuthenticated]);
+
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">
+      {/* Refined Handshake Gate: Rendered only if showInitialHandshake is true AND user is admin */}
+      {showInitialHandshake && user?.email === ADMIN_EMAIL && (
+        <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />
+      )}
+
       {/* 3D Simulation Background */}
       <WorldScene />
       
