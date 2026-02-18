@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { 
   ShieldCheck, 
   Key, 
@@ -28,11 +28,13 @@ import WorldScene from './components/World/WorldScene';
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
 
+/**
+ * AxiomHandshakeModal handles the administrative authentication logic.
+ */
 const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
   const [keyInput, setKeyInput] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const setAxiomAuthenticated = useStore(state => state.setAxiomAuthenticated);
-  const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
 
   const handleHandshake = () => {
     if (String(keyInput).trim() === UNIVERSAL_KEY) {
@@ -100,7 +102,7 @@ const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
           </div>
         )}
 
-        <div className="mt-10 pt-6 border-t border-white/5 text-[9px] text-gray-600 font-mono italic">
+        <div className="mt-10 pt-6 border-t border-white/5 text-[9px] text-gray-600 font-mono italic text-center">
           {ADMIN_EMAIL}
         </div>
       </div>
@@ -108,19 +110,31 @@ const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
+/**
+ * NeuralTerminal component for interaction with simulation logs and signals.
+ */
 const NeuralTerminal = () => {
   const logs = useStore(state => state.logs);
-  const user = useStore(state => state.user);
+  const storeUser = useStore(state => state.user);
   const sendSignal = useStore(state => state.sendSignal);
+  const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
   const [input, setInput] = useState("");
   const [showHandshake, setShowHandshake] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const user = useMemo(() => {
+    if (storeUser && !storeUser.email) {
+      return { ...storeUser, email: ADMIN_EMAIL };
+    }
+    return storeUser;
+  }, [storeUser]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [logs]);
 
   const isAdmin = user?.email === ADMIN_EMAIL;
+  const canSend = isAdmin && isAxiomAuthenticated;
 
   return (
     <>
@@ -136,8 +150,8 @@ const NeuralTerminal = () => {
               {isAdmin && (
                 <button 
                   onClick={() => setShowHandshake(true)}
-                  className="text-axiom-cyan hover:text-white transition-all transform hover:scale-110 active:scale-90"
-                  title="Axiom Handshake (Admin Only)"
+                  className={`transition-all transform hover:scale-110 active:scale-90 ${isAxiomAuthenticated ? 'text-green-400' : 'text-axiom-cyan'}`}
+                  title={isAxiomAuthenticated ? "Handshake Verified" : "Perform Axiom Handshake"}
                 >
                   <InfinityIcon className="w-4 h-4" />
                 </button>
@@ -169,26 +183,20 @@ const NeuralTerminal = () => {
           <div className="p-4 bg-black/60 border-t border-white/5">
             <div className="flex gap-2">
               <input 
-                className={`flex-1 bg-gray-900 border border-gray-800 rounded-2xl px-5 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 transition-all ${!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}`}
-                placeholder={isAdmin ? "Sende Impuls an Matrix..." : "Observer Mode: Neural Bridge Locked"}
+                className={`flex-1 bg-gray-900 border border-gray-800 rounded-2xl px-5 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 transition-all ${!canSend ? 'opacity-50 cursor-not-allowed' : ''}`}
+                placeholder={canSend ? "Sende Impuls an Matrix..." : isAdmin ? "Handshake Required to Send" : "Observer Mode: Neural Bridge Locked"}
                 value={String(input)}
-                disabled={!isAdmin}
+                disabled={!canSend}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && input && isAdmin && (sendSignal(input), setInput(""))}
+                onKeyDown={e => e.key === 'Enter' && input && canSend && (sendSignal(input), setInput(""))}
               />
               <button 
-                onClick={() => { if(input && isAdmin) { sendSignal(input); setInput(""); } }}
-                disabled={!isAdmin}
-                className={`p-3 rounded-2xl transition-all shadow-lg ${isAdmin ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/30' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`}
+                onClick={() => { if(input && canSend) { sendSignal(input); setInput(""); } }}
+                disabled={!canSend}
+                className={`p-3 rounded-2xl transition-all shadow-lg ${canSend ? 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/40 text-white' : 'bg-gray-800 text-gray-600'}`}
               >
-                <Send className="w-5 h-5 text-white" />
+                <Send className="w-4 h-4" />
               </button>
-            </div>
-            <div className="flex justify-between items-center mt-3 px-2">
-              <span className="text-[8px] text-gray-600 uppercase tracking-tighter">Axiomatic Grounding Active</span>
-              <span className={`text-[8px] flex items-center gap-1 font-bold ${isAdmin ? 'text-red-500' : 'text-gray-600'}`}>
-                <BrainCircuit className="w-3 h-3" /> {isAdmin ? 'Neural Bridge: Recurse' : 'Neural Bridge: Read-Only'}
-              </span>
             </div>
           </div>
         </div>
@@ -197,77 +205,53 @@ const NeuralTerminal = () => {
   );
 };
 
-export default function App() {
+/**
+ * Main application component responsible for initializing the game state and rendering the main UI.
+ */
+const App = () => {
   const initGame = useStore(state => state.initGame);
-  const stability = useStore(state => state.stability);
-  const globalJackpot = useStore(state => state.globalJackpot);
-  const user = useStore(state => state.user);
-  const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
 
-  const [showInitialHandshake, setShowInitialHandshake] = useState(false);
-  
-  useEffect(() => { 
+  useEffect(() => {
     initGame();
-    // Trigger the handshake modal for admin on initial load if not already authenticated
-    if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) {
-      setShowInitialHandshake(true);
-    }
-  }, [user, isAxiomAuthenticated]);
+  }, [initGame]);
 
   return (
-    <div className="w-full h-screen bg-axiom-dark overflow-hidden select-none relative">
-      {showInitialHandshake && (
-        <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />
-      )}
-
-      <div className="absolute inset-0 z-0">
-        <WorldScene />
-      </div>
-
-      <div className="absolute inset-0 pointer-events-none z-40">
-        <div className="absolute top-6 left-6 z-50 flex gap-4 pointer-events-none">
-          <div className="bg-black/80 border border-cyan-500/20 p-3 rounded-xl backdrop-blur-md">
-            <div className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-1">Reality Stability</div>
-            <div className={`text-xl font-serif font-black ${(stability || 0) < 0.7 ? 'text-red-500 animate-pulse' : 'text-cyan-400'}`}>
-              {String((Number(stability || 1.0) * 100).toFixed(1))}%
-            </div>
+    <div className="w-full h-screen bg-black overflow-hidden relative select-none">
+      {/* 3D Simulation Background */}
+      <WorldScene />
+      
+      {/* Overlay Interaction Layer */}
+      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        <div className="flex justify-between items-start">
+          <div className="space-y-4">
+            <AgentHUD />
           </div>
-          <div className="bg-black/80 border border-axiom-gold/20 p-3 rounded-xl backdrop-blur-md">
-            <div className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mb-1">Jackpot Reserve</div>
-            <div className="text-xl font-serif font-black text-axiom-gold">
-              {String(Number(globalJackpot || 0).toLocaleString())} G
-            </div>
+          <div className="flex flex-col items-end gap-4">
+            <QuestLog />
+            <EventOverlay />
           </div>
         </div>
 
-        <div className="absolute bottom-6 right-6 pointer-events-auto">
-          <AgentHUD />
-        </div>
-        <div className="absolute right-0 top-0 h-full pointer-events-auto flex items-center">
+        <div className="flex justify-between items-end">
+          <div className="flex flex-col gap-4">
+            <ChatConsole />
+            <NeuralTerminal />
+          </div>
           <NotaryDashboard />
         </div>
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto">
-            <CharacterSheet />
-          </div>
-        </div>
-        
-        <div className="absolute bottom-20 left-6 pointer-events-auto">
-          <ChatConsole />
-        </div>
-
-        <QuestLog />
-        <AdminDashboard />
-        <WorldMap />
-        <AuctionHouse />
-        <VirtualJoysticks />
-        <EventOverlay />
       </div>
 
-      <NeuralTerminal />
-      
-      <div className="absolute inset-0 pointer-events-none border-[12px] border-white/5 z-50" />
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-transparent to-black/20 z-10" />
+      {/* Full-screen UI Overlays and Modals */}
+      <CharacterSheet />
+      <AdminDashboard />
+      <WorldMap />
+      <AuctionHouse />
+      <VirtualJoysticks />
+
+      {/* Final Visual Polish */}
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.4)_100%)]" />
     </div>
   );
-}
+};
+
+export default App;

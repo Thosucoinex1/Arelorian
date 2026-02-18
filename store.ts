@@ -112,7 +112,7 @@ export const useStore = create<GameState>((set, get) => ({
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   setCameraTarget: (pos) => set({ cameraTarget: pos }),
-  setAxiomAuthenticated: (val) => set({ isAxiomAuthenticated: val }),
+  setAxiomAuthenticated: (val: boolean) => set({ isAxiomAuthenticated: val }),
 
   addLog: (message, type, sender = 'SYSTEM') => set(state => ({ 
     logs: [{ 
