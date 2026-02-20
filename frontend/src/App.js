@@ -46,9 +46,13 @@ const useStore = create((set, get) => ({
   selectAgent: (id) => set({ selectedAgentId: id }),
   toggleMap: () => set(s => ({ showMap: !s.showMap })),
   toggleImporter: () => set(s => ({ showImporter: !s.showImporter })),
+  toggleInventory: () => set(s => ({ showInventory: !s.showInventory })),
+  toggleTierInfo: () => set(s => ({ showTierInfo: !s.showTierInfo })),
   setConnected: (connected) => set({ isConnected: connected }),
   setCameraOffset: (offset) => set({ cameraOffset: offset }),
   setZoom: (zoom) => set({ zoom: Math.max(0.5, Math.min(3, zoom)) }),
+  setNotary: (notary) => set({ currentNotary: notary }),
+  setItemSets: (sets) => set({ itemSets: sets }),
 }));
 
 // ============== 2D CANVAS WORLD ==============
