@@ -4,7 +4,6 @@ import {
   OrbitControls, 
   PerspectiveCamera, 
   Html, 
-  Stars,
   Float
 } from '@react-three/drei';
 import * as THREE from 'three';
