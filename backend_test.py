@@ -437,6 +437,11 @@ class OuroborosAPITester:
                 agent = response['agent']
                 print(f"   Imported agent name: {agent.get('name', 'Unknown')}")
                 print(f"   Imported agent ID: {agent.get('id', 'Unknown')}")
+                
+                # Store agent ID for later tests
+                if agent.get('id'):
+                    self.test_agent_id = agent.get('id')
+                
                 return success and has_success and has_agent, agent.get('id')
         return False, None
 
