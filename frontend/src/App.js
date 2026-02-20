@@ -408,8 +408,6 @@ const WorldScene = () => {
       />
       <pointLight position={[0, 20, 0]} color="#06b6d4" intensity={0.5} />
       
-      <Stars radius={200} depth={100} count={8000} factor={4} fade speed={0.5} />
-      
       <Sanctuary3D />
       
       {agents.map(agent => (
