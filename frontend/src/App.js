@@ -1040,6 +1040,7 @@ function App() {
       
       <WorldMap />
       <CharacterImporter />
+      <TierInfoPanel />
       
       <div className="vignette" />
       <div className="frame-border" />
