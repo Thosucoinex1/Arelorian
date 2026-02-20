@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, extend } from '@react-three/fiber';
 import { OrbitControls, Html, Sky } from '@react-three/drei';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import axios from 'axios';
+
+// Extend THREE namespace for React Three Fiber
+extend(THREE);
 import { 
   Terminal, Brain, Activity, Shield, Eye, Package, Zap, ZapOff,
   ChevronUp, ChevronDown, Map, Users, MessageSquare, Upload, RefreshCw,
