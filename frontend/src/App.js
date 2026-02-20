@@ -23,10 +23,14 @@ const useStore = create((set, get) => ({
   selectedAgentId: null,
   showMap: false,
   showImporter: false,
+  showInventory: false,
+  showTierInfo: false,
   isConnected: false,
   isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
   cameraOffset: { x: 0, z: 0 },
   zoom: 1,
+  currentNotary: null,
+  itemSets: {},
   
   setWorldState: (state) => set({
     agents: state.agents || [],
