@@ -778,18 +778,20 @@ const StatusBar = () => {
   const isConnected = useStore(s => s.isConnected);
   const toggleMap = useStore(s => s.toggleMap);
   const toggleImporter = useStore(s => s.toggleImporter);
+  const toggleTierInfo = useStore(s => s.toggleTierInfo);
   
   return (
     <div className="status-bar" data-testid="status-bar">
       <div className="status-left">
         <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
           <div className="status-dot" />
-          <span>{isConnected ? 'NEURAL LINK ACTIVE' : 'CONNECTING...'}</span>
+          <span>{isConnected ? 'DUDEN-REGISTER ACTIVE' : 'CONNECTING...'}</span>
         </div>
       </div>
       
       <div className="status-center">
         <span className="title-text">OUROBOROS: NEURAL EMERGENCE</span>
+        <span className="db-badge">PostgreSQL v2.0</span>
       </div>
       
       <div className="status-right">
@@ -797,20 +799,23 @@ const StatusBar = () => {
           <Shield size={14} />
           <span>Stability: {(stabilityIndex * 100).toFixed(1)}%</span>
         </div>
-        <div className="status-item threat">
+        <div className={`status-item ${threatLevel > 0.5 ? 'danger' : 'threat'}`}>
           <AlertTriangle size={14} />
-          <span>Threat: {(threatLevel * 100).toFixed(2)}%</span>
+          <span>Corruption: {(threatLevel * 100).toFixed(1)}%</span>
         </div>
         <div className="status-item">
           <Users size={14} />
           <span>Agents: {agents.length}</span>
         </div>
         
-        <button className="toolbar-btn" onClick={toggleMap} title="World Map">
+        <button className="toolbar-btn" onClick={toggleMap} title="World Map (35x35)">
           <Map size={16} />
         </button>
         <button className="toolbar-btn" onClick={toggleImporter} title="Import Character">
           <Upload size={16} />
+        </button>
+        <button className="toolbar-btn" onClick={toggleTierInfo} title="Tier System">
+          <Crown size={16} />
         </button>
       </div>
     </div>
