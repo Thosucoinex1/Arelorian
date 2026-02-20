@@ -538,7 +538,7 @@ const NeuralTerminal = () => {
   
   const addLog = useCallback((message, type = 'SYSTEM', sender = 'MATRIX') => {
     setLogs(prev => [...prev, {
-      id: Date.now().toString(),
+      id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
       message,
       type,
