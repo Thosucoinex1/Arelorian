@@ -199,7 +199,7 @@ const MonsterMesh = ({ monster }) => {
           emissiveIntensity={0.5} 
         />
       </mesh>
-      <Html position={[0, monster.scale * 2 + 1, 0]} center distanceFactor={15}>
+      <Html position={[0, monster.scale * 2 + 1, 0]} center distanceFactor={15} as="div">
         <div className="monster-label">
           <div className="hp-bar">
             <div 
