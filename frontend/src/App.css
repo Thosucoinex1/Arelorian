@@ -704,6 +704,195 @@ body {
 
 .terminal-input input {
   flex: 1;
+
+/* ============== TIER INFO PANEL ============== */
+
+.tier-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.tier-container {
+  width: 500px;
+  max-width: 90vw;
+  background: var(--axiom-darker);
+  border: 2px solid var(--axiom-gold);
+  border-radius: 24px;
+  padding: 32px;
+  position: relative;
+  box-shadow: 0 0 60px rgba(251,191,36,0.2);
+}
+
+.tier-container h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: var(--axiom-gold);
+}
+
+.tier-subtitle {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 24px;
+}
+
+.tier-login {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tier-login input {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #fff;
+  outline: none;
+}
+
+.tier-login input:focus {
+  border-color: var(--axiom-gold);
+}
+
+.tier-login button {
+  background: var(--axiom-gold);
+  border: none;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #000;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.tier-login button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tier-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.current-tier {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+}
+
+.tier-label {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+}
+
+.tier-value {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tier-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tier-level {
+  padding: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #333;
+  border-radius: 12px;
+  position: relative;
+}
+
+.tier-level.unlocked {
+  background: rgba(255,255,255,0.05);
+}
+
+.tier-level.locked {
+  opacity: 0.5;
+}
+
+.tier-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.tier-level p {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin: 0;
+}
+
+.unlocked-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(34,197,94,0.2);
+  color: var(--success);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.upgrade-btn {
+  background: linear-gradient(135deg, var(--axiom-cyan), var(--axiom-purple));
+  border: none;
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  transition: transform 0.2s;
+}
+
+.upgrade-btn:hover {
+  transform: scale(1.02);
+}
+
+.upgrade-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.universal-key-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(251,191,36,0.1);
+  border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 8px;
+  color: var(--axiom-gold);
+  font-size: 11px;
+  font-weight: 600;
+}
+
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 12px;
