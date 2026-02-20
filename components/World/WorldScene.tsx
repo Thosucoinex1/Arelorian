@@ -11,7 +11,7 @@ import { axiomFragmentShader, axiomVertexShader } from './AxiomShader';
 const isPosInSanctuary = (pos: [number, number, number], chunks: Chunk[]) => {
     const chunkX = Math.floor((pos[0] + 40) / 80);
     const chunkZ = Math.floor((pos[2] + 40) / 80);
-    const chunk = chunks.find(c => c.x === chunkX && chunkZ === chunkZ);
+    const chunk = chunks.find(c => c.x === chunkX && c.z === chunkZ);
     return chunk?.biome === 'CITY';
 };
 

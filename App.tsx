@@ -26,6 +26,8 @@ import { VirtualJoysticks } from './components/UI/VirtualJoysticks';
 import { EventOverlay } from './components/UI/EventOverlay';
 import { ChatConsole } from './components/UI/ChatConsole';
 import { MarketOverlay } from './components/UI/MarketOverlay';
+import { AxiomDebugger } from './components/UI/AxiomDebugger';
+import { EmergentBehaviorMonitor } from './components/UI/EmergentBehaviorMonitor';
 import WorldScene from './components/World/WorldScene';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
@@ -90,6 +92,7 @@ const NeuralTerminal = () => {
   const storeUser = useStore(state => state.user);
   const sendSignal = useStore(state => state.sendSignal);
   const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
+  const toggleDebugger = useStore(state => state.toggleDebugger);
   const [input, setInput] = useState("");
   const [showHandshake, setShowHandshake] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -113,7 +116,18 @@ const NeuralTerminal = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {isAdmin && <button onClick={() => setShowHandshake(true)} className={`transition-all transform hover:scale-110 active:scale-90 ${isAxiomAuthenticated ? 'text-green-400' : 'text-axiom-cyan'}`}><InfinityIcon className="w-5 h-5" /></button>}
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => toggleDebugger(true)} 
+                    className="p-2 hover:bg-white/5 rounded-lg text-emerald-500 transition-all hover:scale-110"
+                    title="Deep Solving Debugger"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setShowHandshake(true)} className={`transition-all transform hover:scale-110 active:scale-90 ${isAxiomAuthenticated ? 'text-green-400' : 'text-axiom-cyan'}`}><InfinityIcon className="w-5 h-5" /></button>
+                </div>
+              )}
               <Activity className="w-5 h-5 text-axiom-gold animate-pulse" />
             </div>
           </div>
@@ -143,13 +157,28 @@ const NeuralTerminal = () => {
 const App = () => {
   const initGame = useStore(state => state.initGame);
   const runSocialInteractions = useStore(state => state.runSocialInteractions);
+  const runEmergentBehavior = useStore(state => state.runEmergentBehavior);
+  const agents = useStore(state => state.agents);
   const storeUser = useStore(state => state.user);
   const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
+  const runDiagnostics = useStore(state => state.runDiagnostics);
+  const toggleDebugger = useStore(state => state.toggleDebugger);
   const [showInitialHandshake, setShowInitialHandshake] = useState(false);
   const user = useMemo(() => storeUser, [storeUser]);
 
   useEffect(() => { initGame(); }, [initGame]);
   useEffect(() => { if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [user?.email, isAxiomAuthenticated]);
+
+  // Global Error Listener for Deep Solving
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error("Matrix Corruption Detected:", event.error);
+      toggleDebugger(true);
+      runDiagnostics(`RUNTIME_ERROR: ${event.message}\nStack: ${event.error?.stack}`);
+    };
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, [toggleDebugger, runDiagnostics]);
 
   // Social Interaction Loop
   useEffect(() => {
@@ -158,6 +187,19 @@ const App = () => {
     }, 10000);
     return () => clearInterval(interval);
   }, [runSocialInteractions]);
+
+  // Emergent Behavior Loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Pick a random agent to exhibit emergent behavior
+      const activeAgents = agents.filter(a => a.faction !== 'SYSTEM');
+      if (activeAgents.length > 0) {
+        const randomAgent = activeAgents[Math.floor(Math.random() * activeAgents.length)];
+        runEmergentBehavior(randomAgent.id);
+      }
+    }, 30000); // Every 30 seconds
+    return () => clearInterval(interval);
+  }, [runEmergentBehavior, agents]);
 
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">
@@ -185,6 +227,8 @@ const App = () => {
       <AuctionHouse />
       <VirtualJoysticks />
       <MarketOverlay />
+      <AxiomDebugger />
+      <EmergentBehaviorMonitor />
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
       <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
     </div>

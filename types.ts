@@ -139,6 +139,8 @@ export interface Agent {
   memoryCache: string[];
   isAwakened?: boolean;
   isAdvancedIntel?: boolean;
+  consciousnessLevel: number;
+  awakeningProgress: number;
   loreSnippet?: string;
   quotaResetTime?: number;
   apiQuotaExceeded?: boolean;
@@ -164,6 +166,20 @@ export interface Agent {
   targetId?: string | null;
   lastDecision?: { decision: string, justification: string };
   lastScanTime: number;
+  economicDesires: {
+    targetGold: number;
+    preferredResources: ResourceType[];
+    greedLevel: number; // 0 to 1
+    riskAppetite: number; // 0 to 1
+    frugality: number; // 0 to 1
+    marketRole: 'HOARDER' | 'FLIPPER' | 'PRODUCER' | 'CONSUMER' | 'SPECULATOR';
+    tradeFrequency: number; // 0 to 1
+  };
+  emergentBehaviorLog: {
+    timestamp: number;
+    action: string;
+    reasoning: string;
+  }[];
 }
 
 export interface Chunk { 

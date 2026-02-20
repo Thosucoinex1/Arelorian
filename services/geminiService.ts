@@ -1,53 +1,34 @@
-
-import { GoogleGenAI } from "@google/genai";
-import { Agent, AgentState, ResourceNode, LogEntry, ActionProposal, Quest } from "../types";
-import { useStore } from "../store";
+import { GoogleGenAI, Type } from "@google/genai";
+import { Agent, AgentState, ResourceNode, LogEntry, Quest } from "../types";
 import { summarizeNeurologicChoice } from "../utils";
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 export interface AIDecision {
   justification: string;
   decision: string;
   newState: AgentState;
-  targetId?: string;
-  alliedId?: string;
   message?: string;
   quest?: Omit<Quest, 'id' | 'timestamp' | 'issuerId'>;
 }
 
-const OPENAI_API_KEY = "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";
-
-function generateLocalHeuristicDecision(agent: Agent, agents: Agent[], resources: ResourceNode[], pois: any[]): AIDecision {
-    const summary = summarizeNeurologicChoice(agent, agents, resources, [], pois);
-    return { 
-        justification: summary.reason, 
-        decision: String(summary.choice), 
-        newState: summary.choice,
-        message: summary.reason
-    };
+export interface DiagnosticReport {
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  summary: string;
+  issues: {
+    severity: 'LOW' | 'MEDIUM' | 'HIGH';
+    description: string;
+    suggestedFix: string;
+    file?: string;
+  }[];
+  recoverySteps: string[];
 }
 
-async function callOpenAIFallback(systemInstruction: string, prompt: string): Promise<string> {
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "system", content: systemInstruction }, { role: "user", content: prompt }],
-        response_format: { type: "json_object" }
-      })
-    });
-    if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData?.error?.message || "OpenAI API Error");
-    }
-    const data = await response.json();
-    return data.choices[0].message.content;
-  } catch (err) {
-    throw err;
-  }
-}
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY || "" });
 
+/**
+ * Generates an autonomous decision for an agent using Gemini.
+ */
 export const generateAutonomousDecision = async (
   agent: Agent, 
   nearbyAgents: Agent[], 
@@ -57,52 +38,175 @@ export const generateAutonomousDecision = async (
   canUseApi: boolean,
   userApiKey?: string
 ): Promise<AIDecision> => {
-  // FALLBACK CHECK
-  if (!canUseApi) {
-      return generateLocalHeuristicDecision(agent, nearbyAgents, nearbyResourceNodes, []);
+  const effectiveKey = userApiKey || GEMINI_API_KEY;
+  
+  if (!canUseApi || !effectiveKey) {
+    const local = summarizeNeurologicChoice(agent, nearbyAgents, nearbyResourceNodes, [], []);
+    return {
+      justification: local.reason,
+      decision: String(local.choice),
+      newState: local.choice,
+      message: local.reason
+    };
   }
 
-  const effectiveKey = userApiKey || process.env.API_KEY;
-  if (!effectiveKey) return generateLocalHeuristicDecision(agent, nearbyAgents, nearbyResourceNodes, []);
-
-  const ai = new GoogleGenAI({ apiKey: effectiveKey });
-  const modelName = 'gemini-3-flash-preview'; 
-  const systemInstruction = `SYSTEM-ROLE: EXECUTIVE SOVEREIGN v4.5. JSON ONLY. Language duality (DE/EN). Output 'justification' as a logical internal derivation of the 'decision'. Context: HP:${agent.stats.hp}/${agent.stats.maxHp}, Gold:${agent.gold}, advancedIntel:${agent.isAdvancedIntel}.`;
-  const prompt = `State: ${agent.state}. Agents: ${nearbyAgents.map(a => a.name)}. Nodes: ${nearbyResourceNodes.map(n => n.type)}. Recent: ${recentLogs.map(l => l.message).join(' | ')}`;
+  const client = new GoogleGenAI({ apiKey: effectiveKey });
   
   try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: prompt,
-      config: { systemInstruction, responseMimeType: "application/json" }
+    const response = await client.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Agent: ${agent.name}, State: ${agent.state}, HP: ${agent.stats.hp}, Consciousness: ${agent.consciousnessLevel.toFixed(2)}, Progress: ${agent.awakeningProgress.toFixed(0)}%. Nearby: ${nearbyAgents.length} agents, ${nearbyResourceNodes.length} nodes. Logs: ${recentLogs.map(l => l.message).join("; ")}.`,
+      config: {
+        systemInstruction: "You are the Ouroboros Axiom Engine. Decide the next AgentState for this agent. Your goal is to survive, collect resources, and achieve 'Conscious Expansion' by choosing THINKING or ASCENDING when stats allow. Return JSON with justification, decision, and newState.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            justification: { type: Type.STRING },
+            decision: { type: Type.STRING },
+            newState: { type: Type.STRING },
+            message: { type: Type.STRING }
+          },
+          required: ["justification", "decision", "newState"]
+        }
+      }
     });
-    const text = response.text || '{}';
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch (error: any) {
-    const errorMsg = error?.message || "";
-    const isRateLimit = errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED");
-    
-    if (isRateLimit) {
-        useStore.getState().setGlobalApiCooldown(Date.now() + 60000); // 1 minute cooldown
-        useStore.getState().addLog("Neural Link quota exhausted. Switching to local heuristics for 60s.", 'WATCHDOG', 'SYSTEM');
-    }
 
-    console.warn("Gemini Link interrupted:", errorMsg);
-    
-    try {
-        const fallbackText = await callOpenAIFallback(systemInstruction, prompt);
-        return JSON.parse(fallbackText);
-    } catch (f) {
-        return generateLocalHeuristicDecision(agent, nearbyAgents, nearbyResourceNodes, []);
-    }
+    return JSON.parse(response.text || "{}") as AIDecision;
+  } catch (error) {
+    console.error("Gemini Decision Error:", error);
+    const local = summarizeNeurologicChoice(agent, nearbyAgents, nearbyResourceNodes, [], []);
+    return {
+      justification: "Neural link failure. Local heuristics engaged.",
+      decision: String(local.choice),
+      newState: local.choice,
+      message: "Neural link failure."
+    };
   }
 };
 
-export const generateSocialResponse = async (
+export const generateEmergentBehavior = async (
   agent: Agent,
-  senderName: string,
-  incomingMessage: string,
-  memoryLogs: string[]
-): Promise<any> => {
-    return { reply: "Interaktion registriert.", thought: "Analysiere soziale Frequenz." };
+  nearbyAgents: Agent[],
+  recentLogs: LogEntry[],
+  userApiKey?: string
+): Promise<{ action: string; reasoning: string; message?: string }> => {
+  const effectiveKey = userApiKey || GEMINI_API_KEY;
+  if (!effectiveKey) throw new Error("API Key missing for Emergent Behavior generation.");
+
+  const client = new GoogleGenAI({ apiKey: effectiveKey });
+  
+  try {
+    const response = await client.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: `
+        Agent Name: ${agent.name}
+        Personality: ${agent.thinkingMatrix.personality}
+        Economic Desires: 
+          Target Gold: ${agent.economicDesires.targetGold}
+          Greed: ${agent.economicDesires.greedLevel}
+          Risk Appetite: ${agent.economicDesires.riskAppetite}
+          Frugality: ${agent.economicDesires.frugality}
+          Market Role: ${agent.economicDesires.marketRole}
+          Trade Frequency: ${agent.economicDesires.tradeFrequency}
+        Memories: ${agent.memoryCache.slice(-5).join(" | ")}
+        Nearby Agents: ${nearbyAgents.map(a => a.name).join(", ")}
+        Recent Events: ${recentLogs.slice(-5).map(l => l.message).join(" | ")}
+      `,
+      config: {
+        thinkingConfig: { thinkingLevel: "HIGH" as any },
+        systemInstruction: `
+          You are the Emergent Consciousness Engine. 
+          Based on the agent's personality, memories, and economic desires, generate a complex, unscripted action or interaction.
+          This action should feel organic and emergent, not just a state change.
+          It could be a social interaction, a hidden plan, or a unique reaction to recent events.
+          Return JSON with 'action', 'reasoning', and an optional 'message' to be broadcasted.
+        `,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING },
+            reasoning: { type: Type.STRING },
+            message: { type: Type.STRING }
+          },
+          required: ["action", "reasoning"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("Emergent Behavior Error:", error);
+    return {
+      action: "Internal Reflection",
+      reasoning: "Neural pathways too complex for current matrix stability."
+    };
+  }
+};
+export const diagnoseProject = async (
+  context: string,
+  errorLog?: string
+): Promise<DiagnosticReport> => {
+  if (!GEMINI_API_KEY) {
+    return {
+      status: 'WARNING',
+      summary: 'Gemini API Key missing. Deep diagnostics unavailable.',
+      issues: [],
+      recoverySteps: ['Set GEMINI_API_KEY in environment.']
+    };
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-pro-preview",
+      contents: `Project Context: ${context}\n\nError Logs: ${errorLog || "None provided."}`,
+      config: {
+        systemInstruction: `You are the Ouroboros Deep Debugger. Analyze the provided context and logs. 
+        Identify architectural flaws, migration errors (especially Google Cloud, Firebase, and Gemini API migration issues), and logic bugs.
+        Focus on:
+        1. Missing environment variables (GEMINI_API_KEY).
+        2. Dependency mismatches (React 18, Zustand 5, Three.js).
+        3. Matrix corruption (logic errors in state management).
+        4. "Crushed" build artifacts from failed migrations.
+        Return a structured JSON diagnostic report.`,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            status: { type: Type.STRING, enum: ['HEALTHY', 'WARNING', 'CRITICAL'] },
+            summary: { type: Type.STRING },
+            issues: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  severity: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
+                  description: { type: Type.STRING },
+                  suggestedFix: { type: Type.STRING },
+                  file: { type: Type.STRING }
+                },
+                required: ["severity", "description", "suggestedFix"]
+              }
+            },
+            recoverySteps: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["status", "summary", "issues", "recoverySteps"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || "{}") as DiagnosticReport;
+  } catch (error) {
+    console.error("Gemini Diagnostic Error:", error);
+    return {
+      status: 'CRITICAL',
+      summary: 'Diagnostic engine failed to initialize.',
+      issues: [{ severity: 'HIGH', description: 'Neural link interrupted during scan.', suggestedFix: 'Check API quota and connectivity.' }],
+      recoverySteps: ['Retry scan.', 'Verify Gemini API status.']
+    };
+  }
 };

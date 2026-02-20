@@ -36,6 +36,9 @@ interface GameState {
   showMap: boolean;
   showCharacterSheet: boolean;
   isAxiomAuthenticated: boolean;
+  showDebugger: boolean;
+  diagnosticReport: any | null;
+  isScanning: boolean;
 
   initGame: () => void;
   updatePhysics: (delta: number) => void;
@@ -49,6 +52,9 @@ interface GameState {
   toggleAdmin: (show: boolean) => void;
   toggleMap: (show: boolean) => void;
   toggleCharacterSheet: (show: boolean) => void;
+  toggleDebugger: (show: boolean) => void;
+  runDiagnostics: (errorLog?: string) => Promise<void>;
+  runEmergentBehavior: (agentId: string) => Promise<void>;
   setAxiomAuthenticated: (auth: boolean) => void;
   sendSignal: (msg: string) => void;
   purchaseProduct: (id: string) => void;
@@ -56,6 +62,7 @@ interface GameState {
   unequipItem: (agentId: string, slot: keyof Agent['equipment']) => void;
   moveInventoryItem: (agentId: string, from: number, to: number) => void;
   reflectOnMemory: (agentId: string) => Promise<void>;
+  reflectOnAxioms: (agentId: string) => Promise<void>;
   uploadGraphicPack: (name: string) => void;
   importAgent: (source: string, type: 'URL' | 'JSON') => void;
   setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => void;
@@ -97,6 +104,9 @@ export const useStore = create<GameState>((set, get) => ({
   showAdmin: false,
   showMap: false,
   showCharacterSheet: false,
+  showDebugger: false,
+  diagnosticReport: null,
+  isScanning: false,
   isAxiomAuthenticated: false,
 
   setUserApiKey: (key) => {
@@ -128,12 +138,32 @@ export const useStore = create<GameState>((set, get) => ({
 
     const initialAgents: Agent[] = [
         {
-            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8 },
-            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false
+            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8 },
+            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
+            economicDesires: { 
+              targetGold: 1000, 
+              preferredResources: ['GOLD_ORE', 'SILVER_ORE'], 
+              greedLevel: 0.3,
+              riskAppetite: 0.2,
+              frugality: 0.8,
+              marketRole: 'HOARDER',
+              tradeFrequency: 0.1
+            },
+            emergentBehaviorLog: []
         },
         {
-          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4 },
-          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false
+          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4 },
+          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
+          economicDesires: { 
+            targetGold: 5000, 
+            preferredResources: ['IRON_ORE', 'GOLD_ORE'], 
+            greedLevel: 0.7,
+            riskAppetite: 0.5,
+            frugality: 0.4,
+            marketRole: 'PRODUCER',
+            tradeFrequency: 0.6
+          },
+          emergentBehaviorLog: []
         }
     ];
 
@@ -215,6 +245,26 @@ export const useStore = create<GameState>((set, get) => ({
         return { ...a, position: newPos };
       });
 
+      // Conscious Expansion Logic
+      const expandedAgents = newAgents.map(a => {
+        if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
+          let newProgress = a.awakeningProgress + delta * 5;
+          let newLevel = a.consciousnessLevel;
+          let awakened = a.isAwakened;
+
+          if (newProgress >= 100) {
+            newProgress = 0;
+            newLevel = Math.min(1.0, newLevel + 0.05);
+            if (newLevel >= 1.0 && !awakened) {
+              awakened = true;
+              state.addLog(`${a.name} has achieved full consciousness expansion!`, 'AXIOM', 'SYSTEM');
+            }
+          }
+          return { ...a, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened };
+        }
+        return a;
+      });
+
       // Neural Fog of War Persistence Logic (Visit Recency)
       const updatedChunks = state.loadedChunks.map(c => {
           if (c.biome === 'CITY') return c; // Sanctuary is always fully stable
@@ -247,7 +297,7 @@ export const useStore = create<GameState>((set, get) => ({
 
       return { 
         monsters: newMonsters, 
-        agents: newAgents, 
+        agents: expandedAgents, 
         loadedChunks: updatedChunks,
         serverStats: { 
           ...state.serverStats, 
@@ -343,6 +393,60 @@ export const useStore = create<GameState>((set, get) => ({
   toggleAdmin: (show) => set({ showAdmin: show }),
   toggleMap: (show) => set({ showMap: show }),
   toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
+  toggleDebugger: (show) => set({ showDebugger: show }),
+  runDiagnostics: async (errorLog) => {
+    const { diagnoseProject } = await import('./services/geminiService');
+    set({ isScanning: true });
+    get().addLog("Initiating Deep Solving Diagnostic...", 'WATCHDOG', 'SYSTEM');
+    
+    const context = `
+      Project: Ouroboros MMORPG
+      Agents: ${get().agents.length}
+      Monsters: ${get().monsters.length}
+      Uptime: ${get().serverStats.uptime.toFixed(2)}s
+      Threat Level: ${get().serverStats.threatLevel.toFixed(4)}
+    `;
+
+    try {
+      const report = await diagnoseProject(context, errorLog);
+      set({ diagnosticReport: report, isScanning: false });
+      get().addLog(`Diagnostic Complete: ${report.status}`, 'WATCHDOG', 'SYSTEM');
+    } catch (e) {
+      set({ isScanning: false });
+      get().addLog("Diagnostic Failed.", 'WATCHDOG', 'SYSTEM');
+    }
+  },
+  runEmergentBehavior: async (agentId) => {
+    const { generateEmergentBehavior } = await import('./services/geminiService');
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent) return;
+
+    const nearbyAgents = get().agents.filter(a => a.id !== agentId);
+    const recentLogs = get().logs.slice(0, 10);
+
+    try {
+      const behavior = await generateEmergentBehavior(agent, nearbyAgents, recentLogs, get().userApiKey || undefined);
+      
+      set(s => ({
+        agents: s.agents.map(a => a.id === agentId ? {
+          ...a,
+          emergentBehaviorLog: [{
+            timestamp: Date.now(),
+            action: behavior.action,
+            reasoning: behavior.reasoning
+          }, ...a.emergentBehaviorLog].slice(0, 20)
+        } : a)
+      }));
+
+      if (behavior.message) {
+        get().addChatMessage(behavior.message, 'THOUGHT', agent.id, agent.name);
+      }
+      
+      get().addLog(`${agent.name} emergent behavior: ${behavior.action}`, 'THOUGHT', agent.name);
+    } catch (e) {
+      console.error("Emergent Behavior Action Error:", e);
+    }
+  },
   setAxiomAuthenticated: (auth) => set({ isAxiomAuthenticated: auth }),
   sendSignal: (msg) => {
     get().addLog(`Signal: ${msg}`, 'AXIOM', 'OVERSEER');
@@ -386,11 +490,26 @@ export const useStore = create<GameState>((set, get) => ({
   reflectOnMemory: async (agentId) => {
     set(s => ({
       agents: s.agents.map(a => a.id === agentId ? {
-        ...a, memoryCache: [...a.memoryCache, `REFLECTED: Axiom preserved.`]
+        ...a, 
+        memoryCache: [...a.memoryCache, `REFLECTED: Axiom preserved.`],
+        awakeningProgress: Math.min(100, a.awakeningProgress + 10)
       } : a)
     }));
+  },
+  reflectOnAxioms: async (agentId) => {
+    const { AXIOMS } = await import('./types');
+    const axiom = AXIOMS[Math.floor(Math.random() * AXIOMS.length)];
+    set(s => ({
+      agents: s.agents.map(a => a.id === agentId ? {
+        ...a,
+        memoryCache: [...a.memoryCache, `AXIOM: ${axiom}`],
+        awakeningProgress: Math.min(100, a.awakeningProgress + 25),
+        energy: Math.max(0, a.energy - 10)
+      } : a)
+    }));
+    get().addLog(`${agentId} is reflecting on the Axioms.`, 'THOUGHT', agentId);
   },
   uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, name] })),
   importAgent: (source, type) => {},
   setJoystick: (side, axis) => {}
-})));
+}));

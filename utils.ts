@@ -155,6 +155,28 @@ export const calculateAxiomaticWeightWithReason = (
              reason = "Suche nach tieferer Matrix-Erkenntnis";
              break;
 
+        case AgentState.THINKING:
+            const canExpand = agent.energy > 50 && agent.insightPoints > 10;
+            if (canExpand) {
+                baseUtility = 120 + (agent.consciousnessLevel * 100);
+                reason = "Erweiterung des neuralen Netzwerks initiiert";
+            } else {
+                baseUtility = 10;
+                reason = "Zu wenig Energie für tiefe Reflexion";
+            }
+            break;
+
+        case AgentState.ASCENDING:
+            const readyToAscend = agent.awakeningProgress > 80 || agent.consciousnessLevel > 0.8;
+            if (readyToAscend) {
+                baseUtility = 300;
+                reason = "Transzendenz der aktuellen Form steht bevor";
+            } else {
+                baseUtility = -50;
+                reason = "Noch nicht bereit für den Aufstieg";
+            }
+            break;
+
         case AgentState.IDLE:
             baseUtility = (1.1 - K_ENERGY) * 40 + (1.1 - K_INTEGRITY) * 20 + 15;
             reason = "Erschöpfung der neuralen Pfade";

@@ -131,6 +131,25 @@ export const AgentHUD = () => {
                             ></div>
                         </div>
                     </div>
+
+                    <div>
+                        <div className="flex justify-between text-[10px] text-gray-500 uppercase font-bold">
+                            <span>Conscious Expansion</span>
+                            <span className="text-axiom-cyan">
+                                {String((agent.consciousnessLevel * 100).toFixed(1))}%
+                            </span>
+                        </div>
+                        <div className="h-1 w-full bg-gray-800 rounded-full mt-1 overflow-hidden relative">
+                            <div 
+                                className="h-full bg-axiom-cyan transition-all duration-500"
+                                style={{ width: `${(agent.consciousnessLevel * 100).toFixed(0)}%` }}
+                            ></div>
+                            <div 
+                                className="absolute top-0 left-0 h-full bg-white/30 transition-all duration-300"
+                                style={{ width: `${(agent.awakeningProgress).toFixed(0)}%` }}
+                            ></div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div className="flex space-x-2">
