@@ -1,152 +1,72 @@
-import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { 
-  OrbitControls, 
-  PerspectiveCamera, 
-  Html, 
-  Float
-} from '@react-three/drei';
-import * as THREE from 'three';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { create } from 'zustand';
 import axios from 'axios';
 import { 
-  ShieldCheck, 
-  Zap, 
-  Globe,
-  Send,
-  Terminal,
-  CloudUpload,
-  Users,
-  Crown,
-  Map,
-  Upload,
-  Shield,
-  AlertTriangle,
-  Activity,
-  Brain,
-  Eye,
-  Package
+  Terminal, Brain, Activity, Shield, Eye, Package, Zap,
+  ChevronUp, ChevronDown, Map, Users, MessageSquare, Upload, 
+  Send, AlertTriangle, Crown, ShieldCheck, Globe
 } from 'lucide-react';
-
-// Firebase imports
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  onSnapshot, 
-  collection,
-  serverTimestamp
-} from 'firebase/firestore';
-
 import './App.css';
 
 /**
  * OUROBOROS: NEURAL EMERGENCE v3.0
- * PostgreSQL Duden-Register + Firebase Multiplayer + 3D World
+ * PostgreSQL Duden-Register + 2D Canvas World
  * 
  * 5 AXIOME:
  * I.   COMMUNICATION: All interaction via visible stream
  * II.  EROSION: Stability degrades, corruption spreads
- * III. PUNCTUATION: PostgreSQL + Firebase timestamps
+ * III. PUNCTUATION: PostgreSQL timestamps every change
  * IV.  RECURSION: Memory persists across sessions
  * V.   DUALITY: Items have power AND corruption
  */
 
-// Configuration
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 
-// Firebase Config - Using environment or default
-const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "demo-key",
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "demo.firebaseapp.com",
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "gemini-e603b",
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "demo.appspot.com",
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_ID || "000000000000",
-  appId: process.env.REACT_APP_FIREBASE_APP_ID || "1:000:web:000"
-};
-
-// Initialize Firebase (gracefully handle missing config)
-let app, auth, db;
-try {
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-} catch (e) {
-  console.warn('Firebase init skipped - using PostgreSQL only');
-}
-
-const uuid = () => Math.random().toString(36).substring(2, 8).toUpperCase();
-
-// --- ZUSTAND STORE (HYBRID: POSTGRESQL + FIREBASE) ---
-const useGameStore = create((set, get) => ({
-  // PostgreSQL Data
+// ============== ZUSTAND STORE ==============
+const useStore = create((set, get) => ({
   agents: [],
   monsters: [],
   pois: [],
   chunks: [],
+  chatMessages: [],
   stabilityIndex: 1.0,
   threatLevel: 0.05,
-  
-  // Firebase Multiplayer
-  user: null,
-  otherPlayers: [],
-  
-  // UI State
-  isConfirmed: false,
+  uptime: 0,
   selectedAgentId: null,
   showMap: false,
   showImporter: false,
   showTierPanel: false,
-  logs: [],
+  isConnected: false,
+  isConfirmed: false,
+  cameraOffset: { x: 0, z: 0 },
+  zoom: 1,
   notary: null,
+  logs: [],
   
-  // Actions
   setWorldState: (state) => set({
     agents: state.agents || [],
     monsters: state.monsters || [],
     pois: state.pois || [],
     chunks: state.chunks || [],
+    chatMessages: state.chat_messages || state.chatMessages || [],
     stabilityIndex: state.stability_index || state.stabilityIndex || 1.0,
     threatLevel: state.threat_level || state.threatLevel || 0.05,
+    uptime: state.uptime || 0,
   }),
   
-  setUser: (user) => set({ user }),
   selectAgent: (id) => set({ selectedAgentId: id }),
   toggleMap: () => set(s => ({ showMap: !s.showMap })),
   toggleImporter: () => set(s => ({ showImporter: !s.showImporter })),
   toggleTierPanel: () => set(s => ({ showTierPanel: !s.showTierPanel })),
+  setConnected: (connected) => set({ isConnected: connected }),
+  setCameraOffset: (offset) => set({ cameraOffset: offset }),
+  setZoom: (zoom) => set({ zoom: Math.max(0.5, Math.min(3, zoom)) }),
   setNotary: (notary) => set({ notary }),
   
-  addLog: async (msg, type = 'system', sender = 'SYSTEM') => {
-    const { user } = get();
-    const logId = uuid();
-    const logEntry = { id: logId, msg, type, sender, time: Date.now() };
-    
+  addLog: (msg, type = 'system', sender = 'SYSTEM') => {
+    const logEntry = { id: Date.now().toString(), msg, type, sender, time: Date.now() };
     set(state => ({ logs: [logEntry, ...state.logs].slice(0, 50) }));
-    
-    // Axiom III: Dual persistence
-    try {
-      // PostgreSQL
-      await axios.post(`${API_URL}/api/chat`, {
-        sender_id: user?.uid || 'anonymous',
-        sender_name: sender,
-        content: msg,
-        channel: type.toUpperCase()
-      });
-      
-      // Firebase (if available)
-      if (db && user) {
-        await setDoc(doc(db, 'ouroboros_logs', logId), {
-          ...logEntry,
-          timestamp: serverTimestamp()
-        });
-      }
-    } catch (e) {
-      console.error('Log sync error:', e);
-    }
   },
   
   confirmHandshake: (key) => {
@@ -159,294 +79,14 @@ const useGameStore = create((set, get) => ({
   }
 }));
 
-// --- 3D COMPONENTS ---
-
-const Agent3D = ({ agent, onClick }) => {
-  const meshRef = useRef();
-  const isAwakened = agent.is_awakened || agent.awakened;
-  const isPlayer = agent.faction === 'PLAYER';
-  const selectedId = useGameStore(s => s.selectedAgentId);
-  const isSelected = selectedId === agent.id;
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      // Floating animation for awakened agents
-      if (isAwakened) {
-        meshRef.current.position.y = Math.sin(state.clock.elapsedTime * 2) * 0.2 + 1;
-      }
-      // Rotation based on state
-      if (agent.state === 'THINKING') {
-        meshRef.current.rotation.y += 0.01;
-      }
-    }
-  });
-  
-  const color = isPlayer ? '#06b6d4' : '#ef4444';
-  const emissiveColor = isAwakened ? '#00f3ff' : '#000000';
-  
-  return (
-    <group 
-      position={[agent.position?.x || 0, 0, agent.position?.z || 0]}
-      onClick={(e) => { e.stopPropagation(); onClick(agent.id); }}
-    >
-      <Float speed={isAwakened ? 2 : 0} rotationIntensity={0.2} floatIntensity={isAwakened ? 0.5 : 0}>
-        {/* Body */}
-        <mesh ref={meshRef} castShadow position={[0, 1, 0]}>
-          <capsuleGeometry args={[0.4, 0.8, 4, 8]} />
-          <meshStandardMaterial 
-            color={color}
-            emissive={emissiveColor}
-            emissiveIntensity={isSelected ? 1.5 : 0.4}
-            roughness={0.1}
-            metalness={0.8}
-          />
-        </mesh>
-        
-        {/* Awakened Halo */}
-        {isAwakened && (
-          <mesh position={[0, 2.2, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.3, 0.02, 16, 32]} />
-            <meshStandardMaterial color="#00f3ff" emissive="#00f3ff" emissiveIntensity={2} />
-          </mesh>
-        )}
-        
-        {/* Selection Ring */}
-        {isSelected && (
-          <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.8, 1, 32]} />
-            <meshBasicMaterial color="#06b6d4" transparent opacity={0.5} />
-          </mesh>
-        )}
-      </Float>
-      
-      {/* Name Label */}
-      <Html position={[0, 2.8, 0]} center distanceFactor={15}>
-        <div className="agent-3d-label">
-          {agent.last_decision?.justification && (
-            <div className="agent-thought-bubble">
-              {agent.last_decision.justification.slice(0, 50)}...
-            </div>
-          )}
-          <div className={`agent-name-tag ${isAwakened ? 'awakened' : ''}`}>
-            {agent.name} [Lv.{agent.level || 1}]
-          </div>
-          <div className="agent-state-tag">{agent.state}</div>
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-const Monster3D = ({ monster }) => {
-  const meshRef = useRef();
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.005;
-    }
-  });
-  
-  if (monster.state === 'DEAD') return null;
-  
-  return (
-    <group position={[monster.position?.x || 0, 0, monster.position?.z || 0]}>
-      <mesh ref={meshRef} castShadow position={[0, monster.scale || 1, 0]}>
-        <dodecahedronGeometry args={[monster.scale || 1, 0]} />
-        <meshStandardMaterial 
-          color={monster.color || '#22c55e'}
-          emissive={monster.color || '#22c55e'}
-          emissiveIntensity={0.5}
-        />
-      </mesh>
-      <Html position={[0, (monster.scale || 1) * 2 + 1, 0]} center distanceFactor={15}>
-        <div className="monster-3d-label">
-          <div className="monster-hp-bar">
-            <div className="monster-hp-fill" style={{ width: `${(monster.hp / monster.max_hp) * 100}%` }} />
-          </div>
-          <span>{monster.name}</span>
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-const POI3D = ({ poi }) => {
-  const meshRef = useRef();
-  
-  useFrame((state) => {
-    if (meshRef.current && poi.type === 'SHRINE') {
-      meshRef.current.rotation.y += 0.02;
-      meshRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.3 + 1;
-    }
-  });
-  
-  const getColor = () => {
-    switch(poi.type) {
-      case 'SHRINE': return '#06b6d4';
-      case 'BANK_VAULT': return '#fbbf24';
-      case 'FORGE': return '#f97316';
-      case 'DUNGEON': return '#7c3aed';
-      default: return '#6b7280';
-    }
-  };
-  
-  return (
-    <group position={[poi.position?.x || 0, 0, poi.position?.z || 0]}>
-      {poi.type === 'SHRINE' && (
-        <mesh ref={meshRef} castShadow>
-          <octahedronGeometry args={[1.2, 0]} />
-          <meshStandardMaterial 
-            color={getColor()}
-            emissive={getColor()}
-            emissiveIntensity={1.5}
-            wireframe
-          />
-        </mesh>
-      )}
-      {poi.type === 'BANK_VAULT' && (
-        <mesh castShadow position={[0, 1.5, 0]}>
-          <boxGeometry args={[4, 3, 4]} />
-          <meshStandardMaterial color={getColor()} metalness={0.8} roughness={0.2} />
-        </mesh>
-      )}
-      {poi.type === 'FORGE' && (
-        <>
-          <mesh castShadow position={[0, 1, 0]}>
-            <cylinderGeometry args={[1.5, 2, 2, 8]} />
-            <meshStandardMaterial color={getColor()} emissive="#ff4500" emissiveIntensity={0.5} />
-          </mesh>
-          <pointLight position={[0, 2, 0]} color="#ff4500" intensity={2} distance={10} />
-        </>
-      )}
-      {!['SHRINE', 'BANK_VAULT', 'FORGE'].includes(poi.type) && (
-        <mesh castShadow position={[0, 0.5, 0]}>
-          <boxGeometry args={[2, 1, 2]} />
-          <meshStandardMaterial color={getColor()} />
-        </mesh>
-      )}
-      <Html position={[0, 3, 0]} center distanceFactor={20}>
-        <div className={`poi-3d-label ${poi.is_discovered ? 'discovered' : 'undiscovered'}`}>
-          {poi.is_discovered ? poi.type : '???'}
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-const Sanctuary3D = () => {
-  const meshRef = useRef();
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.position.y = 5 + Math.sin(state.clock.elapsedTime * 0.5) * 0.5;
-    }
-  });
-  
-  return (
-    <group position={[0, 0, 0]}>
-      {/* Monolith */}
-      <mesh ref={meshRef} castShadow>
-        <boxGeometry args={[4, 10, 4]} />
-        <meshStandardMaterial 
-          color="#111" 
-          metalness={1} 
-          roughness={0}
-          emissive="#06b6d4"
-          emissiveIntensity={0.1}
-        />
-      </mesh>
-      
-      {/* Base Platform */}
-      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
-        <circleGeometry args={[15, 64]} />
-        <meshStandardMaterial 
-          color="#080808" 
-          emissive="#06b6d4" 
-          emissiveIntensity={0.15}
-          metalness={0.9}
-          roughness={0.1}
-        />
-      </mesh>
-      
-      {/* Axiom Rings */}
-      {[0, 1, 2, 3, 4].map(i => (
-        <mesh key={i} position={[0, 0.1, 0]} rotation={[-Math.PI/2, 0, i * Math.PI / 2.5]}>
-          <ringGeometry args={[12 + i * 2, 12.2 + i * 2, 64]} />
-          <meshBasicMaterial color="#06b6d4" transparent opacity={0.1 + i * 0.05} />
-        </mesh>
-      ))}
-      
-      <Html position={[0, 12, 0]} center>
-        <div className="sanctuary-label">SANCTUARY</div>
-      </Html>
-    </group>
-  );
-};
-
-const WorldScene = () => {
-  const agents = useGameStore(s => s.agents);
-  const monsters = useGameStore(s => s.monsters);
-  const pois = useGameStore(s => s.pois);
-  const selectAgent = useGameStore(s => s.selectAgent);
-  
-  return (
-    <>
-      <PerspectiveCamera makeDefault position={[40, 40, 40]} fov={50} />
-      <OrbitControls 
-        maxPolarAngle={Math.PI / 2.1} 
-        minDistance={15}
-        maxDistance={150}
-        makeDefault 
-      />
-      
-      <ambientLight intensity={0.3} />
-      <directionalLight 
-        position={[30, 50, 30]} 
-        intensity={1.2} 
-        castShadow
-        shadow-mapSize={[2048, 2048]}
-      />
-      <pointLight position={[0, 20, 0]} color="#06b6d4" intensity={0.5} />
-      
-      <Sanctuary3D />
-      
-      {agents.map(agent => (
-        <Agent3D key={agent.id} agent={agent} onClick={selectAgent} />
-      ))}
-      
-      {monsters.map(monster => (
-        <Monster3D key={monster.id} monster={monster} />
-      ))}
-      
-      {pois.map(poi => (
-        <POI3D key={poi.id} poi={poi} />
-      ))}
-      
-      {/* Ground Grid */}
-      <gridHelper args={[200, 40, "#0a1a1a", "#050a0a"]} position={[0, -0.1, 0]} />
-      
-      {/* Ground Plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
-        <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#020205" />
-      </mesh>
-      
-      {/* Simple fog for atmosphere */}
-      <fog attach="fog" args={['#020205', 50, 200]} />
-    </>
-  );
-};
-
-// --- UI COMPONENTS ---
-
-const LiabilityShield = ({ onConfirm }) => {
+// ============== LIABILITY SHIELD ==============
+const LiabilityShield = () => {
   const [key, setKey] = useState("");
   const [error, setError] = useState(false);
+  const confirmHandshake = useStore(s => s.confirmHandshake);
   
   const handleConfirm = () => {
-    if (onConfirm(key)) {
-      setError(false);
-    } else {
+    if (!confirmHandshake(key)) {
       setError(true);
     }
   };
@@ -479,98 +119,361 @@ const LiabilityShield = ({ onConfirm }) => {
   );
 };
 
-const AgentHUD = () => {
-  const selectedId = useGameStore(s => s.selectedAgentId);
-  const agents = useGameStore(s => s.agents);
-  const selectAgent = useGameStore(s => s.selectAgent);
+// ============== 2D CANVAS WORLD ==============
+const WorldCanvas = () => {
+  const canvasRef = useRef(null);
+  const agents = useStore(s => s.agents);
+  const monsters = useStore(s => s.monsters);
+  const pois = useStore(s => s.pois);
+  const chunks = useStore(s => s.chunks);
+  const selectAgent = useStore(s => s.selectAgent);
+  const cameraOffset = useStore(s => s.cameraOffset);
+  const setCameraOffset = useStore(s => s.setCameraOffset);
+  const zoom = useStore(s => s.zoom);
+  const setZoom = useStore(s => s.setZoom);
   
-  const agent = agents.find(a => a.id === selectedId);
+  const [isDragging, setIsDragging] = useState(false);
+  const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
+  
+  const worldToScreen = useCallback((wx, wz, canvas) => {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const scale = 4 * zoom;
+    return {
+      x: centerX + (wx - cameraOffset.x) * scale,
+      y: centerY + (wz - cameraOffset.z) * scale
+    };
+  }, [cameraOffset, zoom]);
+  
+  const screenToWorld = useCallback((sx, sy, canvas) => {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const scale = 4 * zoom;
+    return {
+      x: (sx - centerX) / scale + cameraOffset.x,
+      z: (sy - centerY) / scale + cameraOffset.z
+    };
+  }, [cameraOffset, zoom]);
+  
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setLastMouse({ x: e.clientX, y: e.clientY });
+  };
+  
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - lastMouse.x;
+    const dy = e.clientY - lastMouse.y;
+    const scale = 4 * zoom;
+    setCameraOffset({
+      x: cameraOffset.x - dx / scale,
+      z: cameraOffset.z - dy / scale
+    });
+    setLastMouse({ x: e.clientX, y: e.clientY });
+  };
+  
+  const handleMouseUp = () => setIsDragging(false);
+  const handleWheel = (e) => {
+    e.preventDefault();
+    setZoom(zoom + (e.deltaY > 0 ? -0.1 : 0.1));
+  };
+  
+  const handleClick = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top, canvas);
+    
+    for (const agent of agents) {
+      const dist = Math.hypot(agent.position?.x - worldPos.x, agent.position?.z - worldPos.z);
+      if (dist < 3) {
+        selectAgent(agent.id);
+        return;
+      }
+    }
+    selectAgent(null);
+  };
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    
+    const render = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      
+      // Background
+      ctx.fillStyle = '#020205';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const scale = 4 * zoom;
+      
+      // Draw chunks
+      chunks.forEach(chunk => {
+        const { x, y } = worldToScreen(chunk.x * 80, chunk.z * 80, canvas);
+        const size = 80 * scale;
+        
+        let color = '#1a2a1a';
+        if (chunk.biome === 'CITY') color = '#1a1a2e';
+        else if (chunk.biome === 'FOREST') color = '#1e3a1e';
+        else if (chunk.biome === 'MOUNTAIN') color = '#2d2d2d';
+        
+        ctx.fillStyle = color;
+        ctx.fillRect(x - size/2, y - size/2, size, size);
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.strokeRect(x - size/2, y - size/2, size, size);
+        
+        // Corruption overlay
+        if (chunk.corruption_level > 0.3) {
+          ctx.fillStyle = `rgba(124, 58, 237, ${chunk.corruption_level * 0.3})`;
+          ctx.fillRect(x - size/2, y - size/2, size, size);
+        }
+        
+        if (chunk.biome === 'CITY' || chunk.cell_type === 'SANCTUARY') {
+          ctx.fillStyle = 'rgba(6,182,212,0.2)';
+          ctx.fillRect(x - size/2, y - size/2, size, size);
+          ctx.fillStyle = '#06b6d4';
+          ctx.font = 'bold 10px Orbitron, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('SANCTUARY', x, y);
+        }
+      });
+      
+      // Draw POIs
+      pois.forEach(poi => {
+        const { x, y } = worldToScreen(poi.position?.x || 0, poi.position?.z || 0, canvas);
+        let color = '#f59e0b';
+        if (poi.type === 'SHRINE') color = '#06b6d4';
+        else if (poi.type === 'BANK_VAULT') color = '#fbbf24';
+        else if (poi.type === 'FORGE') color = '#f97316';
+        else if (poi.type === 'DUNGEON') color = '#7c3aed';
+        
+        const size = poi.type === 'BANK_VAULT' || poi.type === 'FORGE' ? 16 : 10;
+        
+        if (poi.type === 'SHRINE') {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(x, y - size);
+          ctx.lineTo(x + size * 0.7, y);
+          ctx.lineTo(x, y + size);
+          ctx.lineTo(x - size * 0.7, y);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillStyle = color;
+          ctx.fillRect(x - size/2, y - size/2, size, size);
+        }
+        
+        ctx.fillStyle = poi.is_discovered ? 'rgba(255,255,255,0.6)' : color;
+        ctx.font = '8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(poi.is_discovered ? poi.type : '???', x, y - size - 4);
+      });
+      
+      // Draw monsters
+      monsters.forEach(monster => {
+        if (monster.state === 'DEAD') return;
+        const { x, y } = worldToScreen(monster.position?.x || 0, monster.position?.z || 0, canvas);
+        const size = 8 * (monster.scale || 1);
+        
+        ctx.fillStyle = monster.color || '#22c55e';
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.shadowColor = monster.color || '#22c55e';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // HP bar
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - 10, y - size - 8, 20, 3);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(x - 10, y - size - 8, 20 * (monster.hp / monster.max_hp), 3);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(monster.name, x, y + size + 12);
+      });
+      
+      // Draw agents
+      agents.forEach(agent => {
+        const { x, y } = worldToScreen(agent.position?.x || 0, agent.position?.z || 0, canvas);
+        const isPlayer = agent.faction === 'PLAYER';
+        const isSelected = useStore.getState().selectedAgentId === agent.id;
+        const isAwakened = agent.is_awakened || agent.awakened;
+        
+        // Selection ring
+        if (isSelected) {
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, 18, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        // Body
+        ctx.fillStyle = isPlayer ? '#06b6d4' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Head
+        ctx.fillStyle = isPlayer ? '#0891b2' : '#dc2626';
+        ctx.beginPath();
+        ctx.arc(x, y - 8, 5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Awakened halo
+        if (isAwakened) {
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y - 12, 8, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        // Name tag
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        const nameWidth = ctx.measureText(agent.name).width + 8;
+        ctx.fillRect(x - nameWidth/2, y - 30, nameWidth, 14);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(agent.name, x, y - 20);
+        
+        // State
+        if (agent.state !== 'IDLE') {
+          ctx.fillStyle = agent.state === 'COMBAT' ? '#ef4444' : '#06b6d4';
+          ctx.font = '7px sans-serif';
+          ctx.fillText(agent.state, x, y + 22);
+        }
+      });
+      
+      // Coordinates
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`[${cameraOffset.x.toFixed(0)}, ${cameraOffset.z.toFixed(0)}] zoom: ${zoom.toFixed(1)}x`, 10, canvas.height - 10);
+      
+      animationId = requestAnimationFrame(render);
+    };
+    
+    render();
+    return () => cancelAnimationFrame(animationId);
+  }, [agents, monsters, pois, chunks, cameraOffset, zoom, worldToScreen]);
+  
+  return (
+    <canvas
+      ref={canvasRef}
+      className="world-canvas"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onWheel={handleWheel}
+      onClick={handleClick}
+      data-testid="world-canvas"
+    />
+  );
+};
+
+// ============== UI COMPONENTS ==============
+const AgentHUD = () => {
+  const selectedAgentId = useStore(s => s.selectedAgentId);
+  const agents = useStore(s => s.agents);
+  const selectAgent = useStore(s => s.selectAgent);
+  
+  const agent = agents.find(a => a.id === selectedAgentId);
   if (!agent) return null;
   
   return (
-    <div className="agent-hud-3d" data-testid="agent-hud-3d">
+    <div className="agent-hud" data-testid="agent-hud">
       <button className="close-btn" onClick={() => selectAgent(null)}>×</button>
-      
       <h2>{agent.name}</h2>
-      <div className="agent-badges">
+      <div className="agent-meta">
         <span className="level-badge">LVL {agent.level || 1}</span>
         <span className="state-badge">{agent.state}</span>
         {(agent.is_awakened || agent.awakened) && (
-          <span className="awakened-badge"><Zap size={10} /> AWAKENED</span>
+          <span className="awakened-badge"><Zap size={10} /> Awakened</span>
         )}
       </div>
       
       {agent.last_decision && (
         <div className="decision-box">
-          <Brain size={12} />
-          <span className="decision-title">{agent.last_decision.decision}</span>
-          <p>{agent.last_decision.justification}</p>
+          <div className="decision-header"><Brain size={12} /> {agent.last_decision.decision}</div>
+          <div className="decision-text">{agent.last_decision.justification}</div>
         </div>
       )}
       
-      <div className="stats-row">
-        <div className="stat">
-          <Eye size={12} />
-          <span>Vision: {agent.vision_range?.toFixed(0)}u</span>
-        </div>
-        <div className="stat">
-          <Package size={12} />
-          <span>Gold: {agent.gold}</span>
+      <div className="stats-grid">
+        <div className="stat-item"><Eye size={12} /><span>Vision: {agent.vision_range?.toFixed(0)}u</span></div>
+        <div className="stat-item"><Package size={12} /><span>Gold: {agent.gold}</span></div>
+      </div>
+      
+      <div className="progress-section">
+        <div className="progress-item">
+          <div className="progress-header"><span>Consciousness</span><span>{((agent.consciousness_level || 0) * 100).toFixed(1)}%</span></div>
+          <div className="progress-bar"><div className="progress-fill consciousness" style={{ width: `${(agent.consciousness_level || 0) * 100}%` }} /></div>
         </div>
       </div>
       
-      <div className="progress-bar-container">
-        <span>Consciousness</span>
-        <div className="progress-bar">
-          <div 
-            className="progress-fill consciousness" 
-            style={{ width: `${(agent.consciousness_level || 0) * 100}%` }}
-          />
-        </div>
-        <span>{((agent.consciousness_level || 0) * 100).toFixed(1)}%</span>
-      </div>
-      
-      <div className="agent-coords">
-        [{agent.position?.x?.toFixed(0)}, {agent.position?.z?.toFixed(0)}]
-      </div>
+      <div className="hud-footer">[{agent.position?.x?.toFixed(0)}, {agent.position?.z?.toFixed(0)}]</div>
     </div>
   );
 };
 
 const CollectiveTerminal = () => {
-  const logs = useGameStore(s => s.logs);
-  const addLog = useGameStore(s => s.addLog);
-  const user = useGameStore(s => s.user);
+  const logs = useStore(s => s.logs);
+  const chatMessages = useStore(s => s.chatMessages);
+  const addLog = useStore(s => s.addLog);
   const [input, setInput] = useState('');
   const scrollRef = useRef();
   
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs]);
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [logs, chatMessages]);
   
-  const sendImpulse = () => {
+  const allLogs = [...logs, ...chatMessages.map(m => ({
+    id: m.id,
+    msg: m.content,
+    type: m.channel?.toLowerCase() || 'chat',
+    sender: m.sender_name,
+    time: new Date(m.timestamp).getTime()
+  }))].sort((a, b) => b.time - a.time).slice(0, 50);
+  
+  const sendImpulse = async () => {
     if (!input.trim()) return;
-    addLog(input, 'notary', user?.uid?.slice(0, 6) || 'ANON');
+    addLog(input, 'notary', 'USER');
+    try {
+      await axios.post(`${API_URL}/api/chat`, {
+        sender_id: 'user',
+        sender_name: 'USER',
+        content: input,
+        channel: 'GLOBAL'
+      });
+    } catch (e) {
+      console.error('Chat error:', e);
+    }
     setInput('');
   };
   
   return (
-    <div className="collective-terminal" data-testid="collective-terminal">
+    <div className="neural-terminal" data-testid="collective-terminal">
       <div className="terminal-header">
-        <Terminal size={14} />
-        <span>Collective Terminal</span>
-        <Activity size={14} className="pulse" />
+        <div className="terminal-title"><Terminal size={16} /><span>Collective Terminal</span></div>
+        <Activity size={16} className="pulse-icon" />
       </div>
       
-      <div className="terminal-logs" ref={scrollRef}>
-        {logs.map(log => (
+      <div ref={scrollRef} className="terminal-logs">
+        {allLogs.map(log => (
           <div key={log.id} className={`log-entry ${log.type}`}>
-            <span className="log-time">
-              [{new Date(log.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}]
-            </span>
-            <span className="log-sender">{log.sender}:</span>
+            <span className="log-time">[{new Date(log.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}]</span>
+            <span className={`log-sender ${log.type}`}>{log.sender}:</span>
             <span className="log-msg">{log.msg}</span>
           </div>
         ))}
@@ -584,69 +487,54 @@ const CollectiveTerminal = () => {
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && sendImpulse()}
         />
-        <button onClick={sendImpulse}>
-          <Send size={16} />
-        </button>
+        <button onClick={sendImpulse}><Send size={16} /></button>
       </div>
     </div>
   );
 };
 
 const StatusBar = () => {
-  const user = useGameStore(s => s.user);
-  const stabilityIndex = useGameStore(s => s.stabilityIndex);
-  const threatLevel = useGameStore(s => s.threatLevel);
-  const agents = useGameStore(s => s.agents);
-  const toggleMap = useGameStore(s => s.toggleMap);
-  const toggleImporter = useGameStore(s => s.toggleImporter);
-  const toggleTierPanel = useGameStore(s => s.toggleTierPanel);
+  const stabilityIndex = useStore(s => s.stabilityIndex);
+  const threatLevel = useStore(s => s.threatLevel);
+  const agents = useStore(s => s.agents);
+  const isConnected = useStore(s => s.isConnected);
+  const toggleMap = useStore(s => s.toggleMap);
+  const toggleImporter = useStore(s => s.toggleImporter);
+  const toggleTierPanel = useStore(s => s.toggleTierPanel);
   
   return (
-    <div className="status-bar-3d" data-testid="status-bar-3d">
+    <div className="status-bar" data-testid="status-bar">
       <div className="status-left">
-        <div className={`connection-badge ${user ? 'connected' : 'disconnected'}`}>
+        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
           <Globe size={14} />
-          <span>{user ? `NODE: ${user.uid?.slice(0, 8)}` : 'CONNECTING...'}</span>
+          <span>{isConnected ? 'DUDEN-REGISTER ACTIVE' : 'CONNECTING...'}</span>
         </div>
       </div>
       
       <div className="status-center">
-        <h1>OUROBOROS: NEURAL EMERGENCE</h1>
-        <span className="db-badge">PostgreSQL + Firebase v3.0</span>
+        <span className="title-text">OUROBOROS: NEURAL EMERGENCE</span>
+        <span className="db-badge">PostgreSQL v3.0</span>
       </div>
       
       <div className="status-right">
-        <div className="status-item">
-          <Shield size={14} />
-          <span>{(stabilityIndex * 100).toFixed(1)}%</span>
+        <div className="status-item"><Shield size={14} /><span>Stability: {(stabilityIndex * 100).toFixed(1)}%</span></div>
+        <div className={`status-item ${threatLevel > 0.5 ? 'danger' : 'threat'}`}>
+          <AlertTriangle size={14} /><span>Corruption: {(threatLevel * 100).toFixed(1)}%</span>
         </div>
-        <div className={`status-item ${threatLevel > 0.5 ? 'danger' : 'warning'}`}>
-          <AlertTriangle size={14} />
-          <span>{(threatLevel * 100).toFixed(1)}%</span>
-        </div>
-        <div className="status-item">
-          <Users size={14} />
-          <span>{agents.length}</span>
-        </div>
+        <div className="status-item"><Users size={14} /><span>Agents: {agents.length}</span></div>
         
-        <button className="toolbar-btn" onClick={toggleMap} title="World Map">
-          <Map size={16} />
-        </button>
-        <button className="toolbar-btn" onClick={toggleImporter} title="Import Character">
-          <Upload size={16} />
-        </button>
-        <button className="toolbar-btn" onClick={toggleTierPanel} title="Tier System">
-          <Crown size={16} />
-        </button>
+        <button className="toolbar-btn" onClick={toggleMap} title="World Map"><Map size={16} /></button>
+        <button className="toolbar-btn" onClick={toggleImporter} title="Import Character"><Upload size={16} /></button>
+        <button className="toolbar-btn" onClick={toggleTierPanel} title="Tier System"><Crown size={16} /></button>
       </div>
     </div>
   );
 };
 
 const CharacterImporter = () => {
-  const showImporter = useGameStore(s => s.showImporter);
-  const toggleImporter = useGameStore(s => s.toggleImporter);
-  const addLog = useGameStore(s => s.addLog);
+  const showImporter = useStore(s => s.showImporter);
+  const toggleImporter = useStore(s => s.toggleImporter);
+  const addLog = useStore(s => s.addLog);
   const [jsonInput, setJsonInput] = useState('');
   const [source, setSource] = useState('janitorai');
   const [loading, setLoading] = useState(false);
@@ -675,42 +563,29 @@ const CharacterImporter = () => {
   if (!showImporter) return null;
   
   return (
-    <div className="modal-overlay" onClick={toggleImporter}>
-      <div className="importer-modal" onClick={e => e.stopPropagation()}>
+    <div className="importer-overlay" onClick={toggleImporter} data-testid="character-importer">
+      <div className="importer-container" onClick={e => e.stopPropagation()}>
         <button className="close-btn" onClick={toggleImporter}>×</button>
-        
         <h2><Upload size={20} /> Character Import</h2>
-        <p>Import agents from JanitorAI or CharacterAI</p>
+        <p className="importer-subtitle">Import agents from JanitorAI or CharacterAI</p>
         
-        <div className="source-buttons">
+        <div className="source-selector">
           {['janitorai', 'characterai', 'custom'].map(s => (
-            <button 
-              key={s}
-              className={source === s ? 'active' : ''}
-              onClick={() => setSource(s)}
-            >
+            <button key={s} className={source === s ? 'active' : ''} onClick={() => setSource(s)}>
               {s.toUpperCase()}
             </button>
           ))}
         </div>
         
-        <textarea
-          placeholder="Paste JSON export..."
-          value={jsonInput}
-          onChange={e => setJsonInput(e.target.value)}
-        />
+        <textarea placeholder="Paste JSON export..." value={jsonInput} onChange={e => setJsonInput(e.target.value)} />
         
         {result && (
-          <div className={`result ${result.success ? 'success' : 'error'}`}>
+          <div className={`import-result ${result.success ? 'success' : 'error'}`}>
             {result.success ? `Agent "${result.agent.name}" imported!` : result.error}
           </div>
         )}
         
-        <button 
-          className="import-btn"
-          onClick={handleImport}
-          disabled={loading || !jsonInput.trim()}
-        >
+        <button className="import-btn" onClick={handleImport} disabled={loading || !jsonInput.trim()}>
           {loading ? 'Importing...' : 'Import Agent'}
         </button>
       </div>
@@ -719,12 +594,12 @@ const CharacterImporter = () => {
 };
 
 const TierPanel = () => {
-  const showTierPanel = useGameStore(s => s.showTierPanel);
-  const toggleTierPanel = useGameStore(s => s.toggleTierPanel);
-  const user = useGameStore(s => s.user);
-  const notary = useGameStore(s => s.notary);
-  const setNotary = useGameStore(s => s.setNotary);
-  const addLog = useGameStore(s => s.addLog);
+  const showTierPanel = useStore(s => s.showTierPanel);
+  const toggleTierPanel = useStore(s => s.toggleTierPanel);
+  const notary = useStore(s => s.notary);
+  const setNotary = useStore(s => s.setNotary);
+  const addLog = useStore(s => s.addLog);
+  const [userId, setUserId] = useState('');
   const [loading, setLoading] = useState(false);
   
   const tiers = [
@@ -733,42 +608,31 @@ const TierPanel = () => {
     { level: 3, name: 'Universal Key', desc: 'External emanations', color: '#fbbf24' }
   ];
   
-  useEffect(() => {
-    if (showTierPanel && user && !notary) {
-      // Try to fetch or create notary
-      const fetchNotary = async () => {
-        try {
-          const res = await axios.get(`${API_URL}/api/notaries/${user.uid}`);
-          setNotary(res.data);
-        } catch (e) {
-          if (e.response?.status === 404) {
-            const createRes = await axios.post(`${API_URL}/api/notaries`, {
-              user_id: user.uid,
-              email: user.email || `${user.uid}@ouroboros.net`
-            });
-            setNotary(createRes.data);
-          }
-        }
-      };
-      fetchNotary();
+  const handleLogin = async () => {
+    if (!userId.trim()) return;
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/api/notaries/${userId}`);
+      setNotary(res.data);
+    } catch (e) {
+      if (e.response?.status === 404) {
+        const createRes = await axios.post(`${API_URL}/api/notaries`, { user_id: userId });
+        setNotary(createRes.data);
+      }
+    } finally {
+      setLoading(false);
     }
-  }, [showTierPanel, user]);
+  };
   
   const handleUpgrade = async () => {
     if (!notary || notary.tier >= 3) return;
     setLoading(true);
-    
     try {
       const res = await axios.post(`${API_URL}/api/notaries/${notary.user_id}/upgrade`);
-      setNotary({
-        ...notary,
-        tier: res.data.new_tier,
-        tier_name: res.data.tier_name
-      });
+      setNotary({ ...notary, tier: res.data.new_tier, tier_name: res.data.tier_name });
       addLog(`Tier Upgrade: ${res.data.tier_name}`, 'system', 'AXIOM_ENGINE');
-      
       if (res.data.universal_key) {
-        addLog(`Universal Key Revealed: ${res.data.universal_key}`, 'system', 'AXIOM_ENGINE');
+        addLog(`Universal Key: ${res.data.universal_key}`, 'system', 'AXIOM_ENGINE');
       }
     } catch (e) {
       console.error('Upgrade failed:', e);
@@ -780,82 +644,72 @@ const TierPanel = () => {
   if (!showTierPanel) return null;
   
   return (
-    <div className="modal-overlay" onClick={toggleTierPanel}>
-      <div className="tier-modal" onClick={e => e.stopPropagation()}>
+    <div className="tier-overlay" onClick={toggleTierPanel} data-testid="tier-panel">
+      <div className="tier-container" onClick={e => e.stopPropagation()}>
         <button className="close-btn" onClick={toggleTierPanel}>×</button>
-        
         <h2><Crown size={20} /> Notary Tier System</h2>
-        <p>Axiom III: Punctuation - Kausalitätssicherung</p>
+        <p className="tier-subtitle">Axiom III: Punctuation</p>
         
-        {notary ? (
-          <>
-            <div className="current-tier">
-              <span>Current:</span>
-              <span className="tier-name" style={{ color: tiers[notary.tier - 1]?.color }}>
-                Tier {notary.tier}: {notary.tier_name || tiers[notary.tier - 1]?.name}
-              </span>
-            </div>
-            
-            <div className="tier-list">
+        {!notary ? (
+          <div className="tier-login">
+            <input type="text" placeholder="Enter User ID" value={userId} onChange={e => setUserId(e.target.value)} />
+            <button onClick={handleLogin} disabled={loading}>{loading ? 'Loading...' : 'Access Duden-Register'}</button>
+          </div>
+        ) : (
+          <div className="tier-info">
+            <div className="current-tier"><span>Current:</span><span className="tier-value" style={{ color: tiers[notary.tier - 1]?.color }}>Tier {notary.tier}: {notary.tier_name || tiers[notary.tier - 1]?.name}</span></div>
+            <div className="tier-levels">
               {tiers.map(tier => (
-                <div 
-                  key={tier.level}
-                  className={`tier-item ${notary.tier >= tier.level ? 'unlocked' : 'locked'}`}
-                  style={{ borderColor: notary.tier >= tier.level ? tier.color : '#333' }}
-                >
-                  <div className="tier-header">
-                    <span style={{ color: tier.color }}>Tier {tier.level}: {tier.name}</span>
-                    {notary.tier >= tier.level && <span className="unlocked-badge">UNLOCKED</span>}
-                  </div>
+                <div key={tier.level} className={`tier-level ${notary.tier >= tier.level ? 'unlocked' : 'locked'}`} style={{ borderColor: notary.tier >= tier.level ? tier.color : '#333' }}>
+                  <div className="tier-header"><span style={{ color: tier.color }}>Tier {tier.level}: {tier.name}</span>{notary.tier >= tier.level && <span className="unlocked-badge">UNLOCKED</span>}</div>
                   <p>{tier.desc}</p>
                 </div>
               ))}
             </div>
-            
-            {notary.tier < 3 && (
-              <button className="upgrade-btn" onClick={handleUpgrade} disabled={loading}>
-                {loading ? 'Upgrading...' : `Upgrade to Tier ${notary.tier + 1}`}
-              </button>
-            )}
-          </>
-        ) : (
-          <div className="loading">Connecting to Duden-Register...</div>
+            {notary.tier < 3 && <button className="upgrade-btn" onClick={handleUpgrade} disabled={loading}>{loading ? 'Upgrading...' : `Upgrade to Tier ${notary.tier + 1}`}</button>}
+          </div>
         )}
       </div>
     </div>
   );
 };
 
-// --- MAIN APP ---
+const WorldMap = () => {
+  const showMap = useStore(s => s.showMap);
+  const toggleMap = useStore(s => s.toggleMap);
+  const chunks = useStore(s => s.chunks);
+  const agents = useStore(s => s.agents);
+  
+  if (!showMap) return null;
+  
+  return (
+    <div className="world-map-overlay" onClick={toggleMap} data-testid="world-map">
+      <div className="world-map-container" onClick={e => e.stopPropagation()}>
+        <h2>WORLD PROJECTION (35x35)</h2>
+        <div className="map-canvas" style={{ width: 400, height: 400 }}>
+          {chunks.map(chunk => (
+            <div key={chunk.id} className={`map-chunk ${chunk.biome?.toLowerCase()}`} style={{
+              width: 160, height: 160,
+              left: 200 + chunk.x * 160 - 80, top: 200 + chunk.z * 160 - 80
+            }}>{chunk.biome === 'CITY' && <span>SANCTUARY</span>}</div>
+          ))}
+          {agents.map(agent => (
+            <div key={agent.id} className={`map-agent ${agent.faction?.toLowerCase()}`} style={{
+              left: 200 + (agent.position?.x || 0) * 2, top: 200 + (agent.position?.z || 0) * 2
+            }} title={agent.name} />
+          ))}
+        </div>
+        <div className="map-footer">Click outside to close</div>
+      </div>
+    </div>
+  );
+};
 
+// ============== MAIN APP ==============
 export default function App() {
-  const { isConfirmed, confirmHandshake, setWorldState, setUser } = useGameStore();
-  const [wsConnected, setWsConnected] = useState(false);
+  const { isConfirmed, setWorldState, setConnected } = useStore();
   const wsRef = useRef(null);
   
-  // Firebase Auth
-  useEffect(() => {
-    if (!auth) return;
-    
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (e) {
-        console.warn('Firebase auth failed, using PostgreSQL only');
-      }
-    };
-    initAuth();
-    
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser(user);
-      }
-    });
-    
-    return () => unsub();
-  }, []);
-  
-  // WebSocket Connection to PostgreSQL Backend
   useEffect(() => {
     if (!isConfirmed) return;
     
@@ -863,81 +717,46 @@ export default function App() {
       const wsUrl = API_URL.replace('https://', 'wss://').replace('http://', 'ws://') + '/api/ws';
       wsRef.current = new WebSocket(wsUrl);
       
-      wsRef.current.onopen = () => {
-        setWsConnected(true);
-        console.log('PostgreSQL WebSocket connected');
-      };
-      
-      wsRef.current.onmessage = (event) => {
+      wsRef.current.onopen = () => { setConnected(true); console.log('WS connected'); };
+      wsRef.current.onmessage = (e) => {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'initial_state' || data.type === 'world_update') {
-            setWorldState(data);
-          }
-        } catch (e) {
-          console.error('WS message error:', e);
-        }
+          const data = JSON.parse(e.data);
+          if (data.type === 'initial_state' || data.type === 'world_update') setWorldState(data);
+        } catch (err) { console.error('WS error:', err); }
       };
-      
-      wsRef.current.onclose = () => {
-        setWsConnected(false);
-        setTimeout(connectWS, 3000);
-      };
+      wsRef.current.onclose = () => { setConnected(false); setTimeout(connectWS, 3000); };
     };
     
     connectWS();
+    const ping = setInterval(() => wsRef.current?.readyState === WebSocket.OPEN && wsRef.current.send(JSON.stringify({ type: 'ping' })), 30000);
     
-    // Keep alive
-    const ping = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 30000);
-    
-    return () => {
-      clearInterval(ping);
-      wsRef.current?.close();
-    };
-  }, [isConfirmed]);
+    return () => { clearInterval(ping); wsRef.current?.close(); };
+  }, [isConfirmed, setWorldState, setConnected]);
   
-  // Fallback polling
   useEffect(() => {
     if (!isConfirmed) return;
-    
     const fetchWorld = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/api/world`);
-        setWorldState(res.data);
-      } catch (e) {
-        console.error('World fetch failed:', e);
-      }
+      try { const res = await axios.get(`${API_URL}/api/world`); setWorldState(res.data); } catch (e) { console.error('Fetch error:', e); }
     };
-    
     fetchWorld();
     const interval = setInterval(fetchWorld, 5000);
-    
     return () => clearInterval(interval);
-  }, [isConfirmed]);
+  }, [isConfirmed, setWorldState]);
+  
+  if (!isConfirmed) return <LiabilityShield />;
   
   return (
-    <div className="app-3d" data-testid="app-3d">
-      {!isConfirmed ? (
-        <LiabilityShield onConfirm={confirmHandshake} />
-      ) : (
-        <>
-          <Canvas shadows dpr={[1, 2]} className="canvas-3d">
-            <Suspense fallback={null}>
-              <WorldScene />
-            </Suspense>
-          </Canvas>
-          
-          <StatusBar />
-          <AgentHUD />
-          <CollectiveTerminal />
-          <CharacterImporter />
-          <TierPanel />
-        </>
-      )}
+    <div className="app-container" data-testid="app-container">
+      <WorldCanvas />
+      <StatusBar />
+      <div className="ui-overlay">
+        <div className="ui-top-left"><AgentHUD /></div>
+        <div className="ui-bottom-left"><CollectiveTerminal /></div>
+      </div>
+      <WorldMap />
+      <CharacterImporter />
+      <TierPanel />
+      <div className="vignette" />
     </div>
   );
 }
