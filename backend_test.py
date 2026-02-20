@@ -564,33 +564,56 @@ class OuroborosAPITester:
             return False
 
 def main():
-    print("🚀 Starting Ouroboros: Neural Emergence API Tests")
+    print("🚀 Starting Ouroboros: Neural Emergence PostgreSQL API Tests")
     print("=" * 60)
     
     tester = OuroborosAPITester()
-    agent_id = None
     
-    # Test 1: Health endpoint with Axioms
+    # Test 1: Health endpoint with PostgreSQL Duden-Register
     health_success = tester.test_health_endpoint()
     
     # Test 2: World state endpoint  
     world_success = tester.test_world_state_endpoint()
     
-    # Test 3: Agents endpoint
+    # Test 3: World grid - Full 35x35 grid
+    grid_success = tester.test_world_grid_full()
+    
+    # Test 4: Sanctuary cell 0,0 - 100% stability
+    sanctuary_success = tester.test_sanctuary_cell()
+    
+    # Test 5: Grid stabilize - reduces corruption
+    stabilize_success = tester.test_grid_stabilize()
+    
+    # Test 6: Notary creation - Tier 1 Autosave
+    notary_create_success = tester.test_notary_creation_tier1()
+    
+    # Test 7: Notary upgrade - Tier 2 Duden-Entry
+    notary_tier2_success = tester.test_notary_upgrade_tier2()
+    
+    # Test 8: Notary upgrade - Tier 3 Universal Key
+    notary_tier3_success = tester.test_notary_upgrade_tier3()
+    
+    # Test 9: Item Sets - All three sets
+    item_sets_success = tester.test_item_sets()
+    
+    # Test 10: Agents endpoint
     agents_success = tester.test_agents_endpoint()
     
-    # Test 4: Character import
+    # Test 11: Character import
     import_success, imported_agent_id = tester.test_character_import()
     if import_success and imported_agent_id:
-        agent_id = imported_agent_id
+        tester.test_agent_id = imported_agent_id
     
-    # Test 5: Agent decision (if we have an agent ID)
-    decision_success = tester.test_agent_decision(agent_id)
+    # Test 12: Give item to agent
+    give_item_success = tester.test_give_item_to_agent()
     
-    # Test 6: Chat endpoint
+    # Test 13: Agent decision (if we have an agent ID)
+    decision_success = tester.test_agent_decision(tester.test_agent_id)
+    
+    # Test 14: Chat endpoint
     chat_success = tester.test_chat_endpoint()
     
-    # Test 7: WebSocket connection
+    # Test 15: WebSocket connection
     websocket_success = tester.test_websocket_endpoint()
     
     # Print final results
@@ -598,6 +621,24 @@ def main():
     print(f"📊 FINAL RESULTS:")
     print(f"   Tests passed: {tester.tests_passed}/{tester.tests_run}")
     print(f"   Success rate: {(tester.tests_passed/tester.tests_run*100):.1f}%")
+    
+    # PostgreSQL specific test summary
+    postgres_tests = [
+        ("PostgreSQL Health", health_success),
+        ("35x35 Grid Data", grid_success),
+        ("Sanctuary Cell", sanctuary_success),
+        ("Grid Stabilize", stabilize_success),
+        ("Notary Tier 1", notary_create_success),
+        ("Notary Tier 2", notary_tier2_success),
+        ("Notary Tier 3", notary_tier3_success),
+        ("Item Sets", item_sets_success),
+        ("Give Item", give_item_success)
+    ]
+    
+    print(f"\n🎯 PostgreSQL Migration Features:")
+    for test_name, success in postgres_tests:
+        status = "✅" if success else "❌"
+        print(f"   {status} {test_name}")
     
     if tester.failed_tests:
         print(f"\n❌ Failed tests:")
