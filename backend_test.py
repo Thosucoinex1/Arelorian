@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 
 class OuroborosAPITester:
-    def __init__(self, base_url="https://agent-mmorpg.preview.emergentagent.com"):
+    def __init__(self, base_url="https://stability-nexus.preview.emergentagent.com"):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0
