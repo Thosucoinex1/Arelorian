@@ -236,7 +236,7 @@ const AgentMesh = ({ agent, onSelect }) => {
         <sphereGeometry args={[0.35, 16, 16]} />
         <meshStandardMaterial color={isPlayer ? '#0891b2' : '#dc2626'} />
       </mesh>
-      <Html position={[0, 2.8, 0]} center distanceFactor={20}>
+      <Html position={[0, 2.8, 0]} center distanceFactor={20} as="div">
         <div className="agent-label">
           <span className="agent-name">{agent.name}</span>
           {agent.state === 'COMBAT' && (
