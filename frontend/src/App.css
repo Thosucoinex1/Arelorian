@@ -48,6 +48,19 @@ body {
   background: var(--axiom-dark);
 }
 
+.world-canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: grab;
+}
+
+.world-canvas:active {
+  cursor: grabbing;
+}
+
 /* ============== VIGNETTE & FRAME ============== */
 
 .vignette {
