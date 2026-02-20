@@ -89,6 +89,268 @@ class OuroborosAPITester:
             return success and has_axioms and is_postgres and is_v2
         return False
 
+    def test_world_grid_full(self):
+        """Test world grid returns 35x35 grid data"""
+        success, response = self.run_test(
+            "World Grid - 35x35 Full Grid",
+            "GET",
+            "api/grid",
+            200
+        )
+        if success and isinstance(response, dict):
+            has_grid = 'grid' in response
+            if has_grid:
+                grid = response['grid']
+                print(f"   Grid cells: {len(grid)}")
+                # Should be 35x35 = 1225 cells
+                expected_cells = 35 * 35
+                is_full_grid = len(grid) == expected_cells
+                print(f"   Expected {expected_cells} cells, got {len(grid)}: {is_full_grid}")
+                
+                # Check for required fields
+                if grid:
+                    cell = grid[0]
+                    required_fields = ['x', 'z', 'cell_type', 'biome', 'stability_index', 'corruption_level']
+                    has_fields = all(field in cell for field in required_fields)
+                    print(f"   Grid cells have required fields: {has_fields}")
+                    return success and is_full_grid and has_fields
+            return success and has_grid
+        return False
+
+    def test_sanctuary_cell(self):
+        """Test grid cell /api/grid/0/0 returns SANCTUARY with 100% stability"""
+        success, response = self.run_test(
+            "Sanctuary Cell - Grid 0,0",
+            "GET",
+            "api/grid/0/0",
+            200
+        )
+        if success and isinstance(response, dict):
+            cell_type = response.get('cell_type', '')
+            stability = response.get('stability_index', 0)
+            print(f"   Cell type: {cell_type}")
+            print(f"   Stability: {stability}")
+            
+            is_sanctuary = cell_type == 'SANCTUARY'
+            is_stable = stability == 1.0
+            print(f"   Is SANCTUARY: {is_sanctuary}")
+            print(f"   100% stable: {is_stable}")
+            
+            return success and is_sanctuary and is_stable
+        return False
+
+    def test_grid_stabilize(self):
+        """Test grid stabilize endpoint reduces corruption"""
+        # First get a cell that might have corruption
+        success, response = self.run_test(
+            "Grid Stabilize - Get Cell 5,5",
+            "GET",
+            "api/grid/5/5",
+            200
+        )
+        
+        if not success:
+            return False
+            
+        original_corruption = response.get('corruption_level', 0)
+        original_stability = response.get('stability_index', 1)
+        
+        # Now stabilize it
+        success, response = self.run_test(
+            "Grid Stabilize - Stabilize Cell 5,5",
+            "POST",
+            "api/grid/5/5/stabilize",
+            200
+        )
+        
+        if success and isinstance(response, dict):
+            new_stability = response.get('stability_index', 0)
+            new_corruption = response.get('corruption_level', 1)
+            
+            print(f"   Original - Stability: {original_stability:.3f}, Corruption: {original_corruption:.3f}")
+            print(f"   After stabilize - Stability: {new_stability:.3f}, Corruption: {new_corruption:.3f}")
+            
+            stability_improved = new_stability >= original_stability
+            corruption_reduced = new_corruption <= original_corruption
+            print(f"   Stability improved/maintained: {stability_improved}")
+            print(f"   Corruption reduced/maintained: {corruption_reduced}")
+            
+            return success and stability_improved and corruption_reduced
+        return False
+
+    def test_notary_creation_tier1(self):
+        """Test notary creation with Tier 1 (Autosave)"""
+        test_user_id = f"test_user_{int(datetime.now().timestamp())}"
+        
+        notary_data = {
+            "user_id": test_user_id,
+            "email": f"{test_user_id}@test.com"
+        }
+        
+        success, response = self.run_test(
+            "Notary Creation - Tier 1 Autosave",
+            "POST",
+            "api/notaries",
+            200,
+            data=notary_data
+        )
+        
+        if success and isinstance(response, dict):
+            tier = response.get('tier', 0)
+            tier_name = response.get('tier_name', '')
+            user_id = response.get('user_id', '')
+            
+            print(f"   User ID: {user_id}")
+            print(f"   Tier: {tier}")
+            print(f"   Tier name: {tier_name}")
+            
+            is_tier1 = tier == 1
+            is_autosave = tier_name == 'Autosave'
+            print(f"   Is Tier 1: {is_tier1}")
+            print(f"   Is Autosave: {is_autosave}")
+            
+            if is_tier1 and is_autosave:
+                self.test_notary_id = test_user_id
+            
+            return success and is_tier1 and is_autosave
+        return False
+
+    def test_notary_upgrade_tier2(self):
+        """Test notary upgrade to Tier 2 (Duden-Entry)"""
+        if not self.test_notary_id:
+            print("⏭️  Skipping Tier 2 upgrade - no notary ID")
+            return False
+            
+        success, response = self.run_test(
+            "Notary Upgrade - Tier 2 Duden-Entry",
+            "POST",
+            f"api/notaries/{self.test_notary_id}/upgrade",
+            200
+        )
+        
+        if success and isinstance(response, dict):
+            new_tier = response.get('new_tier', 0)
+            tier_name = response.get('tier_name', '')
+            
+            print(f"   New tier: {new_tier}")
+            print(f"   Tier name: {tier_name}")
+            
+            is_tier2 = new_tier == 2
+            is_duden_entry = tier_name == 'Duden-Entry'
+            print(f"   Is Tier 2: {is_tier2}")
+            print(f"   Is Duden-Entry: {is_duden_entry}")
+            
+            return success and is_tier2 and is_duden_entry
+        return False
+
+    def test_notary_upgrade_tier3(self):
+        """Test notary upgrade to Tier 3 with Universal Key reveal"""
+        if not self.test_notary_id:
+            print("⏭️  Skipping Tier 3 upgrade - no notary ID")
+            return False
+            
+        success, response = self.run_test(
+            "Notary Upgrade - Tier 3 Universal Key",
+            "POST",
+            f"api/notaries/{self.test_notary_id}/upgrade",
+            200
+        )
+        
+        if success and isinstance(response, dict):
+            new_tier = response.get('new_tier', 0)
+            tier_name = response.get('tier_name', '')
+            universal_key = response.get('universal_key', None)
+            
+            print(f"   New tier: {new_tier}")
+            print(f"   Tier name: {tier_name}")
+            print(f"   Universal key revealed: {universal_key is not None}")
+            
+            if universal_key:
+                print(f"   Universal key: {universal_key[:20]}...")
+            
+            is_tier3 = new_tier == 3
+            is_universal_key = tier_name == 'Universal Key'
+            has_key = universal_key is not None
+            
+            return success and is_tier3 and is_universal_key and has_key
+        return False
+
+    def test_item_sets(self):
+        """Test Item Sets endpoint returns Dragonscale, Voidweaver, Axiom Guardian"""
+        success, response = self.run_test(
+            "Item Sets - All Three Sets",
+            "GET",
+            "api/items/sets",
+            200
+        )
+        
+        if success and isinstance(response, dict):
+            sets = response.get('sets', {})
+            required_sets = ['Dragonscale', 'Voidweaver', 'Axiom Guardian']
+            
+            print(f"   Available sets: {list(sets.keys())}")
+            
+            has_all_sets = all(set_name in sets for set_name in required_sets)
+            print(f"   Has all required sets: {has_all_sets}")
+            
+            # Check set structure
+            if has_all_sets:
+                dragonscale = sets['Dragonscale']
+                has_items = 'items' in dragonscale
+                has_bonuses = 'bonuses' in dragonscale
+                print(f"   Dragonscale has items/bonuses: {has_items}/{has_bonuses}")
+                
+                if has_bonuses:
+                    bonuses = dragonscale['bonuses']
+                    has_2piece = '2' in bonuses or 2 in bonuses
+                    has_3piece = '3' in bonuses or 3 in bonuses
+                    print(f"   Dragonscale has 2/3 piece bonuses: {has_2piece}/{has_3piece}")
+                
+                return success and has_items and has_bonuses
+            
+            return success and has_all_sets
+        return False
+
+    def test_give_item_to_agent(self):
+        """Test giving item to agent with set_name"""
+        if not self.test_agent_id:
+            print("⏭️  Skipping item grant - no agent ID")
+            return False
+            
+        item_data = {
+            "name": "Dragonscale Helm",
+            "item_type": "HELM",
+            "subtype": "HEAVY",
+            "rarity": "EPIC",
+            "stats": {"defense": 25, "strength": 5},
+            "set_name": "Dragonscale"
+        }
+        
+        success, response = self.run_test(
+            "Give Item - Dragonscale Set Item",
+            "POST",
+            f"api/agents/{self.test_agent_id}/items",
+            200,
+            data=item_data
+        )
+        
+        if success and isinstance(response, dict):
+            item_name = response.get('name', '')
+            item_rarity = response.get('rarity', '')
+            set_name = response.get('set_name', '')
+            
+            print(f"   Item name: {item_name}")
+            print(f"   Item rarity: {item_rarity}")
+            print(f"   Set name: {set_name}")
+            
+            correct_name = item_name == "Dragonscale Helm"
+            correct_set = set_name == "Dragonscale"
+            print(f"   Correct name: {correct_name}")
+            print(f"   Correct set: {correct_set}")
+            
+            return success and correct_name and correct_set
+        return False
+
     def test_world_state_endpoint(self):
         """Test world state endpoint"""
         success, response = self.run_test(
