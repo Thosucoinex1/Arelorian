@@ -65,19 +65,28 @@ class OuroborosAPITester:
             return False, str(e)
 
     def test_health_endpoint(self):
-        """Test health endpoint returns Axioms"""
+        """Test health endpoint shows PostgreSQL Duden-Register"""
         success, response = self.run_test(
-            "Health Endpoint - Axioms Check",
+            "Health Endpoint - PostgreSQL Duden-Register",
             "GET",
             "api/health",
             200
         )
         if success and isinstance(response, dict):
             has_axioms = 'axioms' in response
+            database = response.get('database', '')
+            service = response.get('service', '')
+            print(f"   Service: {service}")
+            print(f"   Database: {database}")
             print(f"   Has axioms: {has_axioms}")
-            if has_axioms:
-                print(f"   Axioms: {response['axioms']}")
-            return success and has_axioms
+            
+            # Check for PostgreSQL Duden-Register
+            is_postgres = 'PostgreSQL Duden-Register' in database
+            is_v2 = 'v2.0' in service
+            print(f"   PostgreSQL Duden-Register: {is_postgres}")
+            print(f"   Version 2.0: {is_v2}")
+            
+            return success and has_axioms and is_postgres and is_v2
         return False
 
     def test_world_state_endpoint(self):
