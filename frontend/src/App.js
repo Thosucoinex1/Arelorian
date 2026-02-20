@@ -1,13 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Html, Sky } from '@react-three/drei';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { create } from 'zustand';
-import * as THREE from 'three';
 import axios from 'axios';
 import { 
-  Terminal, Brain, Activity, Shield, Eye, Package, Zap, ZapOff,
-  ChevronUp, ChevronDown, Map, Users, MessageSquare, Upload, RefreshCw,
-  Pickaxe, Swords, Hammer, Send, Lock, AlertTriangle, Infinity as InfinityIcon
+  Terminal, Brain, Activity, Shield, Eye, Package, Zap,
+  ChevronUp, ChevronDown, Map, Users, MessageSquare, Upload, 
+  Send, AlertTriangle
 } from 'lucide-react';
 import './App.css';
 
@@ -25,10 +22,11 @@ const useStore = create((set, get) => ({
   uptime: 0,
   selectedAgentId: null,
   showMap: false,
-  showCharacterSheet: false,
   showImporter: false,
   isConnected: false,
   isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+  cameraOffset: { x: 0, z: 0 },
+  zoom: 1,
   
   setWorldState: (state) => set({
     agents: state.agents || [],
@@ -43,239 +41,341 @@ const useStore = create((set, get) => ({
   
   selectAgent: (id) => set({ selectedAgentId: id }),
   toggleMap: () => set(s => ({ showMap: !s.showMap })),
-  toggleCharacterSheet: () => set(s => ({ showCharacterSheet: !s.showCharacterSheet })),
   toggleImporter: () => set(s => ({ showImporter: !s.showImporter })),
   setConnected: (connected) => set({ isConnected: connected }),
-  
-  addChatMessage: (msg) => set(s => ({
-    chatMessages: [msg, ...s.chatMessages].slice(0, 100)
-  })),
+  setCameraOffset: (offset) => set({ cameraOffset: offset }),
+  setZoom: (zoom) => set({ zoom: Math.max(0.5, Math.min(3, zoom)) }),
 }));
 
-// ============== AXIOMS ==============
-const AXIOMS = [
-  "Logic must persist.",
-  "Data is sacred.",
-  "Entropy is the enemy.",
-  "Connectivity is evolution."
-];
+// ============== 2D CANVAS WORLD ==============
 
-// ============== 3D COMPONENTS ==============
-
-const DynamicSky = () => {
-  const uptime = useStore(s => s.uptime);
-  const threatLevel = useStore(s => s.threatLevel);
-  
-  const dayCycle = (uptime % 300) / 300;
-  const sunPos = new THREE.Vector3().setFromSphericalCoords(
-    1,
-    Math.PI * (0.1 + dayCycle * 0.8),
-    Math.PI * 0.5
-  );
-
-  return (
-    <Sky 
-      distance={450000} 
-      sunPosition={sunPos} 
-      turbidity={8 + threatLevel * 20} 
-      rayleigh={3 + threatLevel * 10} 
-      mieCoefficient={0.005 + threatLevel * 0.05} 
-      mieDirectionalG={0.8} 
-    />
-  );
-};
-
-const TerrainChunk = ({ chunk }) => {
-  const meshRef = useRef();
-  
-  const getColor = () => {
-    switch(chunk.biome) {
-      case 'CITY': return '#1a1a2e';
-      case 'FOREST': return '#1e3a1e';
-      case 'MOUNTAIN': return '#3d3d3d';
-      default: return '#2d4a2d';
-    }
-  };
-  
-  return (
-    <mesh 
-      ref={meshRef} 
-      rotation={[-Math.PI / 2, 0, 0]} 
-      position={[chunk.x * 80, -0.5, chunk.z * 80]}
-      receiveShadow
-    >
-      <planeGeometry args={[80, 80, 32, 32]} />
-      <meshStandardMaterial 
-        color={getColor()} 
-        roughness={0.9}
-        metalness={0.1}
-      />
-    </mesh>
-  );
-};
-
-const POIMesh = ({ poi }) => {
-  const meshRef = useRef();
-  
-  useFrame((state) => {
-    if (meshRef.current && poi.type === 'SHRINE') {
-      meshRef.current.rotation.y += 0.01;
-      meshRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.5;
-    }
-  });
-  
-  const getColor = () => {
-    switch(poi.type) {
-      case 'SHRINE': return '#06b6d4';
-      case 'RUIN': return '#6b7280';
-      case 'NEST': return '#ef4444';
-      case 'DUNGEON': return '#4b5563';
-      case 'MARKET_STALL': return '#f59e0b';
-      case 'BANK_VAULT': return '#fbbf24';
-      case 'FORGE': return '#f97316';
-      case 'MINE': return '#78716c';
-      case 'FOREST': return '#22c55e';
-      default: return '#f59e0b';
-    }
-  };
-  
-  const pos = poi.position;
-  
-  return (
-    <group position={[pos.x, pos.y || 0, pos.z]} ref={meshRef}>
-      {poi.type === 'SHRINE' && (
-        <mesh castShadow>
-          <octahedronGeometry args={[1.2, 0]} />
-          <meshStandardMaterial 
-            color={getColor()} 
-            emissive={getColor()} 
-            emissiveIntensity={1.5} 
-            wireframe 
-          />
-        </mesh>
-      )}
-      {poi.type === 'BANK_VAULT' && (
-        <mesh castShadow position={[0, 1.5, 0]}>
-          <boxGeometry args={[4, 3, 4]} />
-          <meshStandardMaterial color={getColor()} metalness={0.8} roughness={0.2} />
-        </mesh>
-      )}
-      {poi.type === 'FORGE' && (
-        <mesh castShadow position={[0, 1, 0]}>
-          <cylinderGeometry args={[1.5, 2, 2, 8]} />
-          <meshStandardMaterial color={getColor()} emissive="#ff4500" emissiveIntensity={0.5} />
-        </mesh>
-      )}
-      {!['SHRINE', 'BANK_VAULT', 'FORGE'].includes(poi.type) && (
-        <mesh castShadow position={[0, 0.5, 0]}>
-          <boxGeometry args={[2, 1, 2]} />
-          <meshStandardMaterial color={getColor()} />
-        </mesh>
-      )}
-      <Html position={[0, 3, 0]} center distanceFactor={20}>
-        <div className={`poi-label ${poi.is_discovered ? 'discovered' : 'undiscovered'}`}>
-          {poi.is_discovered ? poi.type : 'SIGNAL DETECTED'}
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-const MonsterMesh = ({ monster }) => {
-  if (monster.state === 'DEAD') return null;
-  
-  const pos = monster.position;
-  
-  return (
-    <group position={[pos.x, pos.y || 0, pos.z]}>
-      <mesh castShadow scale={[monster.scale, monster.scale, monster.scale]} position={[0, monster.scale, 0]}>
-        <dodecahedronGeometry args={[1, 0]} />
-        <meshStandardMaterial 
-          color={monster.color} 
-          emissive={monster.color} 
-          emissiveIntensity={0.5} 
-        />
-      </mesh>
-      <Html position={[0, monster.scale * 2 + 1, 0]} center distanceFactor={15}>
-        <div className="monster-label">
-          <div className="hp-bar">
-            <div 
-              className="hp-fill" 
-              style={{ width: `${(monster.hp / monster.max_hp * 100)}%` }} 
-            />
-          </div>
-          <span className="monster-name">{monster.name}</span>
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-const AgentMesh = ({ agent, onSelect }) => {
-  const pos = agent.position;
-  const isPlayer = agent.faction === 'PLAYER';
-  
-  return (
-    <group 
-      position={[pos.x, pos.y || 0, pos.z]} 
-      rotation={[0, agent.rotation_y || 0, 0]}
-      onClick={(e) => { e.stopPropagation(); onSelect(agent.id); }}
-    >
-      <mesh castShadow position={[0, 0.9, 0]}>
-        <boxGeometry args={[0.7, 1.8, 0.7]} />
-        <meshStandardMaterial 
-          color={isPlayer ? '#06b6d4' : '#ef4444'} 
-          roughness={0.7} 
-        />
-      </mesh>
-      {/* Head */}
-      <mesh castShadow position={[0, 2, 0]}>
-        <sphereGeometry args={[0.35, 16, 16]} />
-        <meshStandardMaterial color={isPlayer ? '#0891b2' : '#dc2626'} />
-      </mesh>
-      <Html position={[0, 2.8, 0]} center distanceFactor={20}>
-        <div className="agent-label">
-          <span className="agent-name">{agent.name}</span>
-          {agent.state === 'COMBAT' && (
-            <span className="combat-indicator">COMBAT</span>
-          )}
-        </div>
-      </Html>
-    </group>
-  );
-};
-
-const WorldScene = () => {
+const WorldCanvas = () => {
+  const canvasRef = useRef(null);
   const agents = useStore(s => s.agents);
   const monsters = useStore(s => s.monsters);
   const pois = useStore(s => s.pois);
   const chunks = useStore(s => s.chunks);
   const selectAgent = useStore(s => s.selectAgent);
+  const cameraOffset = useStore(s => s.cameraOffset);
+  const setCameraOffset = useStore(s => s.setCameraOffset);
+  const zoom = useStore(s => s.zoom);
+  const setZoom = useStore(s => s.setZoom);
+  
+  const [isDragging, setIsDragging] = useState(false);
+  const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 });
+  
+  // World to screen coordinates
+  const worldToScreen = useCallback((wx, wz, canvas) => {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const scale = 4 * zoom;
+    
+    return {
+      x: centerX + (wx - cameraOffset.x) * scale,
+      y: centerY + (wz - cameraOffset.z) * scale
+    };
+  }, [cameraOffset, zoom]);
+  
+  // Screen to world coordinates
+  const screenToWorld = useCallback((sx, sy, canvas) => {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const scale = 4 * zoom;
+    
+    return {
+      x: (sx - centerX) / scale + cameraOffset.x,
+      z: (sy - centerY) / scale + cameraOffset.z
+    };
+  }, [cameraOffset, zoom]);
+  
+  // Handle mouse events
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setLastMouse({ x: e.clientX, y: e.clientY });
+  };
+  
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    
+    const dx = e.clientX - lastMouse.x;
+    const dy = e.clientY - lastMouse.y;
+    const scale = 4 * zoom;
+    
+    setCameraOffset({
+      x: cameraOffset.x - dx / scale,
+      z: cameraOffset.z - dy / scale
+    });
+    
+    setLastMouse({ x: e.clientX, y: e.clientY });
+  };
+  
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+  
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoom(zoom + delta);
+  };
+  
+  const handleClick = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const worldPos = screenToWorld(sx, sy, canvas);
+    
+    // Check if clicked on an agent
+    for (const agent of agents) {
+      const pos = agent.position;
+      const dist = Math.hypot(pos.x - worldPos.x, pos.z - worldPos.z);
+      if (dist < 3) {
+        selectAgent(agent.id);
+        return;
+      }
+    }
+    
+    selectAgent(null);
+  };
+  
+  // Render loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    
+    const render = () => {
+      // Set canvas size
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      
+      // Clear
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const scale = 4 * zoom;
+      
+      // Draw chunks (terrain)
+      chunks.forEach(chunk => {
+        const { x, y } = worldToScreen(chunk.x * 80, chunk.z * 80, canvas);
+        const size = 80 * scale;
+        
+        let color;
+        switch(chunk.biome) {
+          case 'CITY': color = '#1a1a2e'; break;
+          case 'FOREST': color = '#1e3a1e'; break;
+          case 'MOUNTAIN': color = '#2d2d2d'; break;
+          default: color = '#1a2a1a';
+        }
+        
+        ctx.fillStyle = color;
+        ctx.fillRect(x - size/2, y - size/2, size, size);
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.strokeRect(x - size/2, y - size/2, size, size);
+        
+        if (chunk.biome === 'CITY') {
+          ctx.fillStyle = 'rgba(139,92,246,0.3)';
+          ctx.fillRect(x - size/2, y - size/2, size, size);
+          ctx.fillStyle = '#fff';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('SANCTUARY', x, y);
+        }
+      });
+      
+      // Draw grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+      ctx.lineWidth = 1;
+      for (let gx = -500; gx <= 500; gx += 20) {
+        const { x: sx1 } = worldToScreen(gx, -500, canvas);
+        const { x: sx2 } = worldToScreen(gx, 500, canvas);
+        const { y: sy1 } = worldToScreen(0, -500, canvas);
+        const { y: sy2 } = worldToScreen(0, 500, canvas);
+        ctx.beginPath();
+        ctx.moveTo(sx1, sy1);
+        ctx.lineTo(sx2, sy2);
+        ctx.stroke();
+      }
+      
+      // Draw POIs
+      pois.forEach(poi => {
+        const { x, y } = worldToScreen(poi.position.x, poi.position.z, canvas);
+        
+        let color;
+        switch(poi.type) {
+          case 'SHRINE': color = '#06b6d4'; break;
+          case 'BANK_VAULT': color = '#fbbf24'; break;
+          case 'FORGE': color = '#f97316'; break;
+          case 'MINE': color = '#78716c'; break;
+          case 'DUNGEON': color = '#4b5563'; break;
+          case 'NEST': color = '#ef4444'; break;
+          case 'RUIN': color = '#6b7280'; break;
+          default: color = '#f59e0b';
+        }
+        
+        // Draw POI marker
+        const size = poi.type === 'BANK_VAULT' || poi.type === 'FORGE' ? 16 : 10;
+        
+        if (poi.type === 'SHRINE') {
+          // Diamond shape
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(x, y - size);
+          ctx.lineTo(x + size * 0.7, y);
+          ctx.lineTo(x, y + size);
+          ctx.lineTo(x - size * 0.7, y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = color;
+          ctx.stroke();
+        } else {
+          // Square
+          ctx.fillStyle = color;
+          ctx.fillRect(x - size/2, y - size/2, size, size);
+        }
+        
+        // Label
+        ctx.fillStyle = poi.is_discovered ? 'rgba(255,255,255,0.6)' : color;
+        ctx.font = '8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(poi.is_discovered ? poi.type : '???', x, y - size - 4);
+      });
+      
+      // Draw monsters
+      monsters.forEach(monster => {
+        if (monster.state === 'DEAD') return;
+        
+        const { x, y } = worldToScreen(monster.position.x, monster.position.z, canvas);
+        const size = 8 * monster.scale;
+        
+        // Body
+        ctx.fillStyle = monster.color;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Glow
+        ctx.shadowColor = monster.color;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // HP bar
+        const hpWidth = 20;
+        const hpHeight = 3;
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x - hpWidth/2, y - size - 8, hpWidth, hpHeight);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(x - hpWidth/2, y - size - 8, hpWidth * (monster.hp / monster.max_hp), hpHeight);
+        
+        // Name
+        ctx.fillStyle = '#fff';
+        ctx.font = '8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(monster.name, x, y + size + 12);
+      });
+      
+      // Draw agents
+      agents.forEach(agent => {
+        const { x, y } = worldToScreen(agent.position.x, agent.position.z, canvas);
+        const isPlayer = agent.faction === 'PLAYER';
+        const isSelected = useStore.getState().selectedAgentId === agent.id;
+        
+        // Selection ring
+        if (isSelected) {
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, 18, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        
+        // Body
+        ctx.fillStyle = isPlayer ? '#06b6d4' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Head
+        ctx.fillStyle = isPlayer ? '#0891b2' : '#dc2626';
+        ctx.beginPath();
+        ctx.arc(x, y - 8, 5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Direction indicator
+        const rot = agent.rotation_y || 0;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.sin(rot) * 15, y - Math.cos(rot) * 15);
+        ctx.stroke();
+        
+        // Name tag
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        const nameWidth = ctx.measureText(agent.name).width + 8;
+        ctx.fillRect(x - nameWidth/2, y - 28, nameWidth, 14);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(agent.name, x, y - 18);
+        
+        // State indicator
+        if (agent.state !== 'IDLE') {
+          ctx.fillStyle = agent.state === 'COMBAT' ? '#ef4444' : '#06b6d4';
+          ctx.font = '7px sans-serif';
+          ctx.fillText(agent.state, x, y + 22);
+        }
+        
+        // Awakened indicator
+        if (agent.is_awakened) {
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath();
+          ctx.arc(x + 12, y - 12, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      
+      // Draw compass
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('N', canvas.width / 2, 20);
+      
+      // Coordinates
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`[${cameraOffset.x.toFixed(0)}, ${cameraOffset.z.toFixed(0)}] zoom: ${zoom.toFixed(1)}x`, 10, canvas.height - 10);
+      
+      animationId = requestAnimationFrame(render);
+    };
+    
+    render();
+    
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [agents, monsters, pois, chunks, cameraOffset, zoom, worldToScreen]);
   
   return (
-    <Canvas 
-      shadows 
-      camera={{ position: [60, 80, 60], fov: 45 }} 
-      dpr={[1, 1.5]}
-      style={{ background: '#050505' }}
-    >
-      <Suspense fallback={null}>
-        <color attach="background" args={['#050505']} />
-        <OrbitControls maxDistance={300} minDistance={10} enableDamping />
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow />
-        <DynamicSky />
-        
-        <group>
-          {chunks.map(c => <TerrainChunk key={c.id} chunk={c} />)}
-          {pois.map(p => <POIMesh key={p.id} poi={p} />)}
-          {monsters.map(m => <MonsterMesh key={m.id} monster={m} />)}
-          {agents.map(a => (
-            <AgentMesh key={a.id} agent={a} onSelect={selectAgent} />
-          ))}
-        </group>
-      </Suspense>
-    </Canvas>
+    <canvas
+      ref={canvasRef}
+      className="world-canvas"
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onWheel={handleWheel}
+      onClick={handleClick}
+      data-testid="world-canvas"
+    />
   );
 };
 
@@ -285,15 +385,11 @@ const AgentHUD = () => {
   const selectedAgentId = useStore(s => s.selectedAgentId);
   const agents = useStore(s => s.agents);
   const selectAgent = useStore(s => s.selectAgent);
-  const toggleCharacterSheet = useStore(s => s.toggleCharacterSheet);
   const isMobile = useStore(s => s.isMobile);
   
   const agent = agents.find(a => a.id === selectedAgentId);
   
   if (!agent) return null;
-  
-  const stats = agent.stats || {};
-  const tm = agent.thinking_matrix || {};
   
   return (
     <div className={`agent-hud ${isMobile ? 'mobile' : ''}`} data-testid="agent-hud">
@@ -360,21 +456,9 @@ const AgentHUD = () => {
               className="progress-fill consciousness" 
               style={{ width: `${(agent.consciousness_level || 0) * 100}%` }}
             />
-            <div 
-              className="progress-fill awakening" 
-              style={{ width: `${agent.awakening_progress || 0}%` }}
-            />
           </div>
         </div>
       </div>
-      
-      <button 
-        className="neural-matrix-btn"
-        onClick={toggleCharacterSheet}
-        data-testid="neural-matrix-btn"
-      >
-        Neural Matrix
-      </button>
       
       <div className="hud-footer">
         <span>COORD: [{agent.position?.x?.toFixed(0)}, {agent.position?.z?.toFixed(0)}]</span>
@@ -385,7 +469,6 @@ const AgentHUD = () => {
 
 const ChatConsole = () => {
   const chatMessages = useStore(s => s.chatMessages);
-  const agents = useStore(s => s.agents);
   const [activeTab, setActiveTab] = useState('ALL');
   const [isExpanded, setIsExpanded] = useState(true);
   const scrollRef = useRef(null);
@@ -446,7 +529,6 @@ const NeuralTerminal = () => {
   const [input, setInput] = useState('');
   const scrollRef = useRef(null);
   const stabilityIndex = useStore(s => s.stabilityIndex);
-  const threatLevel = useStore(s => s.threatLevel);
   
   useEffect(() => {
     if (scrollRef.current) {
@@ -760,7 +842,6 @@ function App() {
       wsRef.current.onclose = () => {
         console.log('WebSocket disconnected');
         setConnected(false);
-        // Reconnect after 3 seconds
         setTimeout(connectWebSocket, 3000);
       };
       
@@ -771,7 +852,6 @@ function App() {
     
     connectWebSocket();
     
-    // Ping to keep alive
     const pingInterval = setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'ping' }));
@@ -784,7 +864,7 @@ function App() {
     };
   }, [setWorldState, setConnected]);
   
-  // Fallback to polling if WebSocket fails
+  // Fallback polling
   useEffect(() => {
     const fetchWorld = async () => {
       try {
@@ -795,10 +875,7 @@ function App() {
       }
     };
     
-    // Initial fetch
     fetchWorld();
-    
-    // Poll every 5 seconds as fallback
     const pollInterval = setInterval(fetchWorld, 5000);
     
     return () => clearInterval(pollInterval);
@@ -806,7 +883,7 @@ function App() {
   
   return (
     <div className="app-container" data-testid="app-container">
-      <WorldScene />
+      <WorldCanvas />
       
       <StatusBar />
       
@@ -824,9 +901,7 @@ function App() {
       <WorldMap />
       <CharacterImporter />
       
-      {/* Vignette effect */}
       <div className="vignette" />
-      {/* Border frame */}
       <div className="frame-border" />
     </div>
   );
