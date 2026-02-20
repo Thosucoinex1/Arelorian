@@ -5,9 +5,7 @@ import {
   PerspectiveCamera, 
   Html, 
   Stars,
-  Float,
-  Environment,
-  Text
+  Float
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { create } from 'zustand';
