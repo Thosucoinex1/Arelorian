@@ -4,7 +4,7 @@ import axios from 'axios';
 import { 
   Terminal, Brain, Activity, Shield, Eye, Package, Zap,
   ChevronUp, ChevronDown, Map, Users, MessageSquare, Upload, 
-  Send, AlertTriangle
+  Send, AlertTriangle, Sword, Crown, Star, Layers
 } from 'lucide-react';
 import './App.css';
 
