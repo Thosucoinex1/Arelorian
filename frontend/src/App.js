@@ -771,6 +771,133 @@ Example format:
   );
 };
 
+const TierInfoPanel = () => {
+  const showTierInfo = useStore(s => s.showTierInfo);
+  const toggleTierInfo = useStore(s => s.toggleTierInfo);
+  const [notary, setNotary] = useState(null);
+  const [userId, setUserId] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const tiers = [
+    { level: 1, name: 'Autosave', desc: 'Jede Interaktion wird persistent gespeichert', color: '#6b7280' },
+    { level: 2, name: 'Duden-Entry', desc: 'Der Notar wird Teil der permanenten Lore', color: '#06b6d4' },
+    { level: 3, name: 'Universal Key', desc: 'Zugriff auf externe Emanationen', color: '#fbbf24' }
+  ];
+  
+  const handleLogin = async () => {
+    if (!userId.trim()) return;
+    setLoading(true);
+    
+    try {
+      // Try to get existing notary
+      const response = await axios.get(`${API_URL}/api/notaries/${userId}`);
+      setNotary(response.data);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // Create new notary
+        const createResponse = await axios.post(`${API_URL}/api/notaries`, {
+          user_id: userId,
+          email: `${userId}@ouroboros.net`
+        });
+        setNotary(createResponse.data);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleUpgrade = async () => {
+    if (!notary || notary.tier >= 3) return;
+    setLoading(true);
+    
+    try {
+      const response = await axios.post(`${API_URL}/api/notaries/${notary.user_id}/upgrade`);
+      setNotary({
+        ...notary,
+        tier: response.data.new_tier,
+        tier_name: response.data.tier_name,
+        has_universal_key: response.data.new_tier >= 3
+      });
+      
+      if (response.data.universal_key) {
+        alert(`Universal Key Unlocked!\n${response.data.universal_key}`);
+      }
+    } catch (error) {
+      console.error('Upgrade failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  if (!showTierInfo) return null;
+  
+  return (
+    <div className="tier-overlay" onClick={toggleTierInfo} data-testid="tier-panel">
+      <div className="tier-container" onClick={e => e.stopPropagation()}>
+        <button className="close-btn" onClick={toggleTierInfo}>×</button>
+        
+        <h2><Crown size={20} /> Notary Tier System</h2>
+        <p className="tier-subtitle">Axiom III: Punctuation - Kausalitätssicherung</p>
+        
+        {!notary ? (
+          <div className="tier-login">
+            <input
+              type="text"
+              placeholder="Enter your Firebase UID or Username"
+              value={userId}
+              onChange={e => setUserId(e.target.value)}
+            />
+            <button onClick={handleLogin} disabled={loading || !userId.trim()}>
+              {loading ? 'Loading...' : 'Access Duden-Register'}
+            </button>
+          </div>
+        ) : (
+          <div className="tier-info">
+            <div className="current-tier">
+              <span className="tier-label">Current Tier:</span>
+              <span className="tier-value" style={{ color: tiers[notary.tier - 1]?.color }}>
+                {notary.tier_name || tiers[notary.tier - 1]?.name}
+              </span>
+            </div>
+            
+            <div className="tier-levels">
+              {tiers.map(tier => (
+                <div 
+                  key={tier.level} 
+                  className={`tier-level ${notary.tier >= tier.level ? 'unlocked' : 'locked'}`}
+                  style={{ borderColor: notary.tier >= tier.level ? tier.color : '#333' }}
+                >
+                  <div className="tier-header">
+                    <Star size={14} style={{ color: tier.color }} />
+                    <span>Tier {tier.level}: {tier.name}</span>
+                  </div>
+                  <p>{tier.desc}</p>
+                  {notary.tier >= tier.level && (
+                    <span className="unlocked-badge">UNLOCKED</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {notary.tier < 3 && (
+              <button className="upgrade-btn" onClick={handleUpgrade} disabled={loading}>
+                {loading ? 'Upgrading...' : `Upgrade to Tier ${notary.tier + 1}`}
+              </button>
+            )}
+            
+            {notary.has_universal_key && (
+              <div className="universal-key-info">
+                <Zap size={14} />
+                <span>Universal Key Active - External Emanations Enabled</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const StatusBar = () => {
   const stabilityIndex = useStore(s => s.stabilityIndex);
   const threatLevel = useStore(s => s.threatLevel);
