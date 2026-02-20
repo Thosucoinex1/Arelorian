@@ -175,7 +175,7 @@ const POIMesh = ({ poi }) => {
           <meshStandardMaterial color={getColor()} />
         </mesh>
       )}
-      <Html position={[0, 3, 0]} center distanceFactor={20}>
+      <Html position={[0, 3, 0]} center distanceFactor={20} as="div">
         <div className={`poi-label ${poi.is_discovered ? 'discovered' : 'undiscovered'}`}>
           {poi.is_discovered ? poi.type : 'SIGNAL DETECTED'}
         </div>
