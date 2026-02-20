@@ -436,7 +436,8 @@ const WorldScene = () => {
         <meshStandardMaterial color="#020205" />
       </mesh>
       
-      <Environment preset="night" />
+      {/* Simple fog for atmosphere */}
+      <fog attach="fog" args={['#020205', 50, 200]} />
     </>
   );
 };
