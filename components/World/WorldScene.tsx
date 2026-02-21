@@ -43,6 +43,7 @@ const DynamicSky = () => {
 };
 
 const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
+  const selectPoi = useStore(state => state.selectPoi);
     const agents = useStore(state => state.agents);
     const chunks = useStore(state => state.loadedChunks);
     const meshRef = useRef<THREE.Group>(null);
@@ -88,7 +89,7 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
     };
 
     return (
-        <group position={[poi.position[0], poi.position[1], poi.position[2]]} ref={meshRef}>
+        <group position={[poi.position[0], poi.position[1], poi.position[2]]} ref={meshRef} onClick={(e) => { e.stopPropagation(); selectPoi(poi.id); }}>
             <mesh scale={[isVisible ? 1 : 0.8, isVisible ? 1 : 0.8, isVisible ? 1 : 0.8]}>
                 {poi.type === 'MARKET_STALL' && (
                     <mesh castShadow>
@@ -119,6 +120,7 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
 };
 
 const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
+  const selectMonster = useStore(state => state.selectMonster);
     const agents = useStore(state => state.agents);
     const chunks = useStore(state => state.loadedChunks);
     const [isVisible, setIsVisible] = useState(false);
@@ -144,7 +146,7 @@ const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
     if (!isVisible || monster.state === 'DEAD') return null;
 
     return (
-        <group position={[monster.position[0], monster.position[1], monster.position[2]]}>
+        <group position={[monster.position[0], monster.position[1], monster.position[2]]} onClick={(e) => { e.stopPropagation(); selectMonster(monster.id); }}>
             <mesh castShadow scale={[monster.scale, monster.scale, monster.scale]} position={[0, monster.scale, 0]}>
                 <dodecahedronGeometry args={[1, 0]} />
                 <meshStandardMaterial color={monster.color} emissive={monster.color} emissiveIntensity={0.5} />

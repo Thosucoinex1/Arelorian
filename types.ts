@@ -208,7 +208,7 @@ export interface LogEntry {
   id: string;
   timestamp: number;
   message: string;
-  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'WATCHDOG' | 'EVENT';
+  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'WATCHDOG' | 'EVENT' | 'ERROR';
   sender?: string;
 }
 

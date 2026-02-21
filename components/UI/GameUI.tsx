@@ -7,6 +7,7 @@ import { WorldMap } from './WorldMap';
 import { AuctionHouse } from './AuctionHouse';
 import { MarketOverlay } from './MarketOverlay';
 import { InspectorPanel } from './InspectorPanel';
+import { ChatLog } from './ChatLog';
 
 const GameUI = () => {
   const showCharacterSheet = useStore(state => state.showCharacterSheet);
@@ -23,6 +24,7 @@ const GameUI = () => {
       <QuestLog />
       <AuctionHouse />
       <InspectorPanel />
+      <ChatLog />
     </>
   );
 };

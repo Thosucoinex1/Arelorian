@@ -1,7 +1,5 @@
 import { useStore } from '../store';
 
-const WS_URL = `ws://${window.location.host}`;
-
 class WebSocketService {
   private ws: WebSocket | null = null;
 
@@ -10,7 +8,9 @@ class WebSocketService {
       return;
     }
 
-    this.ws = new WebSocket(WS_URL);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
       console.log('Connected to WebSocket server');

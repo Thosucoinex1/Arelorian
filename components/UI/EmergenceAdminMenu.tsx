@@ -7,7 +7,7 @@ export const EmergenceAdminMenu = () => {
     const showAdmin = useStore(state => state.showAdmin);
     const toggleAdmin = useStore(state => state.toggleAdmin);
     const settings = useStore(state => state.emergenceSettings);
-    const updateSettings = useStore(state => state.updateEmergenceSettings);
+    const setEmergenceSetting = useStore(state => state.setEmergenceSetting);
     const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
 
     if (!showAdmin) return null;
@@ -50,7 +50,7 @@ export const EmergenceAdminMenu = () => {
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button 
-                                onClick={() => updateSettings({ isEmergenceEnabled: !settings.isEmergenceEnabled })}
+                                onClick={() => setEmergenceSetting('isEmergenceEnabled', !settings.isEmergenceEnabled)}
                                 className={`p-6 rounded-3xl border transition-all text-left flex flex-col gap-2 ${settings.isEmergenceEnabled ? 'bg-axiom-cyan/10 border-axiom-cyan/40' : 'bg-white/5 border-white/10 opacity-60'}`}
                             >
                                 <div className="flex justify-between items-center">
@@ -61,7 +61,7 @@ export const EmergenceAdminMenu = () => {
                             </button>
 
                             <button 
-                                onClick={() => updateSettings({ useHeuristicsOnly: !settings.useHeuristicsOnly })}
+                                onClick={() => setEmergenceSetting('useHeuristicsOnly', !settings.useHeuristicsOnly)}
                                 className={`p-6 rounded-3xl border transition-all text-left flex flex-col gap-2 ${settings.useHeuristicsOnly ? 'bg-axiom-gold/10 border-axiom-gold/40' : 'bg-white/5 border-white/10 opacity-60'}`}
                             >
                                 <div className="flex justify-between items-center">
@@ -80,7 +80,7 @@ export const EmergenceAdminMenu = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button 
                                 disabled={!isAxiomAuthenticated}
-                                onClick={() => updateSettings({ axiomaticWorldGeneration: !settings.axiomaticWorldGeneration })}
+                                onClick={() => setEmergenceSetting('axiomaticWorldGeneration', !settings.axiomaticWorldGeneration)}
                                 className={`p-6 rounded-3xl border transition-all text-left flex flex-col gap-2 ${settings.axiomaticWorldGeneration ? 'bg-axiom-cyan/10 border-axiom-cyan/40' : 'bg-white/5 border-white/10'} ${!isAxiomAuthenticated ? 'opacity-30 cursor-not-allowed' : ''}`}
                             >
                                 <div className="flex justify-between items-center">
@@ -92,7 +92,7 @@ export const EmergenceAdminMenu = () => {
 
                             <button 
                                 disabled={!isAxiomAuthenticated}
-                                onClick={() => updateSettings({ physicsBasedActivation: !settings.physicsBasedActivation })}
+                                onClick={() => setEmergenceSetting('physicsBasedActivation', !settings.physicsBasedActivation)}
                                 className={`p-6 rounded-3xl border transition-all text-left flex flex-col gap-2 ${settings.physicsBasedActivation ? 'bg-axiom-cyan/10 border-axiom-cyan/40' : 'bg-white/5 border-white/10'} ${!isAxiomAuthenticated ? 'opacity-30 cursor-not-allowed' : ''}`}
                             >
                                 <div className="flex justify-between items-center">
@@ -110,7 +110,7 @@ export const EmergenceAdminMenu = () => {
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button 
-                                onClick={() => updateSettings({ showAxiomaticOverlay: !settings.showAxiomaticOverlay })}
+                                onClick={() => setEmergenceSetting('showAxiomaticOverlay', !settings.showAxiomaticOverlay)}
                                 className={`p-6 rounded-3xl border transition-all text-left flex flex-col gap-2 ${settings.showAxiomaticOverlay ? 'bg-axiom-cyan/10 border-axiom-cyan/40' : 'bg-white/5 border-white/10'}`}
                             >
                                 <div className="flex justify-between items-center">

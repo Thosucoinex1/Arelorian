@@ -21,7 +21,7 @@ export const AdminDashboard = () => {
     const user = useStore(state => state.user);
     const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
     const emergenceSettings = useStore(state => state.emergenceSettings);
-    const updateEmergenceSettings = useStore(state => state.updateEmergenceSettings);
+    const setEmergenceSetting = useStore(state => state.setEmergenceSetting);
     
     const [paypalKey, setPaypalKey] = useState("sk_test_123456789");
     const [newPackName, setNewPackName] = useState("");
@@ -154,28 +154,28 @@ export const AdminDashboard = () => {
                             </h3>
                             <div className="grid grid-cols-2 gap-3">
                                 <button 
-                                    onClick={() => updateEmergenceSettings({ isEmergenceEnabled: !emergenceSettings.isEmergenceEnabled })}
+                                    onClick={() => setEmergenceSetting('isEmergenceEnabled', !emergenceSettings.isEmergenceEnabled)}
                                     className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.isEmergenceEnabled ? 'bg-axiom-cyan/10 border-axiom-cyan/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
                                 >
                                     <span>Global Emergence</span>
                                     <div className={`w-2 h-2 rounded-full ${emergenceSettings.isEmergenceEnabled ? 'bg-axiom-cyan shadow-[0_0_8px_#06b6d4]' : 'bg-gray-700'}`} />
                                 </button>
                                 <button 
-                                    onClick={() => updateEmergenceSettings({ useHeuristicsOnly: !emergenceSettings.useHeuristicsOnly })}
+                                    onClick={() => setEmergenceSetting('useHeuristicsOnly', !emergenceSettings.useHeuristicsOnly)}
                                     className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.useHeuristicsOnly ? 'bg-axiom-gold/10 border-axiom-gold/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
                                 >
                                     <span>Local Heuristics</span>
                                     <div className={`w-2 h-2 rounded-full ${emergenceSettings.useHeuristicsOnly ? 'bg-axiom-gold shadow-[0_0_8px_#f59e0b]' : 'bg-gray-700'}`} />
                                 </button>
                                 <button 
-                                    onClick={() => updateEmergenceSettings({ axiomaticWorldGeneration: !emergenceSettings.axiomaticWorldGeneration })}
+                                    onClick={() => setEmergenceSetting('axiomaticWorldGeneration', !emergenceSettings.axiomaticWorldGeneration)}
                                     className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.axiomaticWorldGeneration ? 'bg-axiom-purple/10 border-axiom-purple/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
                                 >
                                     <span>Axiomatic Gen</span>
                                     <div className={`w-2 h-2 rounded-full ${emergenceSettings.axiomaticWorldGeneration ? 'bg-axiom-purple shadow-[0_0_8px_#a855f7]' : 'bg-gray-700'}`} />
                                 </button>
                                 <button 
-                                    onClick={() => updateEmergenceSettings({ showAxiomaticOverlay: !emergenceSettings.showAxiomaticOverlay })}
+                                    onClick={() => setEmergenceSetting('showAxiomaticOverlay', !emergenceSettings.showAxiomaticOverlay)}
                                     className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.showAxiomaticOverlay ? 'bg-axiom-cyan/10 border-axiom-cyan/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
                                 >
                                     <span>Axiom Overlay</span>

@@ -12,13 +12,21 @@ export const InspectorPanel = () => {
 
   const selectedAgent = agents.find(a => a.id === selectedAgentId);
   const selectedChunk = chunks.find(c => c.id === selectedChunkId);
+  const selectedMonsterId = useStore(state => state.selectedMonsterId);
+  const monsters = useStore(state => state.monsters);
+  const selectedMonster = monsters.find(m => m.id === selectedMonsterId);
+  const selectedPoiId = useStore(state => state.selectedPoiId);
+  const pois = useStore(state => state.pois);
+  const selectedPoi = pois.find(p => p.id === selectedPoiId);
 
   const handleClose = () => {
     selectAgent(null);
     setSelectedChunk(null);
+    useStore.getState().selectMonster(null);
+    useStore.getState().selectPoi(null);
   };
 
-  if (!selectedAgent && !selectedChunk) {
+  if (!selectedAgent && !selectedChunk && !selectedMonster && !selectedPoi) {
     return null;
   }
 
@@ -43,6 +51,22 @@ export const InspectorPanel = () => {
           <p className="text-sm text-gray-400">Biome: {selectedChunk.biome}</p>
           <p className="text-sm text-gray-400">Stability: {selectedChunk.stabilityIndex.toFixed(2)}</p>
           <p className="text-sm text-gray-400">Corruption: {selectedChunk.corruptionLevel.toFixed(2)}</p>
+        </div>
+      )}
+      {selectedMonster && (
+        <div>
+          <h3 className="text-lg font-bold text-white mb-4">Monster Details</h3>
+          <p className="text-sm text-gray-400">ID: {selectedMonster.id}</p>
+          <p className="text-sm text-gray-400">Name: {selectedMonster.name}</p>
+          <p className="text-sm text-gray-400">HP: {selectedMonster.stats.hp} / {selectedMonster.stats.maxHp}</p>
+        </div>
+      )}
+      {selectedPoi && (
+        <div>
+          <h3 className="text-lg font-bold text-white mb-4">POI Details</h3>
+          <p className="text-sm text-gray-400">ID: {selectedPoi.id}</p>
+          <p className="text-sm text-gray-400">Type: {selectedPoi.type}</p>
+          <p className="text-sm text-gray-400">Discovered: {selectedPoi.isDiscovered ? 'Yes' : 'No'}</p>
         </div>
       )}
     </div>

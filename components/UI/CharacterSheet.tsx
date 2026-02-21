@@ -268,6 +268,14 @@ export const CharacterSheet = () => {
                                     </div>
                                     <ActiveSetBonuses agent={agent} />
                                 </div>
+                                <div className="mt-4">
+                                    <h3 className="text-axiom-gold text-[10px] font-bold uppercase mb-2 tracking-widest">Skill Matrix</h3>
+                                    <div className="grid grid-cols-2 gap-2 text-xs bg-black/40 p-3 rounded-xl border border-white/5">
+                                        <div className="flex justify-between"><span>Mining</span> <span className="text-white font-bold">{String(agent.skills.mining.level)}</span></div>
+                                        <div className="flex justify-between"><span>Crafting</span> <span className="text-white font-bold">{String(agent.skills.crafting.level)}</span></div>
+                                        <div className="flex justify-between"><span>Combat</span> <span className="text-white font-bold">{String(agent.skills.combat.level)}</span></div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="flex-1 flex flex-col overflow-hidden">

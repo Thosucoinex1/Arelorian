@@ -41,11 +41,14 @@ interface GameState {
   isAxiomAuthenticated: boolean;
   showDebugger: boolean;
   emergenceSettings: EmergenceSettings;
-    debugBiomeEnabled: false,
-    debugBiome: 0.0,
+  debugBiomeEnabled: boolean;
+  debugBiome: number;
+  isScanning: boolean;
   diagnosticReport: any | null;
   hoveredChunkId: string | null;
   selectedChunkId: string | null;
+  selectedMonsterId: string | null;
+  selectedPoiId: string | null;
 
   initGame: () => void;
   updatePhysics: (delta: number) => void;
@@ -89,6 +92,8 @@ interface GameState {
   cancelTradeOffer: (offerId: string) => void;
   setHoveredChunk: (id: string | null) => void;
   setSelectedChunk: (id: string | null) => void;
+  selectMonster: (id: string | null) => void;
+  selectPoi: (id: string | null) => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -126,9 +131,14 @@ export const useStore = create<GameState>((set, get) => ({
   showCharacterSheet: false,
   showDebugger: false,
   diagnosticReport: null,
+  isAxiomAuthenticated: false,
+  debugBiomeEnabled: false,
+  debugBiome: 0,
   isScanning: false,
   hoveredChunkId: null,
   selectedChunkId: null,
+  selectedMonsterId: null,
+  selectedPoiId: null,
   emergenceSettings: {
     isEmergenceEnabled: true,
     useHeuristicsOnly: true, // Default to true for release as requested
@@ -158,9 +168,8 @@ export const useStore = create<GameState>((set, get) => ({
     set(s => ({ matrixEnergy: s.matrixEnergy + amount }));
   },
 
-  updateEmergenceSettings: (newSettings) => set(s => ({ 
-    emergenceSettings: { ...s.emergenceSettings, ...newSettings } 
-  })),
+  setAxiomAuthenticated: (auth) => set({ isAxiomAuthenticated: auth }),
+  setEmergenceSetting: (key, value) => set(s => ({ emergenceSettings: { ...s.emergenceSettings, [key]: value } })),
   toggleDebugBiome: () => set(state => ({ debugBiomeEnabled: !state.debugBiomeEnabled })),
   setDebugBiome: (biome) => set({ debugBiome: biome }),
 
@@ -316,11 +325,11 @@ export const useStore = create<GameState>((set, get) => ({
             newPos[2] += (dz/dist) * moveSpeed * delta;
           }
           if (a.faction === 'PLAYER') {
-            webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
+            // webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
           }
 
           return { ...a, position: newPos };
-        });
+        }
         if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
           let newProgress = a.awakeningProgress + delta * 5;
           let newLevel = a.consciousnessLevel;
@@ -371,7 +380,7 @@ export const useStore = create<GameState>((set, get) => ({
 
       return { 
         monsters: newMonsters, 
-        agents: expandedAgents, 
+        agents: newAgents, 
         loadedChunks: updatedChunks,
         serverStats: { 
           ...state.serverStats, 
@@ -540,6 +549,8 @@ export const useStore = create<GameState>((set, get) => ({
   },
   setHoveredChunk: (id) => set({ hoveredChunkId: id }),
   setSelectedChunk: (id) => set({ selectedChunkId: id }),
+  selectMonster: (id) => set({ selectedMonsterId: id }),
+  selectPoi: (id) => set({ selectedPoiId: id }),
   sendSignal: (msg) => {
     get().addLog(`Signal: ${msg}`, 'AXIOM', 'OVERSEER');
   },
