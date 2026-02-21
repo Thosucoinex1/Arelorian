@@ -41,8 +41,11 @@ interface GameState {
   isAxiomAuthenticated: boolean;
   showDebugger: boolean;
   emergenceSettings: EmergenceSettings;
+    debugBiomeEnabled: false,
+    debugBiome: 0.0,
   diagnosticReport: any | null;
-  isScanning: boolean;
+  hoveredChunkId: string | null;
+  selectedChunkId: string | null;
 
   initGame: () => void;
   updatePhysics: (delta: number) => void;
@@ -60,7 +63,9 @@ interface GameState {
   runDiagnostics: (errorLog?: string) => Promise<void>;
   runEmergentBehavior: (agentId: string) => Promise<void>;
   setAxiomAuthenticated: (auth: boolean) => void;
-  updateEmergenceSettings: (settings: Partial<EmergenceSettings>) => void;
+  setEmergenceSetting: (key: keyof EmergenceSettings, value: any) => void;
+  toggleDebugBiome: () => void;
+  setDebugBiome: (biome: number) => void;
   generateAxiomaticChunk: (x: number, z: number) => void;
   sendSignal: (msg: string) => void;
   purchaseProduct: (id: string) => void;
@@ -82,7 +87,8 @@ interface GameState {
   postTradeOffer: (offer: Omit<TradeOffer, 'id' | 'timestamp' | 'status'>) => void;
   acceptTradeOffer: (offerId: string, acceptorId: string) => void;
   cancelTradeOffer: (offerId: string) => void;
-  setGlobalApiCooldown: (timestamp: number) => void;
+  setHoveredChunk: (id: string | null) => void;
+  setSelectedChunk: (id: string | null) => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -121,7 +127,8 @@ export const useStore = create<GameState>((set, get) => ({
   showDebugger: false,
   diagnosticReport: null,
   isScanning: false,
-  isAxiomAuthenticated: false,
+  hoveredChunkId: null,
+  selectedChunkId: null,
   emergenceSettings: {
     isEmergenceEnabled: true,
     useHeuristicsOnly: true, // Default to true for release as requested
@@ -154,6 +161,8 @@ export const useStore = create<GameState>((set, get) => ({
   updateEmergenceSettings: (newSettings) => set(s => ({ 
     emergenceSettings: { ...s.emergenceSettings, ...newSettings } 
   })),
+  toggleDebugBiome: () => set(state => ({ debugBiomeEnabled: !state.debugBiomeEnabled })),
+  setDebugBiome: (biome) => set({ debugBiome: biome }),
 
   generateAxiomaticChunk: (x, z) => {
     const id = `c${x}${z}`;
@@ -306,13 +315,12 @@ export const useStore = create<GameState>((set, get) => ({
             newPos[0] += (dx/dist) * moveSpeed * delta;
             newPos[2] += (dz/dist) * moveSpeed * delta;
           }
-        }
+          if (a.faction === 'PLAYER') {
+            webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
+          }
 
-        return { ...a, position: newPos };
-      });
-
-      // Conscious Expansion Logic
-      const expandedAgents = newAgents.map(a => {
+          return { ...a, position: newPos };
+        });
         if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
           let newProgress = a.awakeningProgress + delta * 5;
           let newLevel = a.consciousnessLevel;
@@ -530,7 +538,8 @@ export const useStore = create<GameState>((set, get) => ({
       console.error("Emergent Behavior Action Error:", e);
     }
   },
-  setAxiomAuthenticated: (auth) => set({ isAxiomAuthenticated: auth }),
+  setHoveredChunk: (id) => set({ hoveredChunkId: id }),
+  setSelectedChunk: (id) => set({ selectedChunkId: id }),
   sendSignal: (msg) => {
     get().addLog(`Signal: ${msg}`, 'AXIOM', 'OVERSEER');
   },

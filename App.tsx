@@ -12,24 +12,16 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useStore } from './store';
+import { webSocketService } from './services/webSocketService';
 import { AXIOMS } from './types';
 
 // UI Component Imports
-import { AgentHUD } from './components/UI/AgentHUD';
-import { NotaryDashboard } from './components/UI/NotaryDashboard';
-import { CharacterSheet } from './components/UI/CharacterSheet';
-import { QuestLog } from './components/UI/QuestLog';
-import { AdminDashboard } from './components/UI/AdminDashboard';
-import { WorldMap } from './components/UI/WorldMap';
-import { AuctionHouse } from './components/UI/AuctionHouse';
-import { VirtualJoysticks } from './components/UI/VirtualJoysticks';
-import { EventOverlay } from './components/UI/EventOverlay';
-import { ChatConsole } from './components/UI/ChatConsole';
-import { MarketOverlay } from './components/UI/MarketOverlay';
-import { AxiomDebugger } from './components/UI/AxiomDebugger';
-import { EmergentBehaviorMonitor } from './components/UI/EmergentBehaviorMonitor';
 import { EmergenceAdminMenu } from './components/UI/EmergenceAdminMenu';
 import { AxiomaticOverlay } from './components/UI/AxiomaticOverlay';
+import { BiomeControls } from './components/UI/BiomeControls';
+import { InspectorPanel } from './components/UI/InspectorPanel';
+import GameUI from './components/UI/GameUI';
+import { MainMenu } from './components/UI/MainMenu';
 import WorldScene from './components/World/WorldScene';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
@@ -172,7 +164,10 @@ const App = () => {
 
   const isAdmin = user?.email === ADMIN_EMAIL;
 
-  useEffect(() => { initGame(); }, [initGame]);
+  useEffect(() => { 
+    initGame(); 
+    webSocketService.connect();
+  }, [initGame]);
   useEffect(() => { if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [user?.email, isAxiomAuthenticated]);
 
   // Global Error Listener for Deep Solving
@@ -211,32 +206,8 @@ const App = () => {
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">
       {showInitialHandshake && user?.email === ADMIN_EMAIL && <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />}
       <WorldScene />
-      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 md:p-8 z-40">
-        <div className="flex justify-between items-start">
-          <AgentHUD />
-          <div className="flex flex-col items-end gap-6">
-            <QuestLog />
-            <EventOverlay />
-          </div>
-        </div>
-        <div className="flex justify-between items-end">
-          <div className="flex flex-col gap-6">
-            <ChatConsole />
-            <NeuralTerminal />
-          </div>
-          <NotaryDashboard />
-        </div>
-      </div>
-      <CharacterSheet />
-      <AdminDashboard />
-      <WorldMap />
-      <AuctionHouse />
-      <VirtualJoysticks />
-      <MarketOverlay />
-      <AxiomDebugger />
-      <EmergentBehaviorMonitor />
-      <EmergenceAdminMenu />
-      <AxiomaticOverlay />
+      <GameUI />
+      <MainMenu />
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
       <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
       

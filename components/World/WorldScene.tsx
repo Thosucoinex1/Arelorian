@@ -168,10 +168,18 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
   const emergenceSettings = useStore(state => state.emergenceSettings);
   const meshRef = useRef<THREE.Mesh>(null);
   
+  const debugBiomeEnabled = useStore(state => state.debugBiomeEnabled);
+  const debugBiome = useStore(state => state.debugBiome);
+
+  const hoveredChunkId = useStore(state => state.hoveredChunkId);
+  const selectedChunkId = useStore(state => state.selectedChunkId);
+  const setHoveredChunk = useStore(state => state.setHoveredChunk);
+  const setSelectedChunk = useStore(state => state.setSelectedChunk);
+
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uAwakeningDensity: { value: 1.0 - chunk.stabilityIndex },
-    uBiome: { value: chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 },
+    uBiome: { value: debugBiomeEnabled ? debugBiome : chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 },
     uFogColor: { value: new THREE.Color('#050505') },
     uFogNear: { value: 80 },
     uFogFar: { value: 350 },
@@ -180,14 +188,20 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
     uExplorationLevel: { value: chunk.explorationLevel || 0.0 },
     uAxiomaticIntensity: { value: chunk.axiomaticData ? 1.0 : 0.0 },
     uStability: { value: chunk.stabilityIndex || 0.0 },
-    uCorruption: { value: chunk.corruptionLevel || 0.0 }
-  }), [chunk.id, chunk.biome, chunk.stabilityIndex, chunk.corruptionLevel, chunk.axiomaticData]);
+    uCorruption: { value: chunk.corruptionLevel || 0.0 },
+    uIsHovered: { value: false },
+    uIsSelected: { value: false },
+    uCameraPosition: { value: new THREE.Vector3() },
+  }), [chunk.id, chunk.biome, chunk.stabilityIndex, chunk.corruptionLevel, chunk.axiomaticData, debugBiomeEnabled, debugBiome]);
 
   useFrame((state) => { 
     if (meshRef.current) {
         const mat = meshRef.current.material as THREE.ShaderMaterial;
         mat.uniforms.uTime.value = state.clock.getElapsedTime();
         mat.uniforms.uExplorationLevel.value = chunk.explorationLevel;
+        mat.uniforms.uIsHovered.value = hoveredChunkId === chunk.id;
+        mat.uniforms.uIsSelected.value = selectedChunkId === chunk.id;
+        mat.uniforms.uCameraPosition.value.copy(state.camera.position);
         const positions = mat.uniforms.uAgentPositions.value;
         const ranges = mat.uniforms.uAgentVisionRanges.value;
         for(let i = 0; i < 10; i++) {
@@ -203,7 +217,14 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
   });
 
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[chunk.x * 80, -0.5, chunk.z * 80]}>
+    <mesh 
+      ref={meshRef} 
+      rotation={[-Math.PI / 2, 0, 0]} 
+      position={[chunk.x * 80, -0.5, chunk.z * 80]}
+      onPointerEnter={() => setHoveredChunk(chunk.id)}
+      onPointerLeave={() => setHoveredChunk(null)}
+      onClick={() => setSelectedChunk(chunk.id)}
+    >
       <planeGeometry args={[80, 80, 64, 64]} />
       <shaderMaterial vertexShader={axiomVertexShader} fragmentShader={axiomFragmentShader} uniforms={uniforms} />
     </mesh>
@@ -344,7 +365,7 @@ const WorldScene = () => {
             <Suspense fallback={null}>
                 <SceneManager />
                 <color attach="background" args={['#050505']} /> 
-                <OrbitControls maxDistance={300} minDistance={10} enableDamping />
+                <OrbitControls maxDistance={120} minDistance={10} maxPolarAngle={Math.PI / 2.1} enableDamping />
                 <ambientLight intensity={0.4} />
                 <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow />
                 <DynamicSky />

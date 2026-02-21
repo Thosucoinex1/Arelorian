@@ -101,6 +101,9 @@ uniform float uBiome;
 uniform float uAxiomaticIntensity;
 uniform float uStability;
 uniform float uCorruption;
+uniform bool uIsHovered;
+uniform bool uIsSelected;
+uniform vec3 uCameraPosition;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
@@ -183,21 +186,41 @@ void main() {
         finalColor = mix(grassLush, grassDry, smoothstep(0.2, 0.7, noiseBase));
     }
 
-    // --- Stability & Corruption Procedural Textures ---
-    // Stability adds a clean digital grid pattern
-    vec2 stabilityGrid = fract(vPosition.xz * 0.5);
-    float stabilityPattern = step(0.95, stabilityGrid.x) + step(0.95, stabilityGrid.y);
-    finalColor = mix(finalColor, vec3(0.0, 1.0, 0.8), stabilityPattern * uStability * 0.15);
+    // --- LOD Calculation ---
+    float distToCamera = distance(vPosition, uCameraPosition);
+    float lodFactor = smoothstep(100.0, 250.0, distToCamera);
 
-    // Corruption adds glitchy noise and color shifts
-    float corruptionNoise = snoise(vPosition.xz * 2.0 + uTime * 0.5);
-    vec3 corruptionColor = vec3(0.8, 0.0, 0.2);
-    finalColor = mix(finalColor, corruptionColor, step(0.7, corruptionNoise) * uCorruption * 0.4);
-    
-    // Fragmented glitch effect
-    if (uCorruption > 0.3) {
-        float frag = step(0.9, snoise(vPosition.xz * 10.0 + uTime));
-        finalColor += vec3(1.0) * frag * uCorruption * 0.5;
+    // --- Stability & Corruption Procedural Textures ---
+    if (lodFactor < 1.0) {
+        // High stability creates a pulsing hexagonal grid
+        vec2 hex_uv = vPosition.xz * 0.3;
+        vec3 hex_p1 = fract(hex_uv.xyx / vec3(1.0, 0.866, 0.5));
+        float hex_d = abs(hex_p1.z - 0.5);
+        hex_d = max(hex_d, abs(dot(hex_p1.xy, vec2(0.5, 0.866)) - 0.5));
+        hex_d = max(hex_d, abs(dot(hex_p1.xy, vec2(-0.5, 0.866)) - 0.5));
+        float hex_pulse = sin(uTime * (1.5 + uStability * 3.0) + vPosition.x * 0.1) * 0.5 + 0.5; // Pulse speed linked to stability
+        float hex_grid = smoothstep(0.01, 0.02, hex_d) * (0.5 + hex_pulse * 0.5);
+        finalColor = mix(finalColor, vec3(0.1, 0.8, 1.0), hex_grid * uStability * 0.3 * (1.0 - lodFactor));
+
+        // High corruption creates UV warping and intense color fragmentation
+        vec2 warpedUV = vUv + vec2(snoise(vUv * 5.0 + uTime * 0.2), snoise(vUv * 5.0 - uTime * 0.2)) * 0.1 * uCorruption;
+        float corruptionNoise = snoise(warpedUV * 15.0 + uTime);
+        vec3 corruptionColor = vec3(1.0, 0.1, 0.8);
+        finalColor.r += step(0.8, corruptionNoise) * uCorruption * 0.6 * (1.0 - lodFactor);
+        finalColor.g *= 1.0 - (step(0.7, corruptionNoise) * uCorruption * 0.5 * (1.0 - lodFactor));
+        finalColor.b = mix(finalColor.b, corruptionColor.b, step(0.6, corruptionNoise) * uCorruption * 0.8 * (1.0 - lodFactor));
+        
+        // Fragmented glitch effect
+        if (uCorruption > 0.5) {
+            float frag = step(0.95, snoise(vPosition.xz * 25.0 + uTime * 2.0));
+            finalColor += vec3(1.0, 0.0, 1.0) * frag * uCorruption * (1.0 - lodFactor);
+        }
+
+        // Chromatic Aberration for intense corruption
+        if (uCorruption > 0.6) {
+            finalColor.g = mix(finalColor.g, finalColor.r, uCorruption * 0.3 * (1.0 - lodFactor));
+            finalColor.b = mix(finalColor.b, finalColor.r, uCorruption * 0.5 * (1.0 - lodFactor));
+        }
     }
 
     // --- REFINED NEURAL FOG OF WAR ---
@@ -243,6 +266,15 @@ void main() {
 
     // Global Atmospheric Fog
     float fogFactor = smoothstep(uFogNear, uFogFar, vFogDepth);
-    gl_FragColor = vec4(mix(finalColor, uFogColor, fogFactor), 1.0);
+    vec3 finalFogColor = mix(finalColor, uFogColor, fogFactor);
+
+    // Hover and Selection Effects
+    if (uIsSelected) {
+        finalFogColor = mix(finalFogColor, vec3(1.0, 0.8, 0.2), 0.4);
+    } else if (uIsHovered) {
+        finalFogColor += vec3(0.15, 0.15, 0.15);
+    }
+
+    gl_FragColor = vec4(finalFogColor, 1.0);
 }
 `;
