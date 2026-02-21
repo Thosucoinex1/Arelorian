@@ -1,0 +1,35 @@
+# OUROBOROS CI/CD PIPELINE v9.7
+# Project: planning-with-ai-f2b84
+# Status: Production Ready
+
+steps:
+  # 1. Build Docker image for the Sovereign Engine
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/planning-with-ai-f2b84/ouroboros-engine:$SHORT_SHA', '.']
+
+  # 2. Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/planning-with-ai-f2b84/ouroboros-engine:$SHORT_SHA']
+
+  # 3. Trigger rolling update on Managed Instance Group (MIG)
+  # Axiom I: Ensuring deployment on e2-micro instances for zero-cost operation
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'compute'
+      - 'instance-groups'
+      - 'managed'
+      - 'rolling-action'
+      - 'start-update'
+      - 'fe-mig'
+      - '--version=template=fe-instance-template'
+      - '--project=planning-with-ai-f2b84'
+      - '--zone=us-central1-a'
+
+images:
+  - 'gcr.io/planning-with-ai-f2b84/ouroboros-engine:$SHORT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+
