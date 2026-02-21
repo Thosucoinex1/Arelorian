@@ -1,7 +1,8 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
+import { Settings, Brain, Zap, Globe, Eye, ShieldAlert, Database, Activity } from 'lucide-react';
 
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
 
@@ -19,11 +20,23 @@ export const AdminDashboard = () => {
     const agentsCount = useStore(state => state.agents.length);
     const user = useStore(state => state.user);
     const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
+    const emergenceSettings = useStore(state => state.emergenceSettings);
+    const updateEmergenceSettings = useStore(state => state.updateEmergenceSettings);
     
     const [paypalKey, setPaypalKey] = useState("sk_test_123456789");
     const [newPackName, setNewPackName] = useState("");
     const [importSource, setImportSource] = useState("");
     const [importType, setImportType] = useState<'URL' | 'JSON'>('URL');
+    const [backendStatus, setBackendStatus] = useState<any>(null);
+
+    useEffect(() => {
+        if (showAdmin) {
+            fetch('/api/health')
+                .then(res => res.json())
+                .then(data => setBackendStatus(data))
+                .catch(err => console.error("Failed to fetch backend status", err));
+        }
+    }, [showAdmin]);
 
     // Security Gate: Memoized check for admin status
     const hasAccess = useMemo(() => {
@@ -92,6 +105,28 @@ export const AdminDashboard = () => {
                         </div>
 
                         <div className="bg-white/5 border border-white/10 p-5 rounded-xl">
+                            <h3 className="text-axiom-purple text-xs font-bold uppercase mb-4 tracking-widest flex items-center gap-2">
+                                <Database className="w-3 h-3" /> Axiomatic Backend
+                            </h3>
+                            <div className="space-y-2 text-[10px] font-mono">
+                                <div className="flex justify-between text-gray-500">
+                                    <span>Service</span>
+                                    <span className="text-white text-right">{backendStatus?.service || 'Connecting...'}</span>
+                                </div>
+                                <div className="flex justify-between text-gray-500">
+                                    <span>Database</span>
+                                    <span className="text-axiom-cyan text-right">{backendStatus?.database || 'Loading...'}</span>
+                                </div>
+                                <div className="flex justify-between text-gray-500">
+                                    <span>Status</span>
+                                    <span className={backendStatus?.status === 'HEALTHY' ? 'text-green-400' : 'text-red-400'}>
+                                        {backendStatus?.status || 'OFFLINE'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 p-5 rounded-xl">
                              <h3 className="text-axiom-gold text-xs font-bold uppercase mb-4 tracking-widest">Revenue Gateway</h3>
                              <div className="space-y-4">
                                 <div className="space-y-1">
@@ -111,8 +146,53 @@ export const AdminDashboard = () => {
                         </div>
                     </div>
 
-                    {/* Right Column: Entity Manipulation */}
+                    {/* Right Column: Entity Manipulation & Emergence Settings */}
                     <div className="w-2/3 space-y-6">
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-xl">
+                            <h3 className="text-white text-xs font-bold uppercase mb-4 tracking-widest flex items-center gap-2">
+                                <Brain className="w-4 h-4 text-axiom-cyan" /> Emergence Parameters
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button 
+                                    onClick={() => updateEmergenceSettings({ isEmergenceEnabled: !emergenceSettings.isEmergenceEnabled })}
+                                    className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.isEmergenceEnabled ? 'bg-axiom-cyan/10 border-axiom-cyan/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
+                                >
+                                    <span>Global Emergence</span>
+                                    <div className={`w-2 h-2 rounded-full ${emergenceSettings.isEmergenceEnabled ? 'bg-axiom-cyan shadow-[0_0_8px_#06b6d4]' : 'bg-gray-700'}`} />
+                                </button>
+                                <button 
+                                    onClick={() => updateEmergenceSettings({ useHeuristicsOnly: !emergenceSettings.useHeuristicsOnly })}
+                                    className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.useHeuristicsOnly ? 'bg-axiom-gold/10 border-axiom-gold/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
+                                >
+                                    <span>Local Heuristics</span>
+                                    <div className={`w-2 h-2 rounded-full ${emergenceSettings.useHeuristicsOnly ? 'bg-axiom-gold shadow-[0_0_8px_#f59e0b]' : 'bg-gray-700'}`} />
+                                </button>
+                                <button 
+                                    onClick={() => updateEmergenceSettings({ axiomaticWorldGeneration: !emergenceSettings.axiomaticWorldGeneration })}
+                                    className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.axiomaticWorldGeneration ? 'bg-axiom-purple/10 border-axiom-purple/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
+                                >
+                                    <span>Axiomatic Gen</span>
+                                    <div className={`w-2 h-2 rounded-full ${emergenceSettings.axiomaticWorldGeneration ? 'bg-axiom-purple shadow-[0_0_8px_#a855f7]' : 'bg-gray-700'}`} />
+                                </button>
+                                <button 
+                                    onClick={() => updateEmergenceSettings({ showAxiomaticOverlay: !emergenceSettings.showAxiomaticOverlay })}
+                                    className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-between items-center ${emergenceSettings.showAxiomaticOverlay ? 'bg-axiom-cyan/10 border-axiom-cyan/40 text-white' : 'bg-white/5 border-white/10 text-gray-500'}`}
+                                >
+                                    <span>Axiom Overlay</span>
+                                    <div className={`w-2 h-2 rounded-full ${emergenceSettings.showAxiomaticOverlay ? 'bg-axiom-cyan shadow-[0_0_8px_#06b6d4]' : 'bg-gray-700'}`} />
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        useStore.getState().loadedChunks.forEach(c => useStore.getState().stabilizeChunk(c.id));
+                                        soundManager.playUI('CLICK');
+                                    }}
+                                    className="p-3 rounded-xl border border-green-500/30 bg-green-500/10 text-green-400 text-[10px] font-black uppercase hover:bg-green-500/20 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Zap className="w-3 h-3" /> Stabilize Matrix
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/20 p-6 rounded-xl relative overflow-hidden">
                              <h3 className="text-green-400 text-xs font-bold uppercase mb-4 tracking-widest flex justify-between items-center">
                                  <span>Neural Entity Manifestation</span>

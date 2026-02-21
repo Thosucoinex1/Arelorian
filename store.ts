@@ -2,7 +2,8 @@
 import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
-  Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType
+  Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
+  TradeOffer, EmergenceSettings, Notary, NotaryTier
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice } from './utils';
 import { generateAutonomousDecision } from './services/geminiService';
@@ -19,6 +20,8 @@ interface GameState {
   craftingOrders: CraftingOrder[];
   quests: Quest[];
   landParcels: LandParcel[];
+  notaries: Notary[];
+  tradeOffers: TradeOffer[];
   auctionHouse: any[];
   activeEvents: any[];
   graphicPacks: string[];
@@ -37,6 +40,7 @@ interface GameState {
   showCharacterSheet: boolean;
   isAxiomAuthenticated: boolean;
   showDebugger: boolean;
+  emergenceSettings: EmergenceSettings;
   diagnosticReport: any | null;
   isScanning: boolean;
 
@@ -56,6 +60,8 @@ interface GameState {
   runDiagnostics: (errorLog?: string) => Promise<void>;
   runEmergentBehavior: (agentId: string) => Promise<void>;
   setAxiomAuthenticated: (auth: boolean) => void;
+  updateEmergenceSettings: (settings: Partial<EmergenceSettings>) => void;
+  generateAxiomaticChunk: (x: number, z: number) => void;
   sendSignal: (msg: string) => void;
   purchaseProduct: (id: string) => void;
   equipItem: (agentId: string, item: Item, index: number) => void;
@@ -70,6 +76,12 @@ interface GameState {
   consumeEnergy: (amount: number) => boolean;
   refillEnergy: (amount: number) => void;
   buildStructureOnParcel: (parcelId: string, type: StructureType) => void;
+  stabilizeChunk: (chunkId: string) => void;
+  registerNotary: (userId: string, email: string) => void;
+  upgradeNotary: (userId: string) => void;
+  postTradeOffer: (offer: Omit<TradeOffer, 'id' | 'timestamp' | 'status'>) => void;
+  acceptTradeOffer: (offerId: string, acceptorId: string) => void;
+  cancelTradeOffer: (offerId: string) => void;
   setGlobalApiCooldown: (timestamp: number) => void;
 }
 
@@ -83,6 +95,8 @@ export const useStore = create<GameState>((set, get) => ({
   loadedChunks: [],
   quests: [],
   landParcels: [],
+  notaries: [],
+  tradeOffers: [],
   auctionHouse: [],
   activeEvents: [],
   graphicPacks: ['Default Architecture'],
@@ -108,6 +122,13 @@ export const useStore = create<GameState>((set, get) => ({
   diagnosticReport: null,
   isScanning: false,
   isAxiomAuthenticated: false,
+  emergenceSettings: {
+    isEmergenceEnabled: true,
+    useHeuristicsOnly: true, // Default to true for release as requested
+    axiomaticWorldGeneration: true,
+    physicsBasedActivation: true,
+    showAxiomaticOverlay: false
+  },
 
   setUserApiKey: (key) => {
     if (key) localStorage.setItem('OUROBOROS_API_KEY', key);
@@ -130,16 +151,59 @@ export const useStore = create<GameState>((set, get) => ({
     set(s => ({ matrixEnergy: s.matrixEnergy + amount }));
   },
 
+  updateEmergenceSettings: (newSettings) => set(s => ({ 
+    emergenceSettings: { ...s.emergenceSettings, ...newSettings } 
+  })),
+
+  generateAxiomaticChunk: (x, z) => {
+    const id = `c${x}${z}`;
+    const logicString = `AXIOM-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+    
+    // Generate 8x8 axiomatic data field based on logic string hash
+    const data: number[][] = [];
+    for(let i=0; i<8; i++) {
+      data[i] = [];
+      for(let j=0; j<8; j++) {
+        data[i][j] = (Math.sin(i * 0.5 + j * 0.3 + x + z) + 1) / 2;
+      }
+    }
+
+    const isSanctuary = x === 0 && z === 0;
+
+    const newChunk: Chunk = {
+      id, x, z, 
+      biome: getBiomeForChunk(x, z),
+      entropy: Math.random() * 0.5,
+      explorationLevel: 0.1,
+      logicString,
+      axiomaticData: data,
+      stabilityIndex: isSanctuary ? 1.0 : Math.random() * 0.5 + 0.5,
+      corruptionLevel: isSanctuary ? 0.0 : Math.random() * 0.3,
+      cellType: isSanctuary ? 'SANCTUARY' : 'WILDERNESS'
+    };
+
+    set(s => ({ loadedChunks: [...s.loadedChunks, newChunk] }));
+    get().addLog(`Axiomatic Chunk ${id} generated via Logic Field: ${logicString}`, 'AXIOM', 'SYSTEM');
+  },
+
   initGame: () => {
     const initialChunks: Chunk[] = [
-        { id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0 },
-        { id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.1 },
+        { 
+          id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0, 
+          stabilityIndex: 1.0, corruptionLevel: 0.0, cellType: 'SANCTUARY' 
+        },
+        { 
+          id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.1,
+          stabilityIndex: 0.8, corruptionLevel: 0.1, cellType: 'WILDERNESS'
+        },
     ];
 
     const initialAgents: Agent[] = [
         {
             id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8 },
-            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
+            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, 
+            resources: { WOOD: 10, STONE: 5, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 2 },
+            inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
             economicDesires: { 
               targetGold: 1000, 
               preferredResources: ['GOLD_ORE', 'SILVER_ORE'], 
@@ -153,7 +217,9 @@ export const useStore = create<GameState>((set, get) => ({
         },
         {
           id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4 },
-          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
+          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, 
+          resources: { WOOD: 5, STONE: 20, IRON_ORE: 15, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
+          inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
           economicDesires: { 
             targetGold: 5000, 
             preferredResources: ['IRON_ORE', 'GOLD_ORE'], 
@@ -318,10 +384,11 @@ export const useStore = create<GameState>((set, get) => ({
 
     for (const agent of state.agents) {
       if (agent.faction === 'SYSTEM') continue;
+      if (!state.emergenceSettings.isEmergenceEnabled) continue;
       
       const energyCost = agent.isAdvancedIntel ? 1 : 5;
       const hasEnergy = get().consumeEnergy(energyCost);
-      const useHeuristics = isApiThrottled || !hasEnergy || !state.userApiKey;
+      const useHeuristics = state.emergenceSettings.useHeuristicsOnly || isApiThrottled || !hasEnergy || !state.userApiKey;
 
       let decision;
       
@@ -363,6 +430,10 @@ export const useStore = create<GameState>((set, get) => ({
 
       if (decision.message) {
         get().addChatMessage(decision.message, 'THOUGHT', agent.id, agent.name);
+      }
+
+      if (decision.acceptTradeId) {
+        get().acceptTradeOffer(decision.acceptTradeId, agent.id);
       }
     }
   },
@@ -417,6 +488,7 @@ export const useStore = create<GameState>((set, get) => ({
     }
   },
   runEmergentBehavior: async (agentId) => {
+    if (!get().emergenceSettings.isEmergenceEnabled) return;
     const { generateEmergentBehavior } = await import('./services/geminiService');
     const agent = get().agents.find(a => a.id === agentId);
     if (!agent) return;
@@ -425,7 +497,7 @@ export const useStore = create<GameState>((set, get) => ({
     const recentLogs = get().logs.slice(0, 10);
 
     try {
-      const behavior = await generateEmergentBehavior(agent, nearbyAgents, recentLogs, get().userApiKey || undefined);
+      const behavior = await generateEmergentBehavior(agent, nearbyAgents, recentLogs, get().tradeOffers, get().userApiKey || undefined);
       
       set(s => ({
         agents: s.agents.map(a => a.id === agentId ? {
@@ -440,6 +512,17 @@ export const useStore = create<GameState>((set, get) => ({
 
       if (behavior.message) {
         get().addChatMessage(behavior.message, 'THOUGHT', agent.id, agent.name);
+      }
+
+      if (behavior.tradeProposal) {
+        get().postTradeOffer({
+          senderId: agent.id,
+          senderName: agent.name,
+          offeredType: behavior.tradeProposal.offeredType as any,
+          offeredAmount: behavior.tradeProposal.offeredAmount,
+          requestedType: behavior.tradeProposal.requestedType as any,
+          requestedAmount: behavior.tradeProposal.requestedAmount
+        });
       }
       
       get().addLog(`${agent.name} emergent behavior: ${behavior.action}`, 'THOUGHT', agent.name);
@@ -458,6 +541,116 @@ export const useStore = create<GameState>((set, get) => ({
   buildStructureOnParcel: (parcelId, type) => {
     set(s => ({
       landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: `struct_${Date.now()}`, type, ownerId: s.user.id }] } : p)
+    }));
+  },
+
+  stabilizeChunk: (chunkId) => {
+    set(s => ({
+      loadedChunks: s.loadedChunks.map(c => c.id === chunkId ? {
+        ...c,
+        stabilityIndex: Math.min(1.0, c.stabilityIndex + 0.1),
+        corruptionLevel: Math.max(0.0, c.corruptionLevel - 0.1)
+      } : c)
+    }));
+    get().addLog(`Chunk ${chunkId} stabilized. Corruption reduced.`, 'SYSTEM', 'AXIOM');
+  },
+
+  registerNotary: (userId, email) => {
+    const newNotary: Notary = {
+      userId,
+      email,
+      tier: 1,
+      tierName: 'Autosave',
+      timestamp: Date.now()
+    };
+    set(s => ({ notaries: [...s.notaries, newNotary] }));
+    get().addLog(`New Notary registered: ${email} (Tier 1)`, 'SYSTEM', 'NOTAR');
+  },
+
+  upgradeNotary: (userId) => {
+    set(s => ({
+      notaries: s.notaries.map(n => n.userId === userId ? {
+        ...n,
+        tier: Math.min(3, n.tier + 1) as NotaryTier,
+        tierName: n.tier === 1 ? 'Duden-Entry' : 'Axiomatic-Master'
+      } : n)
+    }));
+    get().addLog(`Notary ${userId} upgraded.`, 'SYSTEM', 'NOTAR');
+  },
+
+  postTradeOffer: (offer) => {
+    const newOffer = {
+      ...offer,
+      id: `trade-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      timestamp: Date.now(),
+      status: 'OPEN' as const
+    };
+    set(s => ({ tradeOffers: [newOffer, ...s.tradeOffers] }));
+    get().addLog(`${offer.senderName} posted a trade offer: ${offer.offeredAmount} ${offer.offeredType} for ${offer.requestedAmount} ${offer.requestedType}`, 'TRADE', offer.senderId);
+  },
+
+  acceptTradeOffer: (offerId, acceptorId) => {
+    const state = get();
+    const offer = state.tradeOffers.find(o => o.id === offerId);
+    if (!offer || offer.status !== 'OPEN') return;
+
+    const sender = state.agents.find(a => a.id === offer.senderId);
+    const acceptor = state.agents.find(a => a.id === acceptorId);
+
+    if (!sender || !acceptor) return;
+
+    // Validate sender has offered goods
+    if (offer.offeredType === 'GOLD') {
+      if (sender.gold < offer.offeredAmount) return;
+    } else {
+      if ((sender.resources[offer.offeredType] || 0) < offer.offeredAmount) return;
+    }
+
+    // Validate acceptor has requested goods
+    if (offer.requestedType === 'GOLD') {
+      if (acceptor.gold < offer.requestedAmount) return;
+    } else {
+      if ((acceptor.resources[offer.requestedType] || 0) < offer.requestedAmount) return;
+    }
+
+    // Execute trade
+    set(s => ({
+      agents: s.agents.map(a => {
+        if (a.id === sender.id) {
+          const newResources = { ...a.resources };
+          let newGold = a.gold;
+          
+          if (offer.offeredType === 'GOLD') newGold -= offer.offeredAmount;
+          else newResources[offer.offeredType] -= offer.offeredAmount;
+
+          if (offer.requestedType === 'GOLD') newGold += offer.requestedAmount;
+          else newResources[offer.requestedType] = (newResources[offer.requestedType] || 0) + offer.requestedAmount;
+
+          return { ...a, gold: newGold, resources: newResources };
+        }
+        if (a.id === acceptor.id) {
+          const newResources = { ...a.resources };
+          let newGold = a.gold;
+
+          if (offer.requestedType === 'GOLD') newGold -= offer.requestedAmount;
+          else newResources[offer.requestedType] -= offer.requestedAmount;
+
+          if (offer.offeredType === 'GOLD') newGold += offer.offeredAmount;
+          else newResources[offer.offeredType] = (newResources[offer.offeredType] || 0) + offer.offeredAmount;
+
+          return { ...a, gold: newGold, resources: newResources };
+        }
+        return a;
+      }),
+      tradeOffers: s.tradeOffers.map(o => o.id === offerId ? { ...o, status: 'ACCEPTED' as const } : o)
+    }));
+
+    get().addLog(`${acceptor.name} accepted ${sender.name}'s trade offer.`, 'TRADE', acceptorId);
+  },
+
+  cancelTradeOffer: (offerId) => {
+    set(s => ({
+      tradeOffers: s.tradeOffers.map(o => o.id === offerId ? { ...o, status: 'CANCELLED' as const } : o)
     }));
   },
 

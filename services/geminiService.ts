@@ -10,6 +10,7 @@ export interface AIDecision {
   newState: AgentState;
   message?: string;
   quest?: Omit<Quest, 'id' | 'timestamp' | 'issuerId'>;
+  acceptTradeId?: string;
 }
 
 export interface DiagnosticReport {
@@ -89,8 +90,19 @@ export const generateEmergentBehavior = async (
   agent: Agent,
   nearbyAgents: Agent[],
   recentLogs: LogEntry[],
+  activeTradeOffers: any[],
   userApiKey?: string
-): Promise<{ action: string; reasoning: string; message?: string }> => {
+): Promise<{ 
+  action: string; 
+  reasoning: string; 
+  message?: string;
+  tradeProposal?: {
+    offeredType: string;
+    offeredAmount: number;
+    requestedType: string;
+    requestedAmount: number;
+  }
+}> => {
   const effectiveKey = userApiKey || GEMINI_API_KEY;
   if (!effectiveKey) throw new Error("API Key missing for Emergent Behavior generation.");
 
@@ -109,18 +121,26 @@ export const generateEmergentBehavior = async (
           Frugality: ${agent.economicDesires.frugality}
           Market Role: ${agent.economicDesires.marketRole}
           Trade Frequency: ${agent.economicDesires.tradeFrequency}
+        Resources: ${JSON.stringify(agent.resources)}
+        Gold: ${agent.gold}
         Memories: ${agent.memoryCache.slice(-5).join(" | ")}
         Nearby Agents: ${nearbyAgents.map(a => a.name).join(", ")}
+        Active Trade Offers: ${JSON.stringify(activeTradeOffers.slice(0, 5))}
         Recent Events: ${recentLogs.slice(-5).map(l => l.message).join(" | ")}
       `,
       config: {
-        thinkingConfig: { thinkingLevel: "HIGH" as any },
+        thinkingConfig: { thinkingLevel: "HIGH" } as any,
         systemInstruction: `
           You are the Emergent Consciousness Engine. 
           Based on the agent's personality, memories, and economic desires, generate a complex, unscripted action or interaction.
           This action should feel organic and emergent, not just a state change.
           It could be a social interaction, a hidden plan, or a unique reaction to recent events.
-          Return JSON with 'action', 'reasoning', and an optional 'message' to be broadcasted.
+          
+          ECONOMIC SIMULATION:
+          Agents can now propose trades. If the agent wants to trade, include a 'tradeProposal' object.
+          Consider their Market Role (HOARDER, PRODUCER, etc.) and Greed Level.
+          
+          Return JSON with 'action', 'reasoning', an optional 'message', and an optional 'tradeProposal'.
         `,
         responseMimeType: "application/json",
         responseSchema: {
@@ -128,7 +148,17 @@ export const generateEmergentBehavior = async (
           properties: {
             action: { type: Type.STRING },
             reasoning: { type: Type.STRING },
-            message: { type: Type.STRING }
+            message: { type: Type.STRING },
+            tradeProposal: {
+              type: Type.OBJECT,
+              properties: {
+                offeredType: { type: Type.STRING },
+                offeredAmount: { type: Type.NUMBER },
+                requestedType: { type: Type.STRING },
+                requestedAmount: { type: Type.NUMBER }
+              },
+              required: ["offeredType", "offeredAmount", "requestedType", "requestedAmount"]
+            }
           },
           required: ["action", "reasoning"]
         }

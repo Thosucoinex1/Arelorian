@@ -2,13 +2,16 @@
 import React from 'react';
 import { useStore } from '../../store';
 import { ResourceType } from '../../types';
-import { TrendingUp, ShoppingCart, Package, Hammer } from 'lucide-react';
+import { TrendingUp, ShoppingCart, Package, Hammer, ArrowRight, User } from 'lucide-react';
 
 export const MarketOverlay = () => {
     const showMarket = useStore(state => state.showMarket);
     const toggleMarket = useStore(state => state.toggleMarket);
     const market = useStore(state => state.market);
     const orders = useStore(state => state.craftingOrders);
+    const tradeOffers = useStore(state => state.tradeOffers);
+    const acceptTradeOffer = useStore(state => state.acceptTradeOffer);
+    const selectedAgentId = useStore(state => state.selectedAgentId);
 
     if (!showMarket) return null;
 
@@ -74,6 +77,47 @@ export const MarketOverlay = () => {
                         </div>
                         <div className="mt-6 p-4 bg-axiom-gold/5 border border-axiom-gold/20 rounded-xl italic text-[10px] text-axiom-gold/70 leading-relaxed">
                             MARKET LOGIC: Prices shift by 2% per transaction. High demand increases value. Specialists earn premium rates for axiomatic tier crafting.
+                        </div>
+                    </section>
+
+                    {/* Inter-Agent Trade Offers */}
+                    <section className="lg:col-span-2">
+                        <h3 className="text-emerald-500 text-xs font-black uppercase mb-4 tracking-widest flex items-center gap-2">
+                            <User className="w-4 h-4" /> Inter-Agent Trade Offers
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {tradeOffers.filter(o => o.status === 'OPEN').length === 0 ? (
+                                <div className="col-span-2 text-center py-8 bg-black/40 rounded-2xl border border-white/5 italic text-gray-600 text-xs">
+                                    No active trade proposals.
+                                </div>
+                            ) : (
+                                tradeOffers.filter(o => o.status === 'OPEN').map(offer => (
+                                    <div key={offer.id} className="bg-emerald-500/5 border border-emerald-500/20 p-4 rounded-xl flex flex-col gap-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest">{offer.senderName}</span>
+                                            <span className="text-[8px] text-gray-500 font-mono">{new Date(offer.timestamp).toLocaleTimeString()}</span>
+                                        </div>
+                                        <div className="flex items-center justify-center gap-4 py-2 bg-black/20 rounded-lg">
+                                            <div className="text-center">
+                                                <div className="text-[10px] text-gray-500 uppercase font-black">OFFERING</div>
+                                                <div className="text-sm font-bold text-white">{offer.offeredAmount} {offer.offeredType}</div>
+                                            </div>
+                                            <ArrowRight className="text-emerald-500 w-4 h-4" />
+                                            <div className="text-center">
+                                                <div className="text-[10px] text-gray-500 uppercase font-black">REQUESTING</div>
+                                                <div className="text-sm font-bold text-white">{offer.requestedAmount} {offer.requestedType}</div>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => selectedAgentId && acceptTradeOffer(offer.id, selectedAgentId)}
+                                            disabled={!selectedAgentId || selectedAgentId === offer.senderId}
+                                            className="w-full bg-emerald-500 text-black text-[10px] font-black py-2 rounded-lg uppercase tracking-widest hover:bg-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                        >
+                                            {selectedAgentId === offer.senderId ? 'Your Offer' : selectedAgentId ? 'Accept Trade' : 'Select Agent to Trade'}
+                                        </button>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </section>
                 </div>

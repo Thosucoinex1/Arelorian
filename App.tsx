@@ -28,6 +28,8 @@ import { ChatConsole } from './components/UI/ChatConsole';
 import { MarketOverlay } from './components/UI/MarketOverlay';
 import { AxiomDebugger } from './components/UI/AxiomDebugger';
 import { EmergentBehaviorMonitor } from './components/UI/EmergentBehaviorMonitor';
+import { EmergenceAdminMenu } from './components/UI/EmergenceAdminMenu';
+import { AxiomaticOverlay } from './components/UI/AxiomaticOverlay';
 import WorldScene from './components/World/WorldScene';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
@@ -163,8 +165,12 @@ const App = () => {
   const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
   const runDiagnostics = useStore(state => state.runDiagnostics);
   const toggleDebugger = useStore(state => state.toggleDebugger);
+  const toggleAdmin = useStore(state => state.toggleAdmin);
+  const showAdmin = useStore(state => state.showAdmin);
   const [showInitialHandshake, setShowInitialHandshake] = useState(false);
   const user = useMemo(() => storeUser, [storeUser]);
+
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   useEffect(() => { initGame(); }, [initGame]);
   useEffect(() => { if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [user?.email, isAxiomAuthenticated]);
@@ -229,8 +235,20 @@ const App = () => {
       <MarketOverlay />
       <AxiomDebugger />
       <EmergentBehaviorMonitor />
+      <EmergenceAdminMenu />
+      <AxiomaticOverlay />
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
       <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
+      
+      {isAdmin && (
+        <button 
+          onClick={() => toggleAdmin(!showAdmin)}
+          className="fixed top-8 right-8 z-[60] pointer-events-auto w-12 h-12 bg-axiom-purple/20 hover:bg-axiom-purple/40 border border-axiom-purple/50 rounded-full flex items-center justify-center text-axiom-purple transition-all hover:scale-110 active:scale-90 shadow-[0_0_20px_rgba(168,85,247,0.2)]"
+          title="Toggle Admin Dashboard"
+        >
+          <ShieldCheck className="w-6 h-6" />
+        </button>
+      )}
     </div>
   );
 };

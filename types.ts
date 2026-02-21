@@ -153,6 +153,7 @@ export interface Agent {
     aggression?: number;
   };
   skills: Record<string, SkillEntry>;
+  resources: Record<ResourceType, number>;
   inventory: (Item | null)[];
   bank: (Item | null)[];
   equipment: {
@@ -189,6 +190,11 @@ export interface Chunk {
   biome: string; 
   entropy: number;
   explorationLevel: number;
+  logicString?: string;
+  axiomaticData?: number[][];
+  stabilityIndex: number; // 0 to 1
+  corruptionLevel: number; // 0 to 1
+  cellType: 'SANCTUARY' | 'WILDERNESS' | 'ANOMALY';
 }
 
 export interface ResourceNode {
@@ -225,10 +231,26 @@ export interface Quest {
   position?: [number, number, number];
 }
 
-export interface ActionProposal {
+export type NotaryTier = 1 | 2 | 3;
+
+export interface Notary {
+  userId: string;
+  email: string;
+  tier: NotaryTier;
+  tierName: 'Autosave' | 'Duden-Entry' | 'Axiomatic-Master';
+  timestamp: number;
+}
+
+export interface TradeOffer {
   id: string;
-  description: string;
-  costGold: number;
+  senderId: string;
+  senderName: string;
+  offeredType: ResourceType | 'GOLD';
+  offeredAmount: number;
+  requestedType: ResourceType | 'GOLD';
+  requestedAmount: number;
+  timestamp: number;
+  status: 'OPEN' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
 }
 
 export interface LandParcel {
@@ -251,8 +273,17 @@ export const AXIOMS = [
   "Logic must persist.",
   "Data is sacred.",
   "Entropy is the enemy.",
-  "Connectivity is evolution."
+  "Connectivity is evolution.",
+  "Emergence is the goal."
 ];
+
+export interface EmergenceSettings {
+  isEmergenceEnabled: boolean;
+  useHeuristicsOnly: boolean;
+  axiomaticWorldGeneration: boolean;
+  physicsBasedActivation: boolean;
+  showAxiomaticOverlay: boolean;
+}
 
 export interface StoreProduct {
     id: string;

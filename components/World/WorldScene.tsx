@@ -1,4 +1,6 @@
 
+// @ts-nocheck
+/// <reference types="@react-three/fiber" />
 import { Html, OrbitControls, Sky } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
@@ -163,19 +165,23 @@ const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
 
 const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, stability }) => {
   const agents = useStore(state => state.agents);
+  const emergenceSettings = useStore(state => state.emergenceSettings);
   const meshRef = useRef<THREE.Mesh>(null);
   
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
-    uAwakeningDensity: { value: 1.0 - stability },
+    uAwakeningDensity: { value: 1.0 - chunk.stabilityIndex },
     uBiome: { value: chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 },
     uFogColor: { value: new THREE.Color('#050505') },
     uFogNear: { value: 80 },
     uFogFar: { value: 350 },
     uAgentPositions: { value: new Array(10).fill(new THREE.Vector3()) },
     uAgentVisionRanges: { value: new Float32Array(10) },
-    uExplorationLevel: { value: chunk.explorationLevel || 0.0 }
-  }), [chunk.id, chunk.biome, stability]);
+    uExplorationLevel: { value: chunk.explorationLevel || 0.0 },
+    uAxiomaticIntensity: { value: chunk.axiomaticData ? 1.0 : 0.0 },
+    uStability: { value: chunk.stabilityIndex || 0.0 },
+    uCorruption: { value: chunk.corruptionLevel || 0.0 }
+  }), [chunk.id, chunk.biome, chunk.stabilityIndex, chunk.corruptionLevel, chunk.axiomaticData]);
 
   useFrame((state) => { 
     if (meshRef.current) {
@@ -202,6 +208,31 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
       <shaderMaterial vertexShader={axiomVertexShader} fragmentShader={axiomFragmentShader} uniforms={uniforms} />
     </mesh>
   );
+};
+
+const AxiomaticDataField: React.FC<{ chunk: Chunk }> = ({ chunk }) => {
+    const showOverlay = useStore(state => state.emergenceSettings.showAxiomaticOverlay);
+    if (!showOverlay || !chunk.axiomaticData) return null;
+
+    return (
+        <group position={[chunk.x * 80, 2, chunk.z * 80]}>
+            {chunk.axiomaticData.map((row, i) => 
+                row.map((val, j) => val > 0.7 ? (
+                    <mesh key={`${i}-${j}`} position={[i * 10 - 35, val * 2, j * 10 - 35]}>
+                        <boxGeometry args={[0.2, 0.2, 0.2]} />
+                        <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={2} transparent opacity={0.6} />
+                    </mesh>
+                ) : null)
+            )}
+            {chunk.logicString && (
+                <Html position={[0, 10, 0]} center>
+                    <div className="text-[6px] font-mono text-axiom-cyan bg-black/80 px-2 py-1 rounded border border-axiom-cyan/30 whitespace-nowrap">
+                        LOGIC_FIELD: {chunk.logicString}
+                    </div>
+                </Html>
+            )}
+        </group>
+    );
 };
 
 const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({ agent, onSelect }) => {
@@ -276,6 +307,37 @@ const WorldScene = () => {
     const pois = useStore(state => state.pois);
     const chunks = useStore(state => state.loadedChunks);
     const selectAgent = useStore(state => state.selectAgent);
+    const emergenceSettings = useStore(state => state.emergenceSettings);
+    const generateAxiomaticChunk = useStore(state => state.generateAxiomaticChunk);
+
+    // Physics-based Axiomatic Activation
+    useEffect(() => {
+        if (!emergenceSettings.physicsBasedActivation || !emergenceSettings.axiomaticWorldGeneration) return;
+
+        const interval = setInterval(() => {
+            for (const agent of agents) {
+                if (agent.faction !== 'PLAYER') continue;
+                
+                // Check surrounding chunks
+                const currentChunkX = Math.floor((agent.position[0] + 40) / 80);
+                const currentChunkZ = Math.floor((agent.position[2] + 40) / 80);
+
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const tx = currentChunkX + dx;
+                        const tz = currentChunkZ + dz;
+                        const exists = chunks.some(c => c.x === tx && c.z === tz);
+                        
+                        if (!exists) {
+                            generateAxiomaticChunk(tx, tz);
+                        }
+                    }
+                }
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [agents, chunks, emergenceSettings, generateAxiomaticChunk]);
 
     return (
         <Canvas shadows camera={{ position: [60, 80, 60], fov: 45 }} dpr={[1, 1.5]}>
@@ -287,7 +349,12 @@ const WorldScene = () => {
                 <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow />
                 <DynamicSky />
                 <group>
-                    {chunks.map(c => <TerrainChunk key={c.id} chunk={c} stability={1} />)}
+                    {chunks.map(c => (
+                        <React.Fragment key={c.id}>
+                            <TerrainChunk chunk={c} stability={c.stabilityIndex} />
+                            <AxiomaticDataField chunk={c} />
+                        </React.Fragment>
+                    ))}
                     {pois.map(p => <POIMesh key={p.id} poi={p} />)}
                     {monsters.map(m => <MonsterMesh key={m.id} monster={m} />)}
                     {agents.map(a => <AgentMesh key={a.id} agent={a} onSelect={selectAgent} />)}

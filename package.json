@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
@@ -14,12 +14,15 @@
     "@react-three/drei": "9.109.0",
     "@react-three/fiber": "8.16.8",
     "@tailwindcss/vite": "^4.2.0",
+    "@types/express": "^5.0.6",
+    "express": "^5.2.1",
     "lucide-react": "0.474.0",
     "motion": "^12.34.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "tailwindcss": "^4.2.0",
     "three": "0.163.0",
+    "tsx": "^4.21.0",
     "zustand": "5.0.3"
   },
   "devDependencies": {

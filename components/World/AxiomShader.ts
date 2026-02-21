@@ -10,6 +10,9 @@ varying float vFogDepth;
 uniform float uTime;
 uniform float uAwakeningDensity;
 uniform float uBiome; 
+uniform float uAxiomaticIntensity;
+uniform float uStability;
+uniform float uCorruption;
 
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 float snoise(vec2 v){
@@ -67,7 +70,7 @@ void main() {
       elevation *= 0.3;
   }
 
-  float glitchFactor = step(0.98, sin(uTime * 1.5 + pos.x * 20.0)) * uAwakeningDensity;
+  float glitchFactor = step(0.98, sin(uTime * 1.5 + pos.x * 20.0)) * (uAwakeningDensity + uCorruption * 0.5);
   pos.x += glitchFactor * 0.5 * snoise(pos.xz + uTime);
   vGlitch = glitchFactor;
 
@@ -95,6 +98,9 @@ varying float vFogDepth;
 uniform float uTime;
 uniform float uAwakeningDensity; 
 uniform float uBiome;
+uniform float uAxiomaticIntensity;
+uniform float uStability;
+uniform float uCorruption;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
@@ -177,6 +183,23 @@ void main() {
         finalColor = mix(grassLush, grassDry, smoothstep(0.2, 0.7, noiseBase));
     }
 
+    // --- Stability & Corruption Procedural Textures ---
+    // Stability adds a clean digital grid pattern
+    vec2 stabilityGrid = fract(vPosition.xz * 0.5);
+    float stabilityPattern = step(0.95, stabilityGrid.x) + step(0.95, stabilityGrid.y);
+    finalColor = mix(finalColor, vec3(0.0, 1.0, 0.8), stabilityPattern * uStability * 0.15);
+
+    // Corruption adds glitchy noise and color shifts
+    float corruptionNoise = snoise(vPosition.xz * 2.0 + uTime * 0.5);
+    vec3 corruptionColor = vec3(0.8, 0.0, 0.2);
+    finalColor = mix(finalColor, corruptionColor, step(0.7, corruptionNoise) * uCorruption * 0.4);
+    
+    // Fragmented glitch effect
+    if (uCorruption > 0.3) {
+        float frag = step(0.9, snoise(vPosition.xz * 10.0 + uTime));
+        finalColor += vec3(1.0) * frag * uCorruption * 0.5;
+    }
+
     // --- REFINED NEURAL FOG OF WAR ---
     float visibility = 0.0;
     float instantVis = 0.0;
@@ -192,6 +215,10 @@ void main() {
     // Digital neural pulse overlay
     float pulse = (sin(uTime * 3.5 + vPosition.x * 0.3 + vPosition.z * 0.3) * 0.5 + 0.5) * 0.08 * instantVis;
     
+    // Axiomatic Logic Field Overlay
+    float axiomPulse = (sin(uTime * 1.5 + vPosition.x * 2.0 + vPosition.z * 2.0) * 0.5 + 0.5) * uAxiomaticIntensity * 0.2 * visibility;
+    finalColor += vec3(0.0, 0.7, 1.0) * axiomPulse;
+
     // 2. Persistent Scan knowledge (Exploration Level)
     // Uses high-frequency noise to simulate "cached" digital memory of the environment
     float cacheNoise = fbm(vPosition.xz * 0.8 + uTime * 0.05);
