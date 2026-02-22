@@ -1,12 +1,39 @@
-
 import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
-  TradeOffer, EmergenceSettings, Notary, NotaryTier, AuctionListing, AxiomEvent
+  TradeOffer, EmergenceSettings, Notary, NotaryTier, AuctionListing, AxiomEvent, Guild, Kingdom, Structure, Skill, Skills
 } from './types';
-import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel } from './utils';
-import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
+import { getBiomeForChunk, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel } from './utils';
+import { generateAutonomousDecision, importAgentFromSource, generateEmergentBehavior, diagnoseProject } from './services/geminiService';
+import { SeededRandom } from './services/rng';
+import { generateLoot } from './lootTables';
+
+const getInitialSkills = (): Skills => ({
+    [Skill.Attack]: { level: 1, xp: 0 },
+    [Skill.Strength]: { level: 1, xp: 0 },
+    [Skill.Defence]: { level: 1, xp: 0 },
+    [Skill.Hitpoints]: { level: 1, xp: 0 },
+    [Skill.Ranged]: { level: 1, xp: 0 },
+    [Skill.Magic]: { level: 1, xp: 0 },
+    [Skill.Prayer]: { level: 1, xp: 0 },
+    [Skill.Slayer]: { level: 1, xp: 0 },
+    [Skill.Crafting]: { level: 1, xp: 0 },
+    [Skill.Smithing]: { level: 1, xp: 0 },
+    [Skill.Fletching]: { level: 1, xp: 0 },
+    [Skill.Runecrafting]: { level: 1, xp: 0 },
+    [Skill.Herblore]: { level: 1, xp: 0 },
+    [Skill.Construction]: { level: 1, xp: 0 },
+    [Skill.Mining]: { level: 1, xp: 0 },
+    [Skill.Woodcutting]: { level: 1, xp: 0 },
+    [Skill.Fishing]: { level: 1, xp: 0 },
+    [Skill.Hunter]: { level: 1, xp: 0 },
+    [Skill.Farming]: { level: 1, xp: 0 },
+    [Skill.Agility]: { level: 1, xp: 0 },
+    [Skill.Thieving]: { level: 1, xp: 0 },
+    [Skill.Cooking]: { level: 1, xp: 0 },
+    [Skill.Firemaking]: { level: 1, xp: 0 },
+});
 
 interface GameState {
   agents: Agent[];
@@ -24,6 +51,8 @@ interface GameState {
   tradeOffers: TradeOffer[];
   auctionHouse: AuctionListing[];
   activeEvents: AxiomEvent[];
+  guilds: Guild[];
+  kingdoms: Kingdom[];
   graphicPacks: string[];
   selectedAgentId: string | null;
   cameraTarget: [number, number, number] | null; 
@@ -113,6 +142,17 @@ interface GameState {
   setSelectedChunk: (id: string | null) => void;
   selectMonster: (id: string | null) => void;
   selectPoi: (id: string | null) => void;
+  createGuild: (agentId: string, name: string) => void;
+  inviteToGuild: (inviterId: string, inviteeId: string) => void;
+  acceptGuildInvite: (inviteeId: string, guildId: string) => void;
+  leaveGuild: (agentId: string) => void;
+  foundCity: (agentId: string, chunkId: string) => void;
+  proposeAlliance: (guildId: string, targetGuildId: string) => void;
+  acceptAlliance: (guildId: string, proposingGuildId: string) => void;
+  formKingdom: (agentId: string, name: string) => void;
+  joinKingdom: (guildId: string, kingdomId: string) => void;
+  buildCastle: (agentId: string, chunkId: string) => void;
+  claimBiome: (agentId: string, biome: string) => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -129,6 +169,8 @@ export const useStore = create<GameState>((set, get) => ({
   tradeOffers: [],
   auctionHouse: [],
   activeEvents: [],
+  guilds: [],
+  kingdoms: [],
   graphicPacks: ['Default Architecture'],
   userApiKey: localStorage.getItem('OUROBOROS_API_KEY'),
   matrixEnergy: 100,
@@ -299,107 +341,192 @@ export const useStore = create<GameState>((set, get) => ({
 
   generateAxiomaticChunk: (x, z) => {
     const id = `c${x}${z}`;
-    const logicString = `AXIOM-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
-    
-    // Generate 8x8 axiomatic data field based on logic string hash
-    const data: number[][] = [];
-    for(let i=0; i<8; i++) {
-      data[i] = [];
-      for(let j=0; j<8; j++) {
-        data[i][j] = (Math.sin(i * 0.5 + j * 0.3 + x + z) + 1) / 2;
-      }
-    }
+    const logicString = `AXIOM-${x}-${z}-${Math.sin(x * 10 + z * 5).toString(16).substr(2, 4)}`;
+    const rng = new SeededRandom(logicString);
 
-    const isSanctuary = x === 0 && z === 0;
+    const biome = getBiomeForChunk(x, z);
+    const isSanctuary = biome === 'CITY';
+    const isOcean = biome === 'OCEAN';
 
     const newChunk: Chunk = {
-      id, x, z, 
-      biome: getBiomeForChunk(x, z),
-      entropy: Math.random() * 0.5,
-      explorationLevel: 0.1,
+      id, x, z,
+      biome,
       logicString,
-      axiomaticData: data,
-      stabilityIndex: isSanctuary ? 1.0 : Math.random() * 0.5 + 0.5,
-      corruptionLevel: isSanctuary ? 0.0 : Math.random() * 0.3,
+      entropy: rng.get(),
+      explorationLevel: isSanctuary ? 1.0 : 0.0,
+      stabilityIndex: isSanctuary ? 1.0 : 0.2 + rng.get() * 0.6,
+      corruptionLevel: isSanctuary ? 0.0 : rng.get() * 0.4,
       cellType: isSanctuary ? 'SANCTUARY' : 'WILDERNESS'
     };
 
-    set(s => ({ loadedChunks: [...s.loadedChunks, newChunk] }));
-    get().addLog(`Axiomatic Chunk ${id} generated via Logic Field: ${logicString}`, 'AXIOM', 'SYSTEM');
+    const newMonsters: Monster[] = [];
+    const newPOIs: POI[] = [];
+    const newResources: ResourceNode[] = [];
+
+    if (!isSanctuary && !isOcean) {
+        // Monster Generation
+        const monsterCount = rng.getInt(0, 5 + Math.floor(newChunk.corruptionLevel * 10));
+        for (let i = 0; i < monsterCount; i++) {
+            let monsterType: MonsterType;
+            // Biome-specific monsters
+            switch(biome) {
+                case 'DESERT':
+                    monsterType = rng.getChoice([MonsterType.GOBLIN, MonsterType.ORC]);
+                    break;
+                case 'SNOWY':
+                    monsterType = rng.getChoice([MonsterType.GOBLIN, MonsterType.ORC, MonsterType.DRAGON]);
+                    break;
+                case 'GRASSLAND':
+                case 'FOREST':
+                default:
+                    monsterType = rng.getChoice([MonsterType.SLIME, MonsterType.GOBLIN, MonsterType.ORC]);
+                    break;
+            }
+
+            const m_template = MONSTER_TEMPLATES[monsterType];
+            const posX = (x * 80) + rng.getInt(-40, 40);
+            const posZ = (z * 80) + rng.getInt(-40, 40);
+
+            newMonsters.push({
+                id: `m-${id}-${i}`,
+                type: monsterType,
+                name: m_template.name,
+                position: [posX, 0, posZ],
+                rotationY: rng.get() * Math.PI * 2,
+                stats: { ...m_template, maxHp: m_template.hp },
+                xpReward: m_template.xp,
+                state: 'IDLE',
+                targetId: null,
+                color: m_template.color,
+                scale: m_template.scale
+            });
+        }
+
+        // POI Generation
+        const poiChance = 0.2 + newChunk.entropy * 0.3;
+        if (rng.get() < poiChance) {
+            const poiType = rng.getChoice(['RUIN', 'DUNGEON', 'SHRINE', 'NEST', 'MINE']);
+            const posX = (x * 80) + rng.getInt(-35, 35);
+            const posZ = (z * 80) + rng.getInt(-35, 35);
+
+            newPOIs.push({
+                id: `poi-${id}`,
+                type: poiType,
+                position: [posX, 0, posZ],
+                isDiscovered: false,
+                discoveryRadius: 15,
+                rewardInsight: rng.getInt(10, 50),
+                threatLevel: newChunk.corruptionLevel * rng.get(),
+            });
+        }
+         // Resource Generation (simple)
+        const resourceCount = rng.getInt(5, 15);
+        for (let i = 0; i < resourceCount; i++) {
+            const resType = biome === 'FOREST' || biome === 'GRASSLAND' ? 'WOOD' : 'STONE';
+            const posX = (x * 80) + rng.getInt(-40, 40);
+            const posZ = (z * 80) + rng.getInt(-40, 40);
+             newResources.push({
+                id: `res-${id}-${i}`,
+                type: resType,
+                position: [posX, 0, posZ],
+                amount: rng.getInt(50, 200)
+            });
+        }
+    }
+
+
+    set(s => ({
+      loadedChunks: [...s.loadedChunks, newChunk],
+      monsters: [...s.monsters, ...newMonsters],
+      pois: [...s.pois, ...newPOIs],
+      resourceNodes: [...s.resourceNodes, ...newResources]
+    }));
+
+    get().addLog(`Axiomatic Chunk ${id} (${biome}) generated via Logic Field: ${logicString}`, 'AXIOM', 'SYSTEM');
   },
 
   initGame: async () => {
-    const initialChunks: Chunk[] = [
-        { 
-          id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0, 
-          stabilityIndex: 1.0, corruptionLevel: 0.0, cellType: 'SANCTUARY' 
-        },
-        { 
-          id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.1,
-          stabilityIndex: 0.8, corruptionLevel: 0.1, cellType: 'WILDERNESS'
-        },
-    ];
+    // Clear existing state
+    set({
+        loadedChunks: [],
+        agents: [],
+        monsters: [],
+        pois: [],
+        quests: [],
+        landParcels: [],
+        auctionHouse: [],
+        guilds: [],
+        kingdoms: []
+    });
+
+    // Generate the initial 3x3 starting area
+    for (let x = -1; x <= 1; x++) {
+        for (let z = -1; z <= 1; z++) {
+            get().generateAxiomaticChunk(x, z);
+        }
+    }
+
+    const vulcanSkills = getInitialSkills();
+    vulcanSkills[Skill.Mining] = { level: 2, xp: 0 };
+    vulcanSkills[Skill.Smithing] = { level: 8, xp: 0 };
+    vulcanSkills[Skill.Attack] = { level: 4, xp: 0 };
+    vulcanSkills[Skill.Strength] = { level: 4, xp: 0 };
+    vulcanSkills[Skill.Defence] = { level: 4, xp: 0 };
 
     const initialAgents: Agent[] = [
+        // Aurelius, the player's primary agent
         {
-            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8 },
-            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, 
+            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8, aggression: 0.1 },
+            skills: getInitialSkills(),
             resources: { WOOD: 10, STONE: 5, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 2 },
             inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
-            economicDesires: { 
-              targetGold: 1000, 
-              preferredResources: ['GOLD_ORE', 'SILVER_ORE'], 
-              greedLevel: 0.3,
-              riskAppetite: 0.2,
-              frugality: 0.8,
-              marketRole: 'HOARDER',
-              tradeFrequency: 0.1
+            economicDesires: {
+              targetGold: 1000,
+              preferredResources: ['GOLD_ORE', 'SILVER_ORE'],
+              greedLevel: 0.3, riskAppetite: 0.2, frugality: 0.8, marketRole: 'HOARDER', tradeFrequency: 0.1
             },
             emergentBehaviorLog: []
         },
+        // Vulcan, the NPC blacksmith
         {
-          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4 },
-          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, 
+          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', sociability: 0.3, aggression: 0.4 },
+          skills: vulcanSkills,
           resources: { WOOD: 5, STONE: 20, IRON_ORE: 15, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
           inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
-          economicDesires: { 
-            targetGold: 5000, 
-            preferredResources: ['IRON_ORE', 'GOLD_ORE'], 
-            greedLevel: 0.7,
-            riskAppetite: 0.5,
-            frugality: 0.4,
-            marketRole: 'PRODUCER',
-            tradeFrequency: 0.6
+          economicDesires: {
+            targetGold: 5000,
+            preferredResources: ['IRON_ORE', 'GOLD_ORE'],
+            greedLevel: 0.7, riskAppetite: 0.5, frugality: 0.4, marketRole: 'PRODUCER', tradeFrequency: 0.6
           },
           emergentBehaviorLog: []
         }
     ];
 
-    const initialMonsters: Monster[] = [
-      { id: 'm1', type: 'SLIME', name: 'Void Slime', position: [25, 0, 25], rotationY: 0, stats: { ...MONSTER_TEMPLATES.SLIME, maxHp: 30 }, xpReward: 15, state: 'IDLE', targetId: null, color: '#22c55e', scale: 0.5 },
-      { id: 'm2', type: 'GOBLIN', name: 'Scavenger', position: [-30, 0, 40], rotationY: 0, stats: { ...MONSTER_TEMPLATES.GOBLIN, maxHp: 60 }, xpReward: 40, state: 'IDLE', targetId: null, color: '#84cc16', scale: 0.8 }
+    // Ensure the central city has its key POIs
+    const cityPOIs: POI[] = [
+        { id: 'poi_bank_central', type: 'BANK_VAULT', position: [5, 0, -5], isDiscovered: true, discoveryRadius: 20, rewardInsight: 0, threatLevel: 0 },
+        { id: 'poi_forge_central', type: 'FORGE', position: [-5, 0, 5], isDiscovered: true, discoveryRadius: 20, rewardInsight: 0, threatLevel: 0 }
     ];
 
-    set({ 
-      loadedChunks: initialChunks, 
-      agents: initialAgents, 
-      monsters: initialMonsters, 
-      pois: generateProceduralPOIs(10),
+    set(s => ({
+      agents: initialAgents,
+      pois: [...s.pois, ...cityPOIs], // Add city POIs to procedurally generated ones
       landParcels: [
         { id: 'parcel_1', name: 'Axiom Lot Alpha', ownerId: 'u1', isCertified: true, structures: [] }
       ]
-    });
+    }));
 
-    // Try to load real agents from DB
+
+    // Try to load real agents from DB (overwrites initial agents if successful)
     const loaded = await get().loadAgents();
     if (loaded) {
       get().addLog("Real Agent Data Manifested from Axiom Database.", 'SYSTEM', 'AXIOM');
     }
 
-    // Generate initial procedural content
+    // Generate initial quests based on the new world state
     get().generateQuests();
     get().generateQuests();
-    
+
     // Add a test auction
     get().listAuctionItem({
       sellerId: 'a2',
@@ -420,21 +547,6 @@ export const useStore = create<GameState>((set, get) => ({
         let newState: Monster['state'] = m.state;
         let newTargetId = m.targetId;
         let newHp = m.stats.hp;
-
-        // 1. Monster Attack Logic
-        if (m.state === 'COMBAT' && m.targetId) {
-            const targetAgent = state.agents.find(a => a.id === m.targetId);
-            if (targetAgent) {
-                const dist = Math.hypot(targetAgent.position[0] - m.position[0], targetAgent.position[2] - m.position[2]);
-                if (dist < 2.5 && Math.random() < 0.1) { // 10% chance per tick to attack
-                    // Damage calculation
-                    const armor = (targetAgent.equipment.chest?.stats.def || 0) + (targetAgent.equipment.head?.stats.def || 0) + (targetAgent.equipment.legs?.stats.def || 0);
-                    const damage = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
-                    
-                    // We'll apply damage to agent in the agent mapping
-                }
-            }
-        }
 
         // 2. Monster Movement
         const closestAgent = state.agents.find(a => Math.hypot(a.position[0]-m.position[0], a.position[2]-m.position[2]) < 15);
@@ -481,6 +593,7 @@ export const useStore = create<GameState>((set, get) => ({
         let newLevel = a.level;
         let newGold = a.gold;
         let newIntegrity = a.integrity;
+        let newInventory = [...a.inventory];
         const moveSpeed = 6;
         
         // 1. Combat Damage from Monsters
@@ -502,7 +615,7 @@ export const useStore = create<GameState>((set, get) => ({
             newPos = [0, 0, 0]; // Back to sanctuary
             newGold = Math.floor(newGold * 0.8); // 20% gold penalty
             newIntegrity = Math.max(0.1, newIntegrity - 0.1);
-            return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, gold: newGold, integrity: newIntegrity, state: AgentState.IDLE, targetId: null };
+            return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, gold: newGold, integrity: newIntegrity, state: AgentState.IDLE, targetId: null, inventory: newInventory };
         }
 
         // 3. XP Gain from Dead Monsters
@@ -514,6 +627,19 @@ export const useStore = create<GameState>((set, get) => ({
                         newXp -= getXPForNextLevel(newLevel);
                         newLevel++;
                         state.addLog(`${a.name} hat Level ${newLevel} erreicht!`, 'SYSTEM', a.id);
+                    }
+
+                    const loot = generateLoot(m.type);
+                    if (loot.length > 0) {
+                        for (const item of loot) {
+                            const freeSlot = newInventory.indexOf(null);
+                            if (freeSlot !== -1) {
+                                newInventory[freeSlot] = item;
+                                state.addLog(`${a.name} received loot: ${item.name} (${item.rarity})`, 'COMBAT', a.id);
+                            } else {
+                                state.addLog(`${a.name}'s inventory is full. Loot was dropped.`, 'COMBAT', a.id);
+                            }
+                        }
                     }
                 }
             }
@@ -571,24 +697,24 @@ export const useStore = create<GameState>((set, get) => ({
             // webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
           }
 
-          return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
+          return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity, inventory: newInventory };
         }
         if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
           let newProgress = a.awakeningProgress + delta * 5;
-          let newLevel = a.consciousnessLevel;
+          let newConsciousnessLevel = a.consciousnessLevel;
           let awakened = a.isAwakened;
 
           if (newProgress >= 100) {
             newProgress = 0;
-            newLevel = Math.min(1.0, newLevel + 0.05);
-            if (newLevel >= 1.0 && !awakened) {
+            newConsciousnessLevel = Math.min(1.0, newConsciousnessLevel + 0.05);
+            if (newConsciousnessLevel >= 1.0 && !awakened) {
               awakened = true;
               state.addLog(`${a.name} has achieved full consciousness expansion!`, 'AXIOM', 'SYSTEM');
             }
           }
-          return { ...a, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
+          return { ...a, awakeningProgress: newProgress, consciousnessLevel: newConsciousnessLevel, isAwakened: awakened, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity, inventory: newInventory };
         }
-        return { ...a, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
+        return { ...a, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity, inventory: newInventory };
       });
 
       // Neural Fog of War Persistence Logic (Visit Recency)
@@ -857,7 +983,6 @@ export const useStore = create<GameState>((set, get) => ({
   toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
   toggleDebugger: (show) => set({ showDebugger: show }),
   runDiagnostics: async (errorLog) => {
-    const { diagnoseProject } = await import('./services/geminiService');
     set({ isScanning: true });
     get().addLog("Initiating Deep Solving Diagnostic...", 'WATCHDOG', 'SYSTEM');
     
@@ -880,7 +1005,6 @@ export const useStore = create<GameState>((set, get) => ({
   },
   runEmergentBehavior: async (agentId) => {
     if (!get().emergenceSettings.isEmergenceEnabled) return;
-    const { generateEmergentBehavior } = await import('./services/geminiService');
     const agent = get().agents.find(a => a.id === agentId);
     if (!agent) return;
 
@@ -914,6 +1038,10 @@ export const useStore = create<GameState>((set, get) => ({
           requestedType: behavior.tradeProposal.requestedType as any,
           requestedAmount: behavior.tradeProposal.requestedAmount
         });
+      }
+
+      if (behavior.formGuild) {
+        get().createGuild(agent.id, behavior.formGuild.guildName);
       }
       
       get().addLog(`${agent.name} emergent behavior: ${behavior.action}`, 'THOUGHT', agent.name);
@@ -1078,22 +1206,65 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   equipItem: (agentId, item, index) => {
-    set(s => ({
-      agents: s.agents.map(a => a.id === agentId ? {
-        ...a,
-        equipment: { ...a.equipment, [item.type.toLowerCase()]: item },
-        inventory: a.inventory.map((inv, i) => i === index ? null : inv)
-      } : a)
-    }));
+    set(s => {
+      const agent = s.agents.find(a => a.id === agentId);
+      if (!agent) return s;
+
+      const getEquipmentSlotForItem = (item: Item): keyof Agent['equipment'] | null => {
+          // This is a guess based on common game logic, as types.ts is not provided.
+          if (item.type === 'WEAPON') return 'mainHand';
+          if (item.type === 'ARMOR') {
+              if (item.subtype === 'HELMET') return 'head';
+              if (item.subtype === 'CHESTPLATE') return 'chest';
+              if (item.subtype === 'LEGGINGS') return 'legs';
+              if (item.subtype === 'SHIELD') return 'offHand';
+          }
+          return null;
+      };
+
+      const slot = getEquipmentSlotForItem(item);
+      if (!slot) {
+        // Cannot equip this item type
+        return s;
+      }
+
+      const currentlyEquipped = agent.equipment[slot];
+      const newInventory = [...agent.inventory];
+      newInventory[index] = currentlyEquipped; // Swap equipped item with inventory item
+
+      return {
+        agents: s.agents.map(a => a.id === agentId ? {
+          ...a,
+          equipment: { ...a.equipment, [slot]: item },
+          inventory: newInventory
+        } : a)
+      };
+    });
   },
   unequipItem: (agentId, slot) => {
-    set(s => ({
-      agents: s.agents.map(a => a.id === agentId ? {
-        ...a,
-        inventory: [...a.inventory.filter(i => i), a.equipment[slot]],
-        equipment: { ...a.equipment, [slot]: null }
-      } : a)
-    }));
+    set(s => {
+      const agent = s.agents.find(a => a.id === agentId);
+      if (!agent || !agent.equipment[slot]) return s;
+
+      const itemToUnequip = agent.equipment[slot];
+      const freeSlotIndex = agent.inventory.indexOf(null);
+
+      if (freeSlotIndex === -1) {
+        get().addLog(`${agent.name}'s inventory is full. Cannot unequip.`, 'SYSTEM', agent.id);
+        return s;
+      }
+
+      const newInventory = [...agent.inventory];
+      newInventory[freeSlotIndex] = itemToUnequip;
+
+      return {
+        agents: s.agents.map(a => a.id === agentId ? {
+          ...a,
+          inventory: newInventory,
+          equipment: { ...a.equipment, [slot]: null }
+        } : a)
+      };
+    });
   },
   moveInventoryItem: (agentId, from, to) => {
     set(s => ({
@@ -1180,11 +1351,7 @@ export const useStore = create<GameState>((set, get) => ({
           chest: null,
           legs: null
         },
-        skills: {
-          mining: { level: 1, xp: 0 },
-          combat: { level: 1, xp: 0 },
-          crafting: { level: 1, xp: 0 }
-        },
+        skills: getInitialSkills(),
         stats: {
           str: partialAgent.stats?.str || 10,
           agi: partialAgent.stats?.agi || 10,
@@ -1205,5 +1372,213 @@ export const useStore = create<GameState>((set, get) => ({
       get().addLog(`Manifestation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'SYSTEM', 'AXIOM');
     }
   },
-  setJoystick: (side, axis) => {}
+  setJoystick: (side, axis) => {},
+
+  createGuild: (agentId, name) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent || agent.guildId) return;
+
+    const newGuild: Guild = {
+      id: `guild-${Date.now()}`,
+      name,
+      leaderId: agentId,
+      members: [{ agentId, rank: 'LEADER' }],
+      allies: [],
+      resources: { WOOD: 0, STONE: 0, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
+      gold: 0,
+    };
+
+    set(s => ({
+      guilds: [...s.guilds, newGuild],
+      agents: s.agents.map(a => a.id === agentId ? { ...a, guildId: newGuild.id } : a),
+    }));
+
+    get().addLog(`${agent.name} has founded the guild: ${name}!`, 'GUILD', agentId);
+  },
+
+  inviteToGuild: (inviterId, inviteeId) => {
+    const inviter = get().agents.find(a => a.id === inviterId);
+    const invitee = get().agents.find(a => a.id === inviteeId);
+
+    if (!inviter || !invitee || !inviter.guildId || invitee.guildId) return;
+
+    // For now, we'll just log the invite.
+    // In a real implementation, you would send a notification to the invitee.
+    get().addLog(`${inviter.name} has invited ${invitee.name} to join their guild.`, 'GUILD', inviter.id);
+  },
+
+  acceptGuildInvite: (inviteeId, guildId) => {
+    const invitee = get().agents.find(a => a.id === inviteeId);
+    const guild = get().guilds.find(g => g.id === guildId);
+
+    if (!invitee || !guild || invitee.guildId) return;
+
+    set(s => ({
+      guilds: s.guilds.map(g => g.id === guildId ? { ...g, members: [...g.members, { agentId: inviteeId, rank: 'MEMBER' }] } : g),
+      agents: s.agents.map(a => a.id === inviteeId ? { ...a, guildId } : a),
+    }));
+
+    get().addLog(`${invitee.name} has joined the guild: ${guild.name}!`, 'GUILD', inviteeId);
+  },
+
+  leaveGuild: (agentId) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent || !agent.guildId) return;
+
+    const guild = get().guilds.find(g => g.id === agent.guildId);
+    if (!guild) return;
+
+    set(s => ({
+      guilds: s.guilds.map(g => g.id === agent.guildId ? { ...g, members: g.members.filter(m => m.agentId !== agentId) } : g),
+      agents: s.agents.map(a => a.id === agentId ? { ...a, guildId: null } : a),
+    }));
+
+    get().addLog(`${agent.name} has left the guild: ${guild.name}.`, 'GUILD', agentId);
+  },
+
+  foundCity: (agentId, chunkId) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent || !agent.guildId) return;
+
+    const guild = get().guilds.find(g => g.id === agent.guildId);
+    if (!guild || guild.leaderId !== agentId || guild.members.length < 50) return;
+
+    const chunk = get().loadedChunks.find(c => c.id === chunkId);
+    if (!chunk || chunk.cellType !== 'WILDERNESS') return;
+
+    const cityCenter: Structure = {
+      id: `struct-${chunkId}-city-center`,
+      type: 'CITY_CENTER',
+      guildId: guild.id,
+    };
+
+    set(s => ({
+      loadedChunks: s.loadedChunks.map(c => c.id === chunkId ? {
+        ...c,
+        cellType: 'CITY',
+        ownerGuildId: guild.id,
+        structures: [...(c.structures || []), cityCenter],
+      } : c),
+    }));
+
+    get().addLog(`${agent.name} has founded a new city, ${guild.name} city, on chunk ${chunkId}!`, 'GUILD', agentId);
+  },
+
+  proposeAlliance: (guildId, targetGuildId) => {
+    const state = get();
+    const guild = state.guilds.find(g => g.id === guildId);
+    const targetGuild = state.guilds.find(g => g.id === targetGuildId);
+
+    if (!guild || !targetGuild) return;
+
+    get().addLog(`Guild '${guild.name}' has proposed an alliance to guild '${targetGuild.name}'.`, 'GUILD');
+  },
+
+  acceptAlliance: (guildId, proposingGuildId) => {
+    const state = get();
+    const guild = state.guilds.find(g => g.id === guildId);
+    const proposingGuild = state.guilds.find(g => g.id === proposingGuildId);
+    if (!guild || !proposingGuild) return;
+
+    set(s => ({
+      guilds: s.guilds.map(g => {
+        if (g.id === guildId) {
+          return { ...g, allies: [...g.allies, proposingGuildId] };
+        }
+        if (g.id === proposingGuildId) {
+          return { ...g, allies: [...g.allies, guildId] };
+        }
+        return g;
+      })
+    }));
+
+    get().addLog(`Guild '${guild.name}' and '${proposingGuild.name}' have formed an alliance!`, 'GUILD');
+  },
+
+  formKingdom: (agentId, name) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent || !agent.guildId) return;
+
+    const guild = get().guilds.find(g => g.id === agent.guildId);
+    if (!guild || guild.leaderId !== agentId || guild.allies.length === 0) return;
+
+    const newKingdom: Kingdom = {
+      id: `kingdom-${Date.now()}`,
+      name,
+      leaderGuildId: guild.id,
+      memberGuildIds: [guild.id, ...guild.allies],
+      territory: [], // Initially empty
+    };
+
+    set(s => ({
+      kingdoms: [...s.kingdoms, newKingdom]
+    }));
+
+    get().addLog(`${agent.name} has formed the kingdom of ${name}!`, 'GUILD', agent.id);
+  },
+
+  joinKingdom: (guildId, kingdomId) => {
+    const guild = get().guilds.find(g => g.id === guildId);
+    const kingdom = get().kingdoms.find(k => k.id === kingdomId);
+
+    if (!guild || !kingdom) return;
+
+    const leaderGuild = get().guilds.find(g => g.id === kingdom.leaderGuildId);
+    if (!leaderGuild || !leaderGuild.allies.includes(guildId)) return;
+
+    set(s => ({
+      kingdoms: s.kingdoms.map(k => k.id === kingdomId ? { ...k, memberGuildIds: [...k.memberGuildIds, guildId] } : k)
+    }));
+    
+    get().addLog(`The guild ${guild.name} has joined the kingdom of ${kingdom.name}!`, 'GUILD');
+  },
+
+  buildCastle: (agentId, chunkId) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent || !agent.guildId) return;
+
+    const guild = get().guilds.find(g => g.id === agent.guildId);
+    if (!guild) return;
+
+    const kingdom = get().kingdoms.find(k => k.leaderGuildId === guild.id);
+    if (!kingdom) return;
+
+    const chunk = get().loadedChunks.find(c => c.id === chunkId);
+    if (!chunk || chunk.ownerGuildId !== guild.id) return;
+
+    const castle: Structure = {
+      id: `struct-${chunkId}-castle`,
+      type: 'CASTLE',
+      guildId: guild.id,
+    };
+
+    set(s => ({
+      loadedChunks: s.loadedChunks.map(c => c.id === chunkId ? {
+        ...c,
+        structures: [...(c.structures || []), castle],
+      } : c),
+    }));
+
+    get().addLog(`${agent.name} has built a castle on chunk ${chunkId}!`, 'GUILD', agentId);
+  },
+
+  claimBiome: (agentId, biome) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent || !agent.guildId) return;
+
+    const guild = get().guilds.find(g => g.id === agent.guildId);
+    if (!guild) return;
+
+    const kingdom = get().kingdoms.find(k => k.leaderGuildId === guild.id);
+    if (!kingdom) return;
+
+    const castlesInBiome = get().loadedChunks.filter(c => c.biome === biome && c.structures?.some(s => s.type === 'CASTLE' && s.guildId === guild.id)).length;
+    if (castlesInBiome < 4) return;
+
+    set(s => ({
+      kingdoms: s.kingdoms.map(k => k.id === kingdom.id ? { ...k, territory: [...k.territory, biome] } : k)
+    }));
+
+    get().addLog(`The kingdom of ${kingdom.name} has claimed the ${biome} biome!`, 'GUILD');
+  },
 }));

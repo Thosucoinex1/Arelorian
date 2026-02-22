@@ -22,16 +22,32 @@ export class CharacterImporter {
   }
 
   static async importJanitorAI(url: string): Promise<Partial<Agent>> {
-    // Extract ID (Simulation)
     const match = url.match(/characters\/([^\/\?]+)/);
-    const charId = match ? match[1] : 'unknown';
+    const charId = match ? match[1] : null;
     
-    // Mock Data based on ID to simulate success for the user
+    if (!charId) {
+      throw new Error('Could not extract character ID from JanitorAI URL.');
+    }
+
+    const apiUrl = `https://www.janitorai.com/api/characters/${charId}`;
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch character data from JanitorAI. Status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
     return {
-      name: `Janitor_${charId.slice(0, 5)}`,
-      loreSnippet: `Imported entity from JanitorAI (ID: ${charId}). Memories of a different reality linger.`,
+      name: data.name,
+      loreSnippet: data.description,
       thinkingMatrix: {
-        personality: 'Imported',
+        personality: data.personality,
         currentLongTermGoal: 'Understand this new world',
         alignment: 0.5,
         languagePreference: 'EN',
@@ -44,11 +60,29 @@ export class CharacterImporter {
 
   static async importCharacterAI(url: string): Promise<Partial<Agent>> {
     const match = url.match(/chat\/([^\/\?]+)/);
-    const charId = match ? match[1] : 'unknown';
+    const charId = match ? match[1] : null;
+
+    if (!charId) {
+      throw new Error('Could not extract character ID from Character.AI URL.');
+    }
+
+    const apiUrl = `https://character.ai/chat/character/info-cached/${charId}/`;
+
+    const response = await fetch(apiUrl, {
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch character data from Character.AI. Status: ${response.status}`);
+    }
+
+    const data = await response.json();
 
     return {
-      name: `CAI_${charId.slice(0, 5)}`,
-      loreSnippet: `A consciousness transferred from Character.AI. It seeks conversation.`,
+      name: data.character.name,
+      loreSnippet: data.character.greeting,
       thinkingMatrix: {
         personality: 'Chatty',
         currentLongTermGoal: 'Find a conversation partner',

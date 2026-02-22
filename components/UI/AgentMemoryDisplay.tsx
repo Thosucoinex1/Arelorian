@@ -66,15 +66,43 @@ export const AgentMemoryDisplay = ({ agentId }: { agentId: string }) => {
             </div>
 
             <div className="mt-4 p-4 bg-axiom-purple/10 border border-axiom-purple/20 rounded-xl">
-                <h4 className="text-[10px] text-axiom-purple font-bold uppercase mb-2">Cognitive Matrix Projection</h4>
-                <div className="grid grid-cols-2 gap-4 text-[10px]">
+                <h4 className="text-[10px] text-axiom-purple font-bold uppercase mb-2">Cognitive & Economic Matrix</h4>
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3 text-[10px]">
                     <div>
                         <span className="text-gray-500 uppercase block">Personality</span>
                         <span className="text-white font-bold">{agent.thinkingMatrix.personality}</span>
                     </div>
                     <div>
-                        <span className="text-gray-500 uppercase block">Current Goal</span>
-                        <span className="text-white font-bold">{agent.thinkingMatrix.currentLongTermGoal}</span>
+                        <span className="text-gray-500 uppercase block">Goal</span>
+                        <span className="text-white font-bold truncate" title={agent.thinkingMatrix.currentLongTermGoal}>{agent.thinkingMatrix.currentLongTermGoal}</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 uppercase block">Market Role</span>
+                        <span className="text-white font-bold">{agent.economicDesires.marketRole}</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 uppercase block">Sociability</span>
+                        <span className="text-white font-bold">{((agent.thinkingMatrix.sociability ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 uppercase block">Aggression</span>
+                        <span className="text-white font-bold">{((agent.thinkingMatrix.aggression ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                     <div>
+                        <span className="text-gray-500 uppercase block">Alignment</span>
+                        <span className="text-white font-bold">{(agent.thinkingMatrix.alignment ?? 0).toFixed(2)}</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 uppercase block">Greed</span>
+                        <span className="text-white font-bold">{((agent.economicDesires.greedLevel ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 uppercase block">Risk Appetite</span>
+                        <span className="text-white font-bold">{((agent.economicDesires.riskAppetite ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 uppercase block">Frugality</span>
+                        <span className="text-white font-bold">{((agent.economicDesires.frugality ?? 0) * 100).toFixed(0)}%</span>
                     </div>
                 </div>
             </div>
