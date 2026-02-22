@@ -1,27 +1,58 @@
 
 import React from 'react';
 import { useStore } from '../../store';
+import { AlertTriangle, Zap, Activity, Info } from 'lucide-react';
 
 export const EventOverlay = () => {
-    const activeEvents = useStore(state => state.activeEvents);
-    const raid = activeEvents.find(e => e.type === 'RAID' && e.active);
+  const activeEvents = useStore(state => state.activeEvents);
 
-    if (!raid) return null;
+  if (activeEvents.length === 0) return null;
 
-    return (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-full max-w-md animate-pulse">
-            <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 backdrop-blur-md shadow-[0_0_30px_rgba(239,68,68,0.5)]">
-                <div className="flex justify-between items-center mb-1">
-                    <span className="text-red-200 font-serif text-lg font-bold tracking-[0.3em] uppercase">WAR PROTOCOL</span>
-                    <span className="text-white text-xs bg-red-600 px-2 py-0.5 rounded font-bold">RAID ACTIVE</span>
-                </div>
-                <h2 className="text-white text-2xl font-serif font-black mb-1">{String(raid.title)}</h2>
-                <p className="text-red-100 text-xs italic mb-3 opacity-80">"{String(raid.description)}"</p>
-                <div className="h-1.5 w-full bg-red-950 rounded-full overflow-hidden">
-                    <div className="h-full bg-white animate-[shimmer_2s_infinite]" style={{ width: '100%' }}></div>
-                </div>
-                <div className="mt-2 text-[10px] text-red-200 text-center font-bold tracking-widest">DEFEND SANCTUARY (0,0) AT ALL COSTS</div>
+  return (
+    <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40 flex flex-col gap-2 pointer-events-none w-full max-w-md px-4">
+      {activeEvents.map((event) => (
+        <div 
+          key={event.id}
+          className={`bg-black/80 backdrop-blur-md border rounded-xl p-4 shadow-2xl animate-in slide-in-from-top-4 duration-500 ${
+            event.type === 'AXIOM_STORM' ? 'border-red-500/50 shadow-red-500/10' : 
+            event.type === 'MATRIX_GLITCH' ? 'border-axiom-purple/50 shadow-axiom-purple/10' : 
+            'border-axiom-cyan/50 shadow-axiom-cyan/10'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${
+              event.type === 'AXIOM_STORM' ? 'bg-red-500/20 text-red-500' : 
+              event.type === 'MATRIX_GLITCH' ? 'bg-axiom-purple/20 text-axiom-purple' : 
+              'bg-axiom-cyan/20 text-axiom-cyan'
+            }`}>
+              {event.type === 'AXIOM_STORM' ? <AlertTriangle size={20} /> : 
+               event.type === 'MATRIX_GLITCH' ? <Zap size={20} /> : 
+               <Activity size={20} />}
             </div>
+            <div className="flex-1">
+              <div className="flex justify-between items-center mb-1">
+                <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white">{event.type.replace('_', ' ')}</h4>
+                <div className="flex items-center gap-1">
+                   <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                   <span className="text-[8px] font-mono text-red-500 uppercase">Active</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 leading-tight">{event.description}</p>
+            </div>
+          </div>
+          
+          <div className="mt-3 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all duration-1000 ${
+                event.type === 'AXIOM_STORM' ? 'bg-red-500' : 
+                event.type === 'MATRIX_GLITCH' ? 'bg-axiom-purple' : 
+                'bg-axiom-cyan'
+              }`}
+              style={{ width: `${Math.max(0, 100 - ((Date.now() - event.startTime) / event.duration) * 100)}%` }}
+            />
+          </div>
         </div>
-    );
+      ))}
+    </div>
+  );
 };

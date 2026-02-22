@@ -3,9 +3,26 @@ import http from 'http';
 import { WebSocketServer } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
+import fs from 'fs';
+import pg from 'pg';
 
-
+const { Pool } = pg;
 const PORT = 3000;
+
+// Database configuration
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: parseInt(process.env.DB_PORT || '5432'),
+  ssl: process.env.DB_HOST ? {
+    ca: fs.readFileSync(path.join(process.cwd(), 'certs/server-ca.pem')),
+    key: fs.readFileSync(path.join(process.cwd(), 'certs/client-key.pem')),
+    cert: fs.readFileSync(path.join(process.cwd(), 'certs/client-cert.pem')),
+    rejectUnauthorized: false
+  } : false
+});
 
 async function startServer() {
   const app = express();
@@ -35,9 +52,33 @@ async function startServer() {
     });
   });
 
-  // API routes can go here in the future
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', playerCount: wss.clients.size });
+  // API routes
+  app.get('/api/health', async (req, res) => {
+    let dbStatus = 'OFFLINE';
+    try {
+      const client = await pool.connect();
+      dbStatus = 'HEALTHY';
+      client.release();
+    } catch (err) {
+      console.error('Database health check failed:', err);
+    }
+
+    res.json({ 
+      status: dbStatus, 
+      service: 'Ouroboros Axiom Engine',
+      database: 'Cloud SQL (PostgreSQL)',
+      playerCount: wss.clients.size 
+    });
+  });
+
+  app.get('/api/data', async (req, res) => {
+    try {
+      const result = await pool.query('SELECT NOW() as current_time');
+      res.json({ success: true, data: result.rows });
+    } catch (err: any) {
+      console.error('Data fetch failed:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // Vite middleware for development

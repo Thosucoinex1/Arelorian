@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
-  TradeOffer, EmergenceSettings, Notary, NotaryTier
+  TradeOffer, EmergenceSettings, Notary, NotaryTier, AuctionListing, AxiomEvent
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice } from './utils';
 import { generateAutonomousDecision } from './services/geminiService';
@@ -22,8 +22,8 @@ interface GameState {
   landParcels: LandParcel[];
   notaries: Notary[];
   tradeOffers: TradeOffer[];
-  auctionHouse: any[];
-  activeEvents: any[];
+  auctionHouse: AuctionListing[];
+  activeEvents: AxiomEvent[];
   graphicPacks: string[];
   selectedAgentId: string | null;
   cameraTarget: [number, number, number] | null; 
@@ -32,9 +32,19 @@ interface GameState {
   userApiKey: string | null;
   matrixEnergy: number; 
   globalApiCooldown: number; 
-  device: { isMobile: boolean };
+  device: { 
+    isMobile: boolean;
+    isTablet: boolean;
+    orientation: 'portrait' | 'landscape';
+    width: number;
+    height: number;
+    isAndroid: boolean;
+  };
+  updateScreenSize: () => void;
   lastLocalThinkTime: number;
   showMarket: boolean;
+  showAuctionHouse: boolean;
+  showQuests: boolean;
   showAdmin: boolean;
   showMap: boolean;
   showCharacterSheet: boolean;
@@ -59,6 +69,8 @@ interface GameState {
   selectAgent: (id: string | null) => void;
   setCameraTarget: (target: [number, number, number] | null) => void;
   toggleMarket: (show: boolean) => void;
+  toggleAuctionHouse: (show: boolean) => void;
+  toggleQuests: (show: boolean) => void;
   toggleAdmin: (show: boolean) => void;
   toggleMap: (show: boolean) => void;
   toggleCharacterSheet: (show: boolean) => void;
@@ -90,6 +102,11 @@ interface GameState {
   postTradeOffer: (offer: Omit<TradeOffer, 'id' | 'timestamp' | 'status'>) => void;
   acceptTradeOffer: (offerId: string, acceptorId: string) => void;
   cancelTradeOffer: (offerId: string) => void;
+  listAuctionItem: (listing: Omit<AuctionListing, 'id' | 'status'>) => void;
+  bidOnAuction: (auctionId: string, bidderId: string, amount: number) => void;
+  generateQuests: () => void;
+  acceptQuest: (questId: string, agentId: string) => void;
+  triggerAxiomEvent: (type?: AxiomEvent['type']) => void;
   setHoveredChunk: (id: string | null) => void;
   setSelectedChunk: (id: string | null) => void;
   selectMonster: (id: string | null) => void;
@@ -123,9 +140,37 @@ export const useStore = create<GameState>((set, get) => ({
   cameraTarget: null,
   serverStats: { uptime: 0, tickRate: 60, memoryUsage: 128, threatLevel: 0.05 },
   user: { id: 'u1', name: 'Admin', email: 'projectouroboroscollective@gmail.com' },
-  device: { isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) },
+  device: {
+    isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+    isTablet: /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/i.test(navigator.userAgent),
+    orientation: window.innerWidth > window.innerHeight ? 'landscape' : 'portrait',
+    width: window.innerWidth,
+    height: window.innerHeight,
+    isAndroid: /Android/i.test(navigator.userAgent)
+  },
+  updateScreenSize: () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isTablet = /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/i.test(navigator.userAgent);
+    const orientation = width > height ? 'landscape' : 'portrait';
+    const isAndroid = /Android/i.test(navigator.userAgent);
+
+    set({ 
+      device: { 
+        isMobile, 
+        isTablet, 
+        orientation, 
+        width, 
+        height,
+        isAndroid
+      } 
+    });
+  },
   lastLocalThinkTime: 0,
   showMarket: false,
+  showAuctionHouse: false,
+  showQuests: false,
   showAdmin: false,
   showMap: false,
   showCharacterSheet: false,
@@ -145,6 +190,83 @@ export const useStore = create<GameState>((set, get) => ({
     axiomaticWorldGeneration: true,
     physicsBasedActivation: true,
     showAxiomaticOverlay: false
+  },
+
+  toggleAuctionHouse: (show) => set({ showAuctionHouse: show }),
+  toggleQuests: (show) => set({ showQuests: show }),
+
+  listAuctionItem: (listing) => {
+    const newListing: AuctionListing = {
+      ...listing,
+      id: `auc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      status: 'ACTIVE'
+    };
+    set(s => ({ auctionHouse: [...s.auctionHouse, newListing] }));
+    get().addLog(`${listing.sellerName} listed ${listing.item.name} on the Auction House.`, 'TRADE', listing.sellerId);
+  },
+
+  bidOnAuction: (auctionId, bidderId, amount) => {
+    const state = get();
+    const listing = state.auctionHouse.find(a => a.id === auctionId);
+    if (!listing || listing.status !== 'ACTIVE' || amount <= listing.currentBid) return;
+
+    const bidder = state.agents.find(a => a.id === bidderId);
+    if (!bidder || bidder.gold < amount) return;
+
+    set(s => ({
+      auctionHouse: s.auctionHouse.map(a => a.id === auctionId ? { ...a, currentBid: amount, highestBidderId: bidderId } : a)
+    }));
+    get().addLog(`${bidder.name} bid ${amount} gold on ${listing.item.name}.`, 'TRADE', bidderId);
+  },
+
+  generateQuests: () => {
+    const state = get();
+    const entropy = state.serverStats.threatLevel;
+    const chunks = state.loadedChunks.filter(c => c.corruptionLevel > 0.2);
+    
+    if (chunks.length === 0) return;
+
+    const randomChunk = chunks[Math.floor(Math.random() * chunks.length)];
+    const newQuest: Quest = {
+      id: `q-${Date.now()}`,
+      title: 'Corruption Purge',
+      description: `The corruption in chunk ${randomChunk.id} is reaching critical levels. Purge the entropy.`,
+      rewardGold: Math.floor(200 * (1 + entropy)),
+      rewardInsight: 10,
+      targetChunkId: randomChunk.id,
+      type: 'CORRUPTION_PURGE',
+      status: 'AVAILABLE',
+      timestamp: Date.now(),
+      issuerId: 'SYSTEM'
+    };
+
+    set(s => ({ quests: [...s.quests, newQuest] }));
+    get().addLog(`New Quest Available: ${newQuest.title}`, 'EVENT', 'SYSTEM');
+  },
+
+  acceptQuest: (questId, agentId) => {
+    set(s => ({
+      quests: s.quests.map(q => q.id === questId ? { ...q, status: 'ACTIVE' } : q),
+      agents: s.agents.map(a => a.id === agentId ? { ...a, state: AgentState.QUESTING, targetId: questId } : a)
+    }));
+  },
+
+  triggerAxiomEvent: (type) => {
+    const eventType = type || (['MATRIX_GLITCH', 'AXIOM_STORM', 'DATA_SURGE'][Math.floor(Math.random() * 3)] as AxiomEvent['type']);
+    const chunks = get().loadedChunks.map(c => c.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+    
+    const newEvent: AxiomEvent = {
+      id: `evt-${Date.now()}`,
+      type: eventType,
+      description: eventType === 'MATRIX_GLITCH' ? 'Temporal instability detected.' : 'High-energy logic storm incoming.',
+      intensity: 0.5 + Math.random() * 0.5,
+      startTime: Date.now(),
+      duration: 60000,
+      affectedChunkIds: chunks
+    };
+
+    set(s => ({ activeEvents: [...s.activeEvents, newEvent] }));
+    get().addLog(`CRITICAL EVENT: ${newEvent.type} - ${newEvent.description}`, 'EVENT', 'SYSTEM');
   },
 
   setUserApiKey: (key) => {
@@ -265,6 +387,20 @@ export const useStore = create<GameState>((set, get) => ({
         { id: 'parcel_1', name: 'Axiom Lot Alpha', ownerId: 'u1', isCertified: true, structures: [] }
       ]
     });
+
+    // Generate initial procedural content
+    get().generateQuests();
+    get().generateQuests();
+    
+    // Add a test auction
+    get().listAuctionItem({
+      sellerId: 'a2',
+      sellerName: 'Vulcan',
+      item: { id: 'i_relic_1', name: 'Ancient Axiom Relic', type: 'RELIC', subtype: 'ARTIFACT', rarity: 'LEGENDARY', stats: { insight: 50 }, description: 'A fragment of the original source code.' },
+      startingBid: 500,
+      currentBid: 500,
+      endTime: Date.now() + 3600000
+    });
   },
 
   updatePhysics: (delta) => {
@@ -323,6 +459,21 @@ export const useStore = create<GameState>((set, get) => ({
           if (dist > stopDist) {
             newPos[0] += (dx/dist) * moveSpeed * delta;
             newPos[2] += (dz/dist) * moveSpeed * delta;
+          } else if (a.state === AgentState.QUESTING && a.targetId) {
+            // Logic for completing quests
+            const quest = state.quests.find(q => q.id === a.targetId);
+            if (quest && quest.type === 'CORRUPTION_PURGE' && quest.targetChunkId) {
+              const chunk = state.loadedChunks.find(c => c.id === quest.targetChunkId);
+              if (chunk) {
+                // Reducing corruption
+                const reduction = delta * 0.05;
+                if (chunk.corruptionLevel <= 0) {
+                  // Quest complete
+                  state.addLog(`${a.name} completed quest: ${quest.title}`, 'EVENT', a.id);
+                  // Mark quest as completed (will be handled in state update)
+                }
+              }
+            }
           }
           if (a.faction === 'PLAYER') {
             // webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
@@ -378,10 +529,46 @@ export const useStore = create<GameState>((set, get) => ({
       const threatInc = Math.random() * 0.0001;
       const newThreat = Math.min(1.0, state.serverStats.threatLevel + threatInc);
 
+      // Handle Structure Effects
+      state.landParcels.forEach(parcel => {
+        parcel.structures.forEach(struct => {
+          if (struct.type === 'DATA_HUB') {
+            // Data Hubs reduce corruption in nearby chunks
+            // (Simplified logic for now)
+          }
+        });
+      });
+
+      // Handle Quest Completion & Event Expiry
+      const now = Date.now();
+      const updatedQuests = state.quests.map(q => {
+        if (q.status === 'ACTIVE' && q.targetChunkId) {
+           // Check if target chunk is purged
+           const chunk = updatedChunks.find(c => c.id === q.targetChunkId);
+           if (chunk && chunk.corruptionLevel <= 0.01) {
+             return { ...q, status: 'COMPLETED' as const };
+           }
+        }
+        return q;
+      });
+
+      const updatedEvents = state.activeEvents.filter(e => now < e.startTime + e.duration);
+      
+      // Handle Auction Expiry
+      const updatedAuctions = state.auctionHouse.map(auc => {
+        if (auc.status === 'ACTIVE' && now > auc.endTime) {
+          return { ...auc, status: 'SOLD' as const }; // Simplified
+        }
+        return auc;
+      });
+
       return { 
         monsters: newMonsters, 
         agents: newAgents, 
         loadedChunks: updatedChunks,
+        quests: updatedQuests,
+        activeEvents: updatedEvents,
+        auctionHouse: updatedAuctions,
         serverStats: { 
           ...state.serverStats, 
           uptime: state.serverStats.uptime + delta,
@@ -473,6 +660,11 @@ export const useStore = create<GameState>((set, get) => ({
   addChatMessage: (content, channel, senderId, senderName) => {
     const newMsg: ChatMessage = { id: Math.random().toString(36).substr(2,9), senderId, senderName, content: String(content), channel, timestamp: Date.now() };
     set(s => ({ chatMessages: [newMsg, ...s.chatMessages].slice(0, 100) }));
+    
+    // X-BRIDGE Logic: Broadcast signals to "other matrices" (simulated via logs for now)
+    if (channel === 'X_BRIDGE') {
+      get().addLog(`[X-BRIDGE SIGNAL] ${senderName}: ${content}`, 'AXIOM', 'BRIDGE');
+    }
   },
 
   selectAgent: (id) => set({ selectedAgentId: id }),

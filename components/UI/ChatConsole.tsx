@@ -7,10 +7,14 @@ import { Brain, MessageSquare, Shield, Zap, Info, Globe, ChevronUp, ChevronDown,
 export const ChatConsole = () => {
     const messages = useStore(state => state.chatMessages);
     const agents = useStore(state => state.agents);
-    const isMobile = useStore(state => state.device.isMobile);
+    const { isMobile, orientation, height: screenHeight } = useStore(state => state.device);
     const [activeTab, setActiveTab] = useState<ChatChannel | 'ALL' | 'THOUGHT'>('ALL');
     const [isExpanded, setIsExpanded] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    const isLandscapeMobile = isMobile && orientation === 'landscape';
+    const consoleWidth = isMobile ? (isLandscapeMobile ? 'w-full max-w-md' : 'w-full max-w-sm') : 'w-[580px]';
+    const consoleHeight = isExpanded ? (isLandscapeMobile ? 'h-48' : 'h-80') : 'h-10';
 
     useEffect(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -21,7 +25,7 @@ export const ChatConsole = () => {
     const isGerman = (text: string) => /der|die|das|und|ist|ich|nicht|beutel|bündnis|uns|wir/i.test(text);
 
     return (
-        <div className={`relative pointer-events-auto shadow-2xl z-30 font-sans transition-all duration-500 ${isMobile ? 'w-full max-w-sm' : 'w-[580px]'} ${isExpanded ? 'h-80 bg-axiom-dark/95' : 'h-10 bg-axiom-dark/70'} border border-white/10 rounded-2xl flex flex-col backdrop-blur-xl overflow-hidden`}>
+        <div className={`relative pointer-events-auto shadow-2xl z-30 font-sans transition-all duration-500 ${consoleWidth} ${consoleHeight} bg-axiom-dark/95 border border-white/10 rounded-2xl flex flex-col backdrop-blur-xl overflow-hidden`}>
             <div className="flex justify-between items-center border-b border-white/5 bg-black/40 px-2 h-10 shrink-0">
                 <div className="flex overflow-x-auto scrollbar-hide gap-1">
                     {['ALL', 'LOCAL', 'THOUGHT', 'SYSTEM'].map((tab) => (

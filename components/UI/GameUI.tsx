@@ -1,10 +1,11 @@
 import React from 'react';
 import { useStore } from '../../store';
 import { CharacterSheet } from './CharacterSheet';
-import { QuestLog } from './QuestLog';
 import { AdminDashboard } from './AdminDashboard';
 import { WorldMap } from './WorldMap';
-import { AuctionHouse } from './AuctionHouse';
+import { AuctionHouseOverlay } from './AuctionHouseOverlay';
+import { QuestBoardOverlay } from './QuestBoardOverlay';
+import { EventOverlay } from './EventOverlay';
 import { MarketOverlay } from './MarketOverlay';
 import { InspectorPanel } from './InspectorPanel';
 import { ChatLog } from './ChatLog';
@@ -14,6 +15,8 @@ const GameUI = () => {
   const showAdmin = useStore(state => state.showAdmin);
   const showMap = useStore(state => state.showMap);
   const showMarket = useStore(state => state.showMarket);
+  const showAuctionHouse = useStore(state => state.showAuctionHouse);
+  const showQuests = useStore(state => state.showQuests);
 
   return (
     <>
@@ -21,8 +24,9 @@ const GameUI = () => {
       {showAdmin && <AdminDashboard />}
       {showMap && <WorldMap />}
       {showMarket && <MarketOverlay />}
-      <QuestLog />
-      <AuctionHouse />
+      {showAuctionHouse && <AuctionHouseOverlay />}
+      {showQuests && <QuestBoardOverlay />}
+      <EventOverlay />
       <InspectorPanel />
       <ChatLog />
     </>

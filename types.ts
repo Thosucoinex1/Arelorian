@@ -1,5 +1,14 @@
 
 
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
+
 export enum AgentState {
   IDLE = 'IDLE',
   GATHERING = 'GATHERING',
@@ -74,7 +83,7 @@ export interface MarketState {
 }
 
 export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'AXIOMATIC';
-export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE';
+export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE' | 'RELIC';
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
 export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT' | 'EVENT' | 'X_BRIDGE';
 
@@ -91,6 +100,7 @@ export interface ItemStats {
   int?: number;
   vit?: number;
   hp?: number;
+  insight?: number;
   atk?: number;
   def?: number;
 }
@@ -221,11 +231,38 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface AuctionListing {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  item: Item;
+  startingBid: number;
+  currentBid: number;
+  highestBidderId?: string;
+  endTime: number;
+  status: 'ACTIVE' | 'SOLD' | 'EXPIRED';
+}
+
+export interface AxiomEvent {
+  id: string;
+  type: 'MATRIX_GLITCH' | 'AXIOM_STORM' | 'DATA_SURGE';
+  description: string;
+  intensity: number;
+  startTime: number;
+  duration: number;
+  affectedChunkIds: string[];
+}
+
 export interface Quest {
   id: string;
   title: string;
   description: string;
   rewardGold: number;
+  rewardInsight: number;
+  rewardItem?: Item;
+  targetChunkId?: string;
+  type: 'CORRUPTION_PURGE' | 'DATA_RECOVERY' | 'ENTITY_NEUTRALIZATION';
+  status: 'AVAILABLE' | 'ACTIVE' | 'COMPLETED' | 'FAILED';
   timestamp: number;
   issuerId: string;
   position?: [number, number, number];

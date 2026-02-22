@@ -9,9 +9,11 @@ export const AgentHUD = () => {
   const agents = useStore(state => state.agents);
   const selectAgent = useStore(state => state.selectAgent);
   const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
+  const toggleAuctionHouse = useStore(state => state.toggleAuctionHouse);
+  const toggleQuests = useStore(state => state.toggleQuests);
   const globalApiCooldown = useStore(state => state.globalApiCooldown);
   const isOpen = useStore(state => state.showCharacterSheet);
-  const isMobile = useStore(state => state.device.isMobile);
+  const { isMobile, isTablet, orientation, height: screenHeight } = useStore(state => state.device);
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -22,6 +24,13 @@ export const AgentHUD = () => {
   const agent = agents.find(a => a.id === selectedAgentId);
 
   if (!agent) return null;
+
+  // Adjust positioning and sizing for mobile landscape
+  const isLandscapeMobile = isMobile && orientation === 'landscape';
+  const hudWidth = isMobile ? (isLandscapeMobile ? 'w-56' : 'w-64') : 'w-72';
+  const hudTop = isLandscapeMobile ? 'top-4' : 'top-8';
+  const hudLeft = isLandscapeMobile ? 'left-4' : 'left-8';
+  const maxHeight = screenHeight - 64;
 
   const SCAN_COOLDOWN = 30 * 60 * 1000;
   const timeSinceLastScan = now - agent.lastScanTime;
@@ -49,8 +58,11 @@ export const AgentHUD = () => {
   };
 
   return (
-    <div className={`fixed top-8 left-8 pointer-events-auto transition-all duration-300 z-50 ${isMobile ? 'w-64' : 'w-72'}`}>
-        <div className={`bg-axiom-dark/95 backdrop-blur-xl border border-axiom-cyan/30 rounded-lg overflow-hidden shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all ${isOpen ? 'opacity-50 blur-sm hover:opacity-100 hover:blur-0' : 'opacity-100'}`}>
+    <div className={`fixed ${hudTop} ${hudLeft} pointer-events-auto transition-all duration-300 z-50 ${hudWidth}`}>
+        <div 
+          className={`bg-axiom-dark/95 backdrop-blur-xl border border-axiom-cyan/30 rounded-lg overflow-hidden shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all ${isOpen ? 'opacity-50 blur-sm hover:opacity-100 hover:blur-0' : 'opacity-100'}`}
+          style={{ maxHeight: isLandscapeMobile ? `${maxHeight}px` : 'none', overflowY: isLandscapeMobile ? 'auto' : 'visible' }}
+        >
             <div className="h-1 bg-axiom-cyan w-full"></div>
             <div className="p-3 md:p-4 relative">
                 <button 
@@ -117,6 +129,15 @@ export const AgentHUD = () => {
                 </div>
 
                 <div className="space-y-2 mb-4">
+                    <div className="bg-white/5 p-2 rounded border border-white/10">
+                        <p className="text-[8px] text-gray-500 uppercase font-black mb-1">Neural Personality</p>
+                        <p className="text-[10px] text-axiom-cyan font-medium leading-tight">{String(agent.thinkingMatrix?.personality || "Standard Axiomatic")}</p>
+                    </div>
+                    <div className="bg-white/5 p-2 rounded border border-white/10">
+                        <p className="text-[8px] text-gray-500 uppercase font-black mb-1">Long-Term Objective</p>
+                        <p className="text-[10px] text-white font-medium leading-tight">{String(agent.thinkingMatrix?.currentLongTermGoal || "Awaiting Directive")}</p>
+                    </div>
+
                     <div>
                         <div className="flex justify-between text-[10px] text-gray-500 uppercase font-bold">
                             <span>Matrix Integrity</span>
@@ -152,19 +173,35 @@ export const AgentHUD = () => {
                     </div>
                 </div>
                 
-                <div className="flex space-x-2">
-                    <button 
-                        onClick={() => toggleCharacterSheet(true)}
-                        className="flex-1 bg-axiom-purple/20 hover:bg-axiom-purple/40 border border-axiom-purple/50 text-axiom-purple text-[10px] font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95"
-                    >
-                        Neural Matrix
-                    </button>
-                    {bankCount > 0 && (
-                         <div className="bg-axiom-cyan/10 border border-axiom-cyan/30 rounded px-2 flex flex-col items-center justify-center">
-                            <span className="text-[7px] text-axiom-cyan uppercase font-black">Bank</span>
-                            <span className="text-[10px] text-white font-bold">{String(bankCount)}</span>
-                         </div>
-                    )}
+                <div className="flex flex-col gap-2">
+                    <div className="flex space-x-2">
+                        <button 
+                            onClick={() => toggleCharacterSheet(true)}
+                            className="flex-1 bg-axiom-purple/20 hover:bg-axiom-purple/40 border border-axiom-purple/50 text-axiom-purple text-[10px] font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95"
+                        >
+                            Neural Matrix
+                        </button>
+                        {bankCount > 0 && (
+                            <div className="bg-axiom-cyan/10 border border-axiom-cyan/30 rounded px-2 flex flex-col items-center justify-center">
+                                <span className="text-[7px] text-axiom-cyan uppercase font-black">Bank</span>
+                                <span className="text-[10px] text-white font-bold">{String(bankCount)}</span>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex space-x-2">
+                        <button 
+                            onClick={() => toggleAuctionHouse(true)}
+                            className="flex-1 bg-axiom-gold/10 hover:bg-axiom-gold/20 border border-axiom-gold/30 text-axiom-gold text-[9px] font-bold py-1.5 rounded transition-colors uppercase tracking-widest active:scale-95"
+                        >
+                            Auction House
+                        </button>
+                        <button 
+                            onClick={() => toggleQuests(true)}
+                            className="flex-1 bg-axiom-cyan/10 hover:bg-axiom-cyan/20 border border-axiom-cyan/30 text-axiom-cyan text-[9px] font-bold py-1.5 rounded transition-colors uppercase tracking-widest active:scale-95"
+                        >
+                            Quest Board
+                        </button>
+                    </div>
                 </div>
 
             </div>

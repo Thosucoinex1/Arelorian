@@ -166,9 +166,16 @@ const App = () => {
 
   const isAdmin = user?.email === ADMIN_EMAIL;
 
+  const updateScreenSize = useStore(state => state.updateScreenSize);
+
   useEffect(() => { 
     initGame(); 
     webSocketService.connect();
+    updateScreenSize();
+
+    const handleResize = () => updateScreenSize();
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
 
     const checkApiKey = async () => {
       const keySelected = await window.aistudio.hasSelectedApiKey();
@@ -179,7 +186,12 @@ const App = () => {
       }
     };
     checkApiKey();
-  }, [initGame, setUserApiKey]);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, [initGame, setUserApiKey, updateScreenSize]);
   useEffect(() => { if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [user?.email, isAxiomAuthenticated]);
 
   // Global Error Listener for Deep Solving
@@ -213,6 +225,16 @@ const App = () => {
     }, 30000); // Every 30 seconds
     return () => clearInterval(interval);
   }, [runEmergentBehavior, agents]);
+
+  // World Events & Quests Loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const state = useStore.getState();
+      if (Math.random() > 0.8) state.triggerAxiomEvent();
+      if (state.quests.length < 5) state.generateQuests();
+    }, 45000); // Every 45 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">

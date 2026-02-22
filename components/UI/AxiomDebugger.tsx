@@ -99,6 +99,18 @@ export const AxiomDebugger = () => {
                   <span className="text-emerald-500">CONNECTED</span>
                 </div>
                 <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-gray-500">Device:</span>
+                  <span className="text-white">{useStore.getState().device.isAndroid ? 'ANDROID' : 'GENERIC'}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-gray-500">Screen:</span>
+                  <span className="text-white">{useStore.getState().device.width}x{useStore.getState().device.height}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-gray-500">Orientation:</span>
+                  <span className="text-white uppercase">{useStore.getState().device.orientation}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-mono">
                   <span className="text-gray-500">Axiom Integrity:</span>
                   <span className="text-emerald-500">99.9%</span>
                 </div>
