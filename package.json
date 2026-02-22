@@ -10,7 +10,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "0.2.0",
+    "@google/genai": "^1.42.0",
     "@react-three/drei": "9.109.0",
     "@react-three/fiber": "8.16.8",
     "@tailwindcss/vite": "^4.2.0",

@@ -159,7 +159,9 @@ const App = () => {
   const toggleDebugger = useStore(state => state.toggleDebugger);
   const toggleAdmin = useStore(state => state.toggleAdmin);
   const showAdmin = useStore(state => state.showAdmin);
+  const setUserApiKey = useStore(state => state.setUserApiKey);
   const [showInitialHandshake, setShowInitialHandshake] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
   const user = useMemo(() => storeUser, [storeUser]);
 
   const isAdmin = user?.email === ADMIN_EMAIL;
@@ -167,7 +169,17 @@ const App = () => {
   useEffect(() => { 
     initGame(); 
     webSocketService.connect();
-  }, [initGame]);
+
+    const checkApiKey = async () => {
+      const keySelected = await window.aistudio.hasSelectedApiKey();
+      setHasApiKey(keySelected);
+      if (keySelected) {
+        // Assuming process.env.GEMINI_API_KEY is updated after selection
+        setUserApiKey(process.env.GEMINI_API_KEY || null);
+      }
+    };
+    checkApiKey();
+  }, [initGame, setUserApiKey]);
   useEffect(() => { if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [user?.email, isAxiomAuthenticated]);
 
   // Global Error Listener for Deep Solving
@@ -204,7 +216,34 @@ const App = () => {
 
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">
-      {showInitialHandshake && user?.email === ADMIN_EMAIL && <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />}
+      {showInitialHandshake && user?.email === ADMIN_EMAIL && <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />} 
+
+      {!hasApiKey && (
+        <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[100] p-6 font-sans backdrop-blur-3xl pointer-events-auto animate-in fade-in duration-700">
+          <div className="max-w-md w-full bg-[#0a0a0f] border-2 border-red-500/50 rounded-[3.5rem] p-12 text-center shadow-2xl shadow-red-500/20 relative overflow-hidden">
+            <AlertTriangle className="w-20 h-20 mx-auto text-red-500 animate-pulse mb-8" />
+            <h2 className="text-3xl font-serif font-black mb-3 uppercase tracking-tighter text-white">API Key Required</h2>
+            <p className="text-sm text-gray-400 mb-8">To access advanced AI features, please select a Gemini API key from a paid Google Cloud project.</p>
+            <button
+              onClick={async () => {
+                await window.aistudio.openSelectKey();
+                const keySelected = await window.aistudio.hasSelectedApiKey();
+                setHasApiKey(keySelected);
+                if (keySelected) {
+                  setUserApiKey(process.env.GEMINI_API_KEY || null);
+                }
+              }}
+              className="w-full py-6 rounded-3xl font-black text-xs transition-all shadow-xl active:scale-[0.98] uppercase tracking-[0.3em] bg-red-600/20 text-red-500 border border-red-500/30 hover:bg-red-500/30"
+            >
+              Select Gemini API Key
+            </button>
+            <p className="text-[10px] text-gray-600 mt-4">
+              <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-400">Billing documentation</a>
+            </p>
+          </div>
+        </div>
+      )}
+
       <WorldScene />
       <GameUI />
       <MainMenu />

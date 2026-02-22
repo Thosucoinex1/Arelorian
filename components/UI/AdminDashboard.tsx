@@ -28,6 +28,7 @@ export const AdminDashboard = () => {
     const [importSource, setImportSource] = useState("");
     const [importType, setImportType] = useState<'URL' | 'JSON'>('URL');
     const [backendStatus, setBackendStatus] = useState<any>(null);
+    const [fetchDataMessage, setFetchDataMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
         if (showAdmin) {
@@ -51,6 +52,18 @@ export const AdminDashboard = () => {
         importAgent(importSource, importType);
         setImportSource("");
         soundManager.playUI('CLICK');
+    };
+
+    const handleFetchData = async () => {
+        try {
+            const res = await fetch('/api/data');
+            if (!res.ok) throw new Error('Network response was not ok');
+            const data = await res.json();
+            setFetchDataMessage({ type: 'success', text: 'Data fetched successfully!' });
+        } catch (err: any) {
+            setFetchDataMessage({ type: 'error', text: err.message || 'Failed to fetch data' });
+        }
+        setTimeout(() => setFetchDataMessage(null), 3000);
     };
 
     return (
@@ -108,7 +121,7 @@ export const AdminDashboard = () => {
                             <h3 className="text-axiom-purple text-xs font-bold uppercase mb-4 tracking-widest flex items-center gap-2">
                                 <Database className="w-3 h-3" /> Axiomatic Backend
                             </h3>
-                            <div className="space-y-2 text-[10px] font-mono">
+                            <div className="space-y-2 text-[10px] font-mono mb-4">
                                 <div className="flex justify-between text-gray-500">
                                     <span>Service</span>
                                     <span className="text-white text-right">{backendStatus?.service || 'Connecting...'}</span>
@@ -117,13 +130,27 @@ export const AdminDashboard = () => {
                                     <span>Database</span>
                                     <span className="text-axiom-cyan text-right">{backendStatus?.database || 'Loading...'}</span>
                                 </div>
-                                <div className="flex justify-between text-gray-500">
+                                <div className="flex justify-between text-gray-500 items-center">
                                     <span>Status</span>
-                                    <span className={backendStatus?.status === 'HEALTHY' ? 'text-green-400' : 'text-red-400'}>
-                                        {backendStatus?.status || 'OFFLINE'}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2 h-2 rounded-full ${backendStatus?.status === 'HEALTHY' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
+                                        <span className={backendStatus?.status === 'HEALTHY' ? 'text-green-400' : 'text-red-400'}>
+                                            {backendStatus?.status || 'OFFLINE'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
+                            <button 
+                                onClick={handleFetchData}
+                                className="w-full py-2 bg-axiom-purple/20 hover:bg-axiom-purple/40 text-axiom-purple border border-axiom-purple/50 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all"
+                            >
+                                Fetch Data
+                            </button>
+                            {fetchDataMessage && (
+                                <div className={`mt-2 text-[10px] font-mono text-center ${fetchDataMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                                    {fetchDataMessage.text}
+                                </div>
+                            )}
                         </div>
 
                         <div className="bg-white/5 border border-white/10 p-5 rounded-xl">

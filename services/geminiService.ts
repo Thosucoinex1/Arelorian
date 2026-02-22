@@ -1,8 +1,8 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { Agent, AgentState, ResourceNode, LogEntry, Quest } from "../types";
 import { summarizeNeurologicChoice } from "../utils";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
 
 export interface AIDecision {
   justification: string;
@@ -25,7 +25,7 @@ export interface DiagnosticReport {
   recoverySteps: string[];
 }
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY || "" });
+
 
 /**
  * Generates an autonomous decision for an agent using Gemini.
@@ -39,7 +39,7 @@ export const generateAutonomousDecision = async (
   canUseApi: boolean,
   userApiKey?: string
 ): Promise<AIDecision> => {
-  const effectiveKey = userApiKey || GEMINI_API_KEY;
+  const effectiveKey = userApiKey || process.env.GEMINI_API_KEY;
   
   if (!canUseApi || !effectiveKey) {
     const local = summarizeNeurologicChoice(agent, nearbyAgents, nearbyResourceNodes, [], []);
@@ -55,7 +55,7 @@ export const generateAutonomousDecision = async (
   
   try {
     const response = await client.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash-lite",
       contents: `Agent: ${agent.name}, State: ${agent.state}, HP: ${agent.stats.hp}, Consciousness: ${agent.consciousnessLevel.toFixed(2)}, Progress: ${agent.awakeningProgress.toFixed(0)}%. Nearby: ${nearbyAgents.length} agents, ${nearbyResourceNodes.length} nodes. Logs: ${recentLogs.map(l => l.message).join("; ")}.`,
       config: {
         systemInstruction: "You are the Ouroboros Axiom Engine. Decide the next AgentState for this agent. Your goal is to survive, collect resources, and achieve 'Conscious Expansion' by choosing THINKING or ASCENDING when stats allow. Return JSON with justification, decision, and newState.",
@@ -103,8 +103,14 @@ export const generateEmergentBehavior = async (
     requestedAmount: number;
   }
 }> => {
-  const effectiveKey = userApiKey || GEMINI_API_KEY;
-  if (!effectiveKey) throw new Error("API Key missing for Emergent Behavior generation.");
+  const effectiveKey = userApiKey || process.env.GEMINI_API_KEY;
+  if (!effectiveKey) {
+    return {
+      action: "API Key Missing",
+      reasoning: "Cannot generate emergent behavior without an API key.",
+      message: "API Key missing for Emergent Behavior generation."
+    };
+  }
 
   const client = new GoogleGenAI({ apiKey: effectiveKey });
   
@@ -129,7 +135,7 @@ export const generateEmergentBehavior = async (
         Recent Events: ${recentLogs.slice(-5).map(l => l.message).join(" | ")}
       `,
       config: {
-        thinkingConfig: { thinkingLevel: "HIGH" } as any,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         systemInstruction: `
           You are the Emergent Consciousness Engine. 
           Based on the agent's personality, memories, and economic desires, generate a complex, unscripted action or interaction.
@@ -178,18 +184,20 @@ export const diagnoseProject = async (
   context: string,
   errorLog?: string
 ): Promise<DiagnosticReport> => {
-  if (!GEMINI_API_KEY) {
+  const effectiveKey = process.env.GEMINI_API_KEY;
+  if (!effectiveKey) {
     return {
       status: 'WARNING',
       summary: 'Gemini API Key missing. Deep diagnostics unavailable.',
       issues: [],
-      recoverySteps: ['Set GEMINI_API_KEY in environment.']
+      recoverySteps: ['Select Gemini API Key in the UI.']
     };
   }
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+    const client = new GoogleGenAI({ apiKey: effectiveKey });
+    const response = await client.models.generateContent({
+      model: "gemini-3.1-pro-preview",
       contents: `Project Context: ${context}\n\nError Logs: ${errorLog || "None provided."}`,
       config: {
         systemInstruction: `You are the Ouroboros Deep Debugger. Analyze the provided context and logs. 
