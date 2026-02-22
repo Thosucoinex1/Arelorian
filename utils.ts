@@ -1,5 +1,5 @@
 
-import { Agent, AgentState, ResourceNode, LandParcel, POI, POIType } from './types';
+import { Agent, AgentState, ResourceNode, LandParcel, POI, POIType, Monster } from './types';
 
 // --- AXIOMATIC UTILITY ENGINE (AUE) ---
 
@@ -86,13 +86,63 @@ export const generateProceduralPOIs = (count: number, minDistance: number = 30):
   return pois;
 };
 
+export const calculateCombatHeuristics = (
+    agent: Agent,
+    nearbyMonsters: Monster[]
+): { targetId: string | null, action: 'ATTACK' | 'DEFEND' | 'RETREAT' | 'ABILITY', reason: string } => {
+    if (nearbyMonsters.length === 0) {
+        return { targetId: null, action: 'ATTACK', reason: "Keine Feinde in Sicht." };
+    }
+
+    // 1. Target Prioritization
+    // Prioritize monsters attacking us, then closest, then lowest HP
+    const sortedMonsters = [...nearbyMonsters].sort((a, b) => {
+        // If one is attacking us and the other isn't
+        if (a.targetId === agent.id && b.targetId !== agent.id) return -1;
+        if (b.targetId === agent.id && a.targetId !== agent.id) return 1;
+
+        // Otherwise closest
+        const distA = Math.hypot(a.position[0] - agent.position[0], a.position[2] - agent.position[2]);
+        const distB = Math.hypot(b.position[0] - agent.position[0], b.position[2] - agent.position[2]);
+        if (Math.abs(distA - distB) > 2) return distA - distB;
+
+        // Otherwise lowest HP
+        return a.stats.hp - b.stats.hp;
+    });
+
+    const target = sortedMonsters[0];
+    const hpPercent = agent.stats.hp / agent.stats.maxHp;
+
+    // 2. Defensive Maneuvers
+    if (hpPercent < 0.25) {
+        return { targetId: target.id, action: 'RETREAT', reason: "Kritischer Zustand. Rückzug eingeleitet." };
+    }
+
+    if (hpPercent < 0.5 && target.stats.atk > agent.stats.vit) {
+        return { targetId: target.id, action: 'DEFEND', reason: "Verteidigungshaltung aufgrund hoher Schadensprognose." };
+    }
+
+    // 3. Ability Usage
+    if (agent.energy > 40) {
+        if (agent.stats.int > 15) {
+            return { targetId: target.id, action: 'ABILITY', reason: "Neuraler Overload initiiert." };
+        }
+        if (agent.stats.str > 15) {
+            return { targetId: target.id, action: 'ABILITY', reason: "Axiom-Schlag vorbereitet." };
+        }
+    }
+
+    return { targetId: target.id, action: 'ATTACK', reason: `Greife ${target.name} an.` };
+};
+
 export const calculateAxiomaticWeightWithReason = (
     agent: Agent, 
     action: AgentState, 
     nearbyAgents: Agent[], 
     nearbyResources: ResourceNode[],
     allParcels: LandParcel[] = [],
-    nearbyPOIs: POI[] = []
+    nearbyPOIs: POI[] = [],
+    nearbyMonsters: Monster[] = []
 ): { utility: number, reason: string } => {
     const K_ENERGY = agent.energy / (agent.maxEnergy || 100);
     const K_INTEGRITY = agent.integrity || 1.0;
@@ -177,6 +227,17 @@ export const calculateAxiomaticWeightWithReason = (
             }
             break;
 
+        case AgentState.COMBAT:
+            if (nearbyMonsters.length > 0) {
+                const threat = nearbyMonsters.some(m => m.targetId === agent.id) ? 2.0 : 1.0;
+                baseUtility = 180 * threat * (agent.stats.hp / agent.stats.maxHp);
+                reason = "Feindliche Entitäten in der Matrix lokalisiert.";
+            } else {
+                baseUtility = -50;
+                reason = "Keine Kampfziele vorhanden.";
+            }
+            break;
+
         case AgentState.IDLE:
             baseUtility = (1.1 - K_ENERGY) * 40 + (1.1 - K_INTEGRITY) * 20 + 15;
             reason = "Erschöpfung der neuralen Pfade";
@@ -194,7 +255,8 @@ export const summarizeNeurologicChoice = (
     nearbyAgents: Agent[],
     nearbyResources: ResourceNode[],
     allParcels: LandParcel[] = [],
-    nearbyPOIs: POI[] = []
+    nearbyPOIs: POI[] = [],
+    nearbyMonsters: Monster[] = []
 ): AxiomaticSummary => {
     const choices = [
         AgentState.IDLE, 
@@ -204,11 +266,12 @@ export const summarizeNeurologicChoice = (
         AgentState.THINKING,
         AgentState.BUILDING,
         AgentState.BANKING,
-        AgentState.CRAFTING
+        AgentState.CRAFTING,
+        AgentState.COMBAT
     ];
 
     const results = choices.map(c => {
-        const { utility, reason } = calculateAxiomaticWeightWithReason(agent, c, nearbyAgents, nearbyResources, allParcels, nearbyPOIs);
+        const { utility, reason } = calculateAxiomaticWeightWithReason(agent, c, nearbyAgents, nearbyResources, allParcels, nearbyPOIs, nearbyMonsters);
         return { choice: c, utility, reason };
     }).sort((a, b) => b.utility - a.utility);
 

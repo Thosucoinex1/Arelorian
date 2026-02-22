@@ -236,6 +236,15 @@ const App = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Periodic Sync Loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const state = useStore.getState();
+      state.syncAgents();
+    }, 60000); // Sync every minute
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">
       {showInitialHandshake && user?.email === ADMIN_EMAIL && <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />} 

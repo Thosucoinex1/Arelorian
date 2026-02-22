@@ -5,7 +5,7 @@ import {
   Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
   TradeOffer, EmergenceSettings, Notary, NotaryTier, AuctionListing, AxiomEvent
 } from './types';
-import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice } from './utils';
+import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
 
 interface GameState {
@@ -98,6 +98,8 @@ interface GameState {
   buildStructureOnParcel: (parcelId: string, type: StructureType) => void;
   stabilizeChunk: (chunkId: string) => void;
   registerNotary: (userId: string, email: string) => void;
+  syncAgents: () => Promise<void>;
+  loadAgents: () => Promise<boolean>;
   upgradeNotary: (userId: string) => void;
   postTradeOffer: (offer: Omit<TradeOffer, 'id' | 'timestamp' | 'status'>) => void;
   acceptTradeOffer: (offerId: string, acceptorId: string) => void;
@@ -326,7 +328,7 @@ export const useStore = create<GameState>((set, get) => ({
     get().addLog(`Axiomatic Chunk ${id} generated via Logic Field: ${logicString}`, 'AXIOM', 'SYSTEM');
   },
 
-  initGame: () => {
+  initGame: async () => {
     const initialChunks: Chunk[] = [
         { 
           id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0, 
@@ -388,6 +390,12 @@ export const useStore = create<GameState>((set, get) => ({
       ]
     });
 
+    // Try to load real agents from DB
+    const loaded = await get().loadAgents();
+    if (loaded) {
+      get().addLog("Real Agent Data Manifested from Axiom Database.", 'SYSTEM', 'AXIOM');
+    }
+
     // Generate initial procedural content
     get().generateQuests();
     get().generateQuests();
@@ -405,20 +413,38 @@ export const useStore = create<GameState>((set, get) => ({
 
   updatePhysics: (delta) => {
     set(state => {
-      // Monster AI
-      const newMonsters = state.monsters.map(m => {
+      // Monster AI & Combat Resolution
+      const newMonsters: Monster[] = state.monsters.map(m => {
         if (m.state === 'DEAD') return m;
         let newPos = [...m.position] as [number, number, number];
-        let newState = m.state;
+        let newState: Monster['state'] = m.state;
         let newTargetId = m.targetId;
-        const closestAgent = state.agents.find(a => Math.hypot(a.position[0]-m.position[0], a.position[2]-m.position[2]) < 10);
-        if (closestAgent) {
+        let newHp = m.stats.hp;
+
+        // 1. Monster Attack Logic
+        if (m.state === 'COMBAT' && m.targetId) {
+            const targetAgent = state.agents.find(a => a.id === m.targetId);
+            if (targetAgent) {
+                const dist = Math.hypot(targetAgent.position[0] - m.position[0], targetAgent.position[2] - m.position[2]);
+                if (dist < 2.5 && Math.random() < 0.1) { // 10% chance per tick to attack
+                    // Damage calculation
+                    const armor = (targetAgent.equipment.chest?.stats.def || 0) + (targetAgent.equipment.head?.stats.def || 0) + (targetAgent.equipment.legs?.stats.def || 0);
+                    const damage = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
+                    
+                    // We'll apply damage to agent in the agent mapping
+                }
+            }
+        }
+
+        // 2. Monster Movement
+        const closestAgent = state.agents.find(a => Math.hypot(a.position[0]-m.position[0], a.position[2]-m.position[2]) < 15);
+        if (closestAgent && closestAgent.stats.hp > 0) {
           newState = 'COMBAT';
           newTargetId = closestAgent.id;
           const dx = closestAgent.position[0] - m.position[0];
           const dz = closestAgent.position[2] - m.position[2];
           const dist = Math.hypot(dx, dz);
-          if (dist > 1.5) {
+          if (dist > 1.8) {
             newPos[0] += (dx/dist) * 4 * delta;
             newPos[2] += (dz/dist) * 4 * delta;
           }
@@ -426,22 +452,88 @@ export const useStore = create<GameState>((set, get) => ({
           newState = 'IDLE';
           newTargetId = null;
         }
-        return { ...m, position: newPos, state: newState, targetId: newTargetId };
+
+        // 3. Check for damage from agents
+        state.agents.forEach(a => {
+            if (a.state === AgentState.COMBAT && a.targetId === m.id) {
+                const dist = Math.hypot(a.position[0] - m.position[0], a.position[2] - m.position[2]);
+                if (dist < 3.0 && Math.random() < 0.15) { // Agents attack slightly faster
+                    const weaponAtk = a.equipment.mainHand?.stats.atk || 0;
+                    const damage = Math.max(1, (a.stats.str * 0.8 + weaponAtk) - m.stats.def);
+                    newHp -= damage;
+                }
+            }
+        });
+
+        if (newHp <= 0) {
+            state.addLog(`${m.name} wurde von den Agenten der Matrix neutralisiert.`, 'COMBAT', 'SYSTEM');
+            return { ...m, state: 'DEAD' as const, stats: { ...m.stats, hp: 0 } };
+        }
+
+        return { ...m, position: newPos, state: newState, targetId: newTargetId, stats: { ...m.stats, hp: newHp } };
       });
 
-      // Agent AI - FULL REACTIVITY
+      // Agent AI - FULL REACTIVITY & Combat Resolution
       const newAgents = state.agents.map(a => {
         let newPos = [...a.position] as [number, number, number];
+        let newHp = a.stats.hp;
+        let newXp = a.xp;
+        let newLevel = a.level;
+        let newGold = a.gold;
+        let newIntegrity = a.integrity;
         const moveSpeed = 6;
         
+        // 1. Combat Damage from Monsters
+        state.monsters.forEach(m => {
+            if (m.state === 'COMBAT' && m.targetId === a.id) {
+                const dist = Math.hypot(m.position[0] - a.position[0], m.position[2] - a.position[2]);
+                if (dist < 2.5 && Math.random() < 0.1) {
+                    const armor = (a.equipment.chest?.stats.def || 0) + (a.equipment.head?.stats.def || 0) + (a.equipment.legs?.stats.def || 0);
+                    const damage = Math.max(1, m.stats.atk - (a.stats.vit * 0.5 + armor));
+                    newHp -= damage;
+                }
+            }
+        });
+
+        // 2. Death Handling
+        if (newHp <= 0) {
+            state.addLog(`${a.name} ist in der Matrix gefallen. Rekonstruktion eingeleitet.`, 'COMBAT', a.id);
+            newHp = a.stats.maxHp;
+            newPos = [0, 0, 0]; // Back to sanctuary
+            newGold = Math.floor(newGold * 0.8); // 20% gold penalty
+            newIntegrity = Math.max(0.1, newIntegrity - 0.1);
+            return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, gold: newGold, integrity: newIntegrity, state: AgentState.IDLE, targetId: null };
+        }
+
+        // 3. XP Gain from Dead Monsters
+        newMonsters.forEach(m => {
+            if (m.state === 'DEAD' && state.monsters.find(oldM => oldM.id === m.id)?.state !== 'DEAD') {
+                if (a.state === AgentState.COMBAT && a.targetId === m.id) {
+                    newXp += m.xpReward;
+                    if (newXp >= getXPForNextLevel(newLevel)) {
+                        newXp -= getXPForNextLevel(newLevel);
+                        newLevel++;
+                        state.addLog(`${a.name} hat Level ${newLevel} erreicht!`, 'SYSTEM', a.id);
+                    }
+                }
+            }
+        });
+
         let targetPos: [number, number, number] | null = null;
         
         if (a.state === AgentState.MARKETING) {
           const market = state.pois.find(p => p.type === 'MARKET_STALL' || p.type === 'BANK_VAULT');
           if (market) targetPos = market.position;
         } else if (a.state === AgentState.COMBAT && a.targetId) {
-          const m = state.monsters.find(mon => mon.id === a.targetId);
-          if (m && m.state !== 'DEAD') targetPos = m.position;
+          const m = newMonsters.find(mon => mon.id === a.targetId);
+          if (m && m.state !== 'DEAD') {
+              targetPos = m.position;
+              // Apply Combat Heuristics for movement/action
+              const combatDecision = calculateCombatHeuristics(a, newMonsters.filter(mon => Math.hypot(mon.position[0]-a.position[0], mon.position[2]-a.position[2]) < 20));
+              if (combatDecision.action === 'RETREAT') {
+                  targetPos = [0, 0, 0]; // Retreat to sanctuary
+              }
+          }
         } else if (a.state === AgentState.GATHERING) {
           const node = state.pois.find(p => p.type === 'MINE' || p.type === 'FOREST');
           if (node) targetPos = node.position;
@@ -479,7 +571,7 @@ export const useStore = create<GameState>((set, get) => ({
             // webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
           }
 
-          return { ...a, position: newPos };
+          return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
         }
         if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
           let newProgress = a.awakeningProgress + delta * 5;
@@ -494,9 +586,9 @@ export const useStore = create<GameState>((set, get) => ({
               state.addLog(`${a.name} has achieved full consciousness expansion!`, 'AXIOM', 'SYSTEM');
             }
           }
-          return { ...a, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened };
+          return { ...a, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
         }
-        return a;
+        return { ...a, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
       });
 
       // Neural Fog of War Persistence Logic (Visit Recency)
@@ -603,7 +695,8 @@ export const useStore = create<GameState>((set, get) => ({
           state.agents.filter(a => a.id !== agent.id), 
           state.resourceNodes, 
           state.landParcels, 
-          state.pois
+          state.pois,
+          state.monsters.filter(m => m.state !== 'DEAD')
         );
         
         // ADVANCED DYNAMIC GOAL SYSTEM: Mathematical Heuristic
@@ -643,12 +736,21 @@ export const useStore = create<GameState>((set, get) => ({
           }
         });
 
+        // If in combat, apply combat heuristics for target selection
+        let targetId = agent.targetId;
+        if (localChoice.choice === AgentState.COMBAT) {
+            const combatDecision = calculateCombatHeuristics(agent, state.monsters.filter(m => m.state !== 'DEAD' && Math.hypot(m.position[0]-agent.position[0], m.position[2]-agent.position[2]) < 20));
+            targetId = combatDecision.targetId;
+            localChoice.reason = combatDecision.reason;
+        }
+
         decision = {
           newState: localChoice.choice,
           decision: String(localChoice.choice),
           justification: localChoice.reason,
           message: localChoice.reason,
-          newGoal: bestGoal
+          newGoal: bestGoal,
+          targetId: targetId
         };
       } else {
         // NEURAL LINK (API) MODE
@@ -667,6 +769,7 @@ export const useStore = create<GameState>((set, get) => ({
         agents: s.agents.map(a => a.id === agent.id ? { 
           ...a, 
           state: decision.newState, 
+          targetId: (decision as any).targetId !== undefined ? (decision as any).targetId : a.targetId,
           lastDecision: { decision: decision.decision, justification: decision.justification },
           thinkingMatrix: {
             ...a.thinkingMatrix,
@@ -856,6 +959,35 @@ export const useStore = create<GameState>((set, get) => ({
     };
     set(s => ({ notaries: [...s.notaries, newNotary] }));
     get().addLog(`New Notary registered: ${email} (Tier 1)`, 'SYSTEM', 'NOTAR');
+  },
+
+  syncAgents: async () => {
+    const { agents } = get();
+    try {
+      const res = await fetch('/api/sync/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agents })
+      });
+      if (!res.ok) throw new Error(`Sync failed: ${res.statusText}`);
+    } catch (e) {
+      console.error("Agents sync error:", e);
+    }
+  },
+
+  loadAgents: async () => {
+    try {
+      const res = await fetch('/api/sync/agents');
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.success && data.agents && data.agents.length > 0) {
+        set({ agents: data.agents });
+        return true;
+      }
+    } catch (e) {
+      console.error("Agents load error:", e);
+    }
+    return false;
   },
 
   upgradeNotary: (userId) => {
