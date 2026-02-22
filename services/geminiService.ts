@@ -180,6 +180,84 @@ export const generateEmergentBehavior = async (
     };
   }
 };
+
+/**
+ * Imports an agent from a source (URL or JSON) using Gemini.
+ */
+export const importAgentFromSource = async (
+  source: string,
+  type: 'URL' | 'JSON',
+  userApiKey?: string
+): Promise<Partial<Agent>> => {
+  const effectiveKey = userApiKey || process.env.GEMINI_API_KEY;
+  if (!effectiveKey) {
+    throw new Error("API Key missing for agent import.");
+  }
+
+  const client = new GoogleGenAI({ apiKey: effectiveKey });
+  
+  try {
+    const response = await client.models.generateContent({
+      model: "gemini-3.1-pro-preview",
+      contents: type === 'URL' 
+        ? `Extract character details from this URL: ${source}. Create a new Ouroboros Agent based on this character.`
+        : `Parse this JSON and create a new Ouroboros Agent: ${source}`,
+      config: {
+        tools: type === 'URL' ? [{ urlContext: {} }] : [],
+        systemInstruction: `
+          You are the Ouroboros Entity Manifestation Engine. 
+          Your task is to extract or parse character details and map them to the Ouroboros Agent structure.
+          
+          AGENT STRUCTURE:
+          - name: string
+          - personality: string (in thinkingMatrix)
+          - currentLongTermGoal: string (in thinkingMatrix)
+          - classType: string (e.g., MAGE, WARRIOR, ROGUE, SCHOLAR)
+          - faction: 'PLAYER' | 'ANOMALY' | 'CREATURE' | 'SYSTEM' | 'NPC'
+          - loreSnippet: string (a short background story)
+          
+          If the source is a JanitorAI or Character.ai link, extract the character's name, personality, and background.
+          Map their traits to Ouroboros stats (STR, AGI, INT, VIT).
+          
+          Return JSON matching the Agent interface (partial).
+        `,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            classType: { type: Type.STRING },
+            faction: { type: Type.STRING },
+            loreSnippet: { type: Type.STRING },
+            thinkingMatrix: {
+              type: Type.OBJECT,
+              properties: {
+                personality: { type: Type.STRING },
+                currentLongTermGoal: { type: Type.STRING }
+              }
+            },
+            stats: {
+              type: Type.OBJECT,
+              properties: {
+                str: { type: Type.NUMBER },
+                agi: { type: Type.NUMBER },
+                int: { type: Type.NUMBER },
+                vit: { type: Type.NUMBER }
+              }
+            }
+          },
+          required: ["name", "classType", "faction", "thinkingMatrix"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("Agent Import Error:", error);
+    throw error;
+  }
+};
+
 export const diagnoseProject = async (
   context: string,
   errorLog?: string

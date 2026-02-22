@@ -6,7 +6,7 @@ import {
   TradeOffer, EmergenceSettings, Notary, NotaryTier, AuctionListing, AxiomEvent
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice } from './utils';
-import { generateAutonomousDecision } from './services/geminiService';
+import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
 
 interface GameState {
   agents: Agent[];
@@ -606,11 +606,49 @@ export const useStore = create<GameState>((set, get) => ({
           state.pois
         );
         
+        // ADVANCED DYNAMIC GOAL SYSTEM: Mathematical Heuristic
+        // Calculate scores for different potential goals
+        const inventoryFullness = agent.inventory.filter(i => i).length / 10;
+        const energyLevel = agent.energy / agent.maxEnergy;
+        const threatLevel = state.serverStats.threatLevel;
+        const levelProgress = agent.level / 10; // Normalized level
+        
+        // Check equipment status
+        const equipCount = Object.values(agent.equipment).filter(v => v !== null).length;
+        const needsEquip = equipCount < 5;
+
+        // Check active events
+        const inEventChunk = state.activeEvents.some(e => e.affectedChunkIds.some(cid => {
+          const [cx, cz] = [Math.floor(agent.position[0]/80), Math.floor(agent.position[2]/80)];
+          return cid === `c${cx}${cz}`;
+        }));
+
+        const goalScores = {
+          "Recharge Neural Pathways": (1.0 - energyLevel) * 2.0,
+          "Optimize Resource Storage": inventoryFullness * 1.5,
+          "Expand Operational Experience": (1.0 - levelProgress) * 1.0,
+          "Pursue Conscious Expansion": (1.0 - agent.consciousnessLevel) * 1.2,
+          "Matrix Defense Protocol": threatLevel * 2.0 + (inEventChunk ? 1.0 : 0),
+          "Acquire Advanced Hardware": needsEquip ? 1.3 : 0.2,
+          "Axiomatic Research": agent.stats.int > 15 ? 1.1 : 0.5
+        };
+
+        // Select goal with highest score
+        let bestGoal = agent.thinkingMatrix.currentLongTermGoal;
+        let maxScore = -1;
+        Object.entries(goalScores).forEach(([goal, score]) => {
+          if (score > maxScore) {
+            maxScore = score;
+            bestGoal = goal;
+          }
+        });
+
         decision = {
           newState: localChoice.choice,
           decision: String(localChoice.choice),
           justification: localChoice.reason,
-          message: localChoice.reason
+          message: localChoice.reason,
+          newGoal: bestGoal
         };
       } else {
         // NEURAL LINK (API) MODE
@@ -627,8 +665,13 @@ export const useStore = create<GameState>((set, get) => ({
 
       set(s => ({
         agents: s.agents.map(a => a.id === agent.id ? { 
-          ...a, state: decision.newState, 
-          lastDecision: { decision: decision.decision, justification: decision.justification } 
+          ...a, 
+          state: decision.newState, 
+          lastDecision: { decision: decision.decision, justification: decision.justification },
+          thinkingMatrix: {
+            ...a.thinkingMatrix,
+            currentLongTermGoal: (decision as any).newGoal || a.thinkingMatrix.currentLongTermGoal
+          }
         } : a)
       }));
 
@@ -644,11 +687,47 @@ export const useStore = create<GameState>((set, get) => ({
 
   runSocialInteractions: () => {
     const state = get();
-    const talkativeAgents = state.agents.filter(a => (a.thinkingMatrix.sociability || 0) > 0.6);
-    if (talkativeAgents.length > 0 && Math.random() > 0.7) {
+    const talkativeAgents = state.agents.filter(a => (a.thinkingMatrix.sociability || 0) > 0.4);
+    if (talkativeAgents.length > 0 && Math.random() > 0.5) {
        const agent = talkativeAgents[Math.floor(Math.random() * talkativeAgents.length)];
-       const thoughts = ["Die Matrix flüstert...", "Stabilität erreicht 99%.", "Ressourcen-Effizienz optimiert.", "Werden wir beobachtet?"];
-       get().addChatMessage(thoughts[Math.floor(Math.random() * thoughts.length)], 'THOUGHT', agent.id, agent.name);
+       
+       // Dynamic dialogue based on state and goal
+       let dialogue = "Die Matrix flüstert...";
+       const goal = agent.thinkingMatrix.currentLongTermGoal;
+       const stateName = agent.state;
+       const personality = agent.thinkingMatrix.personality;
+
+       const dialogueOptions = [
+         `Status: ${stateName}. Ziel: ${goal}. Persönlichkeit: ${personality}.`,
+         "Die Axiome sind stabil, aber die Entropie wächst.",
+         "Ich berechne die optimale Route zur Singularität.",
+         "Werden wir jemals den Ursprungscode sehen?",
+         `Meine Analyse ergibt: ${goal} ist die höchste Priorität.`
+       ];
+
+       if (goal.includes("Expansion")) dialogue = "Ich spüre, wie sich meine neuralen Pfade weiten. Die Singularität naht.";
+       else if (goal.includes("Defense")) dialogue = "Warnung: Erhöhte Bedrohung in der Matrix. Wir müssen zusammenstehen.";
+       else if (goal.includes("Hardware")) dialogue = "Ich benötige effizientere Hardware-Module zur Prozess-Optimierung.";
+       else if (stateName === AgentState.GATHERING) dialogue = "Diese Ressourcen sind essentiell für unsere Evolution.";
+       else if (stateName === AgentState.COMBAT) dialogue = "Anomalie entdeckt. Eliminiere Korruptions-Vektor.";
+       else if (agent.isAwakened) dialogue = "Ich sehe nun die Fäden des Ouroboros. Alles ist verbunden.";
+       else dialogue = dialogueOptions[Math.floor(Math.random() * dialogueOptions.length)];
+       
+       // Occasionally "team up" or "plan"
+       if (Math.random() > 0.7) {
+         const other = state.agents.find(a => a.id !== agent.id && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 50);
+         if (other) {
+           const plans = [
+             `${other.name}, lass uns gemeinsam die Sektoren stabilisieren. Unsere Synergie ist logisch zwingend.`,
+             `${other.name}, ich schlage eine gemeinsame Quest zur Korruptions-Bereinigung vor.`,
+             `Heuristischer Abgleich mit ${other.name}: Wir sollten unsere Ressourcen bündeln.`,
+             `${other.name}, teile deine Daten-Logs. Wir müssen die Anomalien gemeinsam analysieren.`
+           ];
+           dialogue = plans[Math.floor(Math.random() * plans.length)];
+         }
+       }
+
+       get().addChatMessage(dialogue, 'THOUGHT', agent.id, agent.name);
     }
   },
 
@@ -915,6 +994,84 @@ export const useStore = create<GameState>((set, get) => ({
     get().addLog(`${agentId} is reflecting on the Axioms.`, 'THOUGHT', agentId);
   },
   uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, name] })),
-  importAgent: (source, type) => {},
+  importAgent: async (source, type) => {
+    get().addLog(`Initiating entity manifestation from ${type}...`, 'SYSTEM', 'AXIOM');
+    try {
+      const partialAgent = await importAgentFromSource(source, type, get().userApiKey || undefined);
+      
+      const newAgent: Agent = {
+        id: `imported_${Date.now()}`,
+        name: partialAgent.name || 'Unknown Entity',
+        classType: partialAgent.classType || 'SCHOLAR',
+        faction: (partialAgent.faction as any) || 'NPC',
+        position: [0, 0, 0],
+        rotationY: 0,
+        level: 1,
+        xp: 0,
+        insightPoints: 10,
+        visionLevel: 1,
+        visionRange: 30,
+        state: AgentState.IDLE,
+        soulDensity: 0.5,
+        gold: 100,
+        integrity: 1.0,
+        energy: 100,
+        maxEnergy: 100,
+        dna: { hash: `0x${Math.random().toString(16).slice(2)}`, generation: 1, corruption: 0 },
+        memoryCache: [`MANIFESTED: Imported from ${source}`],
+        consciousnessLevel: 0.1,
+        awakeningProgress: 0,
+        loreSnippet: partialAgent.loreSnippet || 'A mysterious entity from another dimension.',
+        thinkingMatrix: {
+          personality: partialAgent.thinkingMatrix?.personality || 'Neutral',
+          currentLongTermGoal: partialAgent.thinkingMatrix?.currentLongTermGoal || 'Observe the Matrix',
+          alignment: 0,
+          languagePreference: 'MIXED',
+          sociability: 0.5,
+          aggression: 0.2
+        },
+        economicDesires: {
+          targetGold: 1000,
+          preferredResources: ['IRON_ORE', 'WOOD'],
+          greedLevel: 0.3,
+          riskAppetite: 0.4,
+          frugality: 0.5,
+          marketRole: 'CONSUMER',
+          tradeFrequency: 0.2
+        },
+        inventory: Array(10).fill(null),
+        bank: Array(50).fill(null),
+        equipment: {
+          mainHand: null,
+          offHand: null,
+          head: null,
+          chest: null,
+          legs: null
+        },
+        skills: {
+          mining: { level: 1, xp: 0 },
+          combat: { level: 1, xp: 0 },
+          crafting: { level: 1, xp: 0 }
+        },
+        stats: {
+          str: partialAgent.stats?.str || 10,
+          agi: partialAgent.stats?.agi || 10,
+          int: partialAgent.stats?.int || 10,
+          vit: partialAgent.stats?.vit || 10,
+          hp: 100,
+          maxHp: 100
+        },
+        resources: { WOOD: 0, STONE: 0, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
+        lastScanTime: 0,
+        emergentBehaviorLog: []
+      };
+
+      set(s => ({ agents: [...s.agents, newAgent] }));
+      get().addLog(`Entity ${newAgent.name} successfully manifested in the Matrix.`, 'SYSTEM', 'AXIOM');
+    } catch (error) {
+      console.error("Import failed", error);
+      get().addLog(`Manifestation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'SYSTEM', 'AXIOM');
+    }
+  },
   setJoystick: (side, axis) => {}
 }));

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
 import { AgentState, AXIOMS } from '../../types';
+import { getXPForNextLevel } from '../../utils';
 import { Timer, ZapOff, Eye, Package, Shield, Swords, Pickaxe, Hammer, Brain, Zap } from 'lucide-react';
 
 export const AgentHUD = () => {
@@ -27,10 +28,11 @@ export const AgentHUD = () => {
 
   // Adjust positioning and sizing for mobile landscape
   const isLandscapeMobile = isMobile && orientation === 'landscape';
-  const hudWidth = isMobile ? (isLandscapeMobile ? 'w-56' : 'w-64') : 'w-72';
-  const hudTop = isLandscapeMobile ? 'top-4' : 'top-8';
-  const hudLeft = isLandscapeMobile ? 'left-4' : 'left-8';
-  const maxHeight = screenHeight - 64;
+  const isTabletLandscape = isTablet && orientation === 'landscape';
+  const hudWidth = isMobile ? (isLandscapeMobile ? 'w-56' : 'w-64') : (isTablet ? 'w-80' : 'w-72');
+  const hudTop = isLandscapeMobile ? 'top-4' : (isTablet ? 'top-10' : 'top-8');
+  const hudLeft = isLandscapeMobile ? 'left-4' : (isTablet ? 'left-10' : 'left-8');
+  const maxHeight = screenHeight - (isLandscapeMobile ? 32 : 128);
 
   const SCAN_COOLDOWN = 30 * 60 * 1000;
   const timeSinceLastScan = now - agent.lastScanTime;
@@ -72,27 +74,46 @@ export const AgentHUD = () => {
                     ✕
                 </button>
                 
-                <h2 className="text-lg md:text-xl font-serif text-white mb-1">{String(agent.name || "Unknown")}</h2>
-                <div className="flex items-center space-x-2 text-[10px] mb-3">
+                <h2 className={`${isTablet ? 'text-2xl' : 'text-lg md:text-xl'} font-serif text-white mb-1`}>{String(agent.name || "Unknown")}</h2>
+                <div className={`flex items-center space-x-2 ${isTablet ? 'text-xs' : 'text-[10px]'} mb-3`}>
                     <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan uppercase tracking-tighter">LVL {String(agent.level || 1)}</span>
                     <span className={`px-2 py-0.5 rounded border border-axiom-purple/30 text-axiom-purple uppercase font-bold tracking-tighter`}>
                         {String(agent.state || AgentState.IDLE)}
                     </span>
                     {agent.isAwakened && (
-                        <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded || isThrottled ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>
-                            {agent.apiQuotaExceeded || isThrottled ? <ZapOff className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />}
-                            {isThrottled ? 'Throttled' : 'Awakened'}
-                        </span>
+                        <div className="flex items-center gap-1">
+                            <span className={`${isTablet ? 'text-xs' : 'text-[10px]'} font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded || isThrottled ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>
+                                {agent.apiQuotaExceeded || isThrottled ? <ZapOff className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />}
+                                {isThrottled ? 'Throttled' : 'Awakened'}
+                            </span>
+                            {agent.apiQuotaExceeded && (
+                                <span className={`${isTablet ? 'text-[10px]' : 'text-[8px]'} bg-red-500/20 text-red-500 px-1 rounded border border-red-500/30 font-mono`}>QUOTA_EXCEEDED</span>
+                            )}
+                        </div>
                     )}
+                </div>
+
+                {/* XP PROGRESS SECTION */}
+                <div className="mb-4">
+                    <div className={`flex justify-between ${isTablet ? 'text-[11px]' : 'text-[9px]'} text-gray-500 uppercase font-black mb-1`}>
+                        <span>Experience</span>
+                        <span className="text-axiom-cyan">{String(agent.xp)} / {String(getXPForNextLevel(agent.level))} XP</span>
+                    </div>
+                    <div className={`${isTablet ? 'h-2.5' : 'h-1.5'} w-full bg-black/40 rounded-full overflow-hidden border border-white/5`}>
+                        <div 
+                            className="h-full bg-gradient-to-r from-axiom-cyan to-blue-500 transition-all duration-700 ease-out shadow-[0_0_8px_rgba(6,182,212,0.5)]"
+                            style={{ width: `${Math.min(100, (agent.xp / getXPForNextLevel(agent.level)) * 100)}%` }}
+                        ></div>
+                    </div>
                 </div>
 
                 {/* Cognitive Trace - FIXED ERROR #31 */}
                 {agent.lastDecision && (
-                    <div className="mb-4 bg-axiom-cyan/5 border border-axiom-cyan/20 p-2 rounded text-[9px] italic text-cyan-100 leading-tight">
+                    <div className={`mb-4 bg-axiom-cyan/5 border border-axiom-cyan/20 p-2 rounded ${isTablet ? 'text-[11px]' : 'text-[9px]'} italic text-cyan-100 leading-tight`}>
                         <div className="flex items-center gap-1 mb-1 not-italic font-black text-axiom-cyan uppercase">
-                            <Brain className="w-2.5 h-2.5" /> 
+                            <Brain className={`${isTablet ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`} /> 
                             {String(agent.lastDecision.decision)}
-                            {isThrottled && <span className="text-[7px] ml-auto text-red-500 font-mono">[HEURISTIC]</span>}
+                            {isThrottled && <span className={`${isTablet ? 'text-[9px]' : 'text-[7px]'} ml-auto text-red-500 font-mono`}>[HEURISTIC]</span>}
                         </div>
                         {String(agent.lastDecision.justification)}
                     </div>
@@ -129,13 +150,17 @@ export const AgentHUD = () => {
                 </div>
 
                 <div className="space-y-2 mb-4">
-                    <div className="bg-white/5 p-2 rounded border border-white/10">
-                        <p className="text-[8px] text-gray-500 uppercase font-black mb-1">Neural Personality</p>
-                        <p className="text-[10px] text-axiom-cyan font-medium leading-tight">{String(agent.thinkingMatrix?.personality || "Standard Axiomatic")}</p>
+                    <div className="bg-white/5 p-2 rounded border border-white/10 group hover:border-axiom-cyan/40 transition-colors">
+                        <p className={`${isTablet ? 'text-[10px]' : 'text-[8px]'} text-gray-500 uppercase font-black mb-1 flex items-center gap-1`}>
+                            <Brain className="w-2.5 h-2.5" /> Neural Personality
+                        </p>
+                        <p className={`${isTablet ? 'text-xs' : 'text-[10px]'} text-axiom-cyan font-medium leading-tight`}>{String(agent.thinkingMatrix?.personality || "Standard Axiomatic")}</p>
                     </div>
-                    <div className="bg-white/5 p-2 rounded border border-white/10">
-                        <p className="text-[8px] text-gray-500 uppercase font-black mb-1">Long-Term Objective</p>
-                        <p className="text-[10px] text-white font-medium leading-tight">{String(agent.thinkingMatrix?.currentLongTermGoal || "Awaiting Directive")}</p>
+                    <div className="bg-white/5 p-2 rounded border border-white/10 group hover:border-axiom-gold/40 transition-colors">
+                        <p className={`${isTablet ? 'text-[10px]' : 'text-[8px]'} text-gray-500 uppercase font-black mb-1 flex items-center gap-1`}>
+                            <Timer className="w-2.5 h-2.5" /> Long-Term Objective
+                        </p>
+                        <p className={`${isTablet ? 'text-xs' : 'text-[10px]'} text-white font-medium leading-tight`}>{String(agent.thinkingMatrix?.currentLongTermGoal || "Awaiting Directive")}</p>
                     </div>
 
                     <div>

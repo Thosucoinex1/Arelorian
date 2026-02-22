@@ -167,23 +167,33 @@ void main() {
     } 
     else if (abs(uBiome - 1.0) < 0.1) {
         vec3 dirtDark = vec3(0.18, 0.14, 0.1);
-        vec3 forestFloor = vec3(0.05, 0.12, 0.03);
-        float vegMix = smoothstep(-0.2, 0.5, noiseBase + noiseDetail * 0.2);
-        finalColor = mix(dirtDark, forestFloor, vegMix);
+        vec3 forestFloor = vec3(0.05, 0.15, 0.03);
+        vec3 grassBright = vec3(0.1, 0.3, 0.05);
+        float vegMix = smoothstep(-0.2, 0.5, noiseBase + noiseDetail * 0.3);
+        float grassNoise = snoise(vPosition.xz * 10.0 + uTime * 0.1);
+        vec3 baseVeg = mix(dirtDark, forestFloor, vegMix);
+        finalColor = mix(baseVeg, grassBright, step(0.6, grassNoise) * 0.3);
     }
     else if (abs(uBiome - 2.0) < 0.1) {
         vec3 rockGray = vec3(0.25, 0.25, 0.28);
         vec3 rockDark = vec3(0.1, 0.1, 0.12);
         vec3 snow = vec3(0.95, 0.98, 1.0);
+        vec3 moss = vec3(0.1, 0.2, 0.05);
         float cliffFactor = smoothstep(0.3, 0.7, slope);
         vec3 rock = mix(rockGray, rockDark, cliffFactor);
+        float mossFactor = snoise(vPosition.xz * 0.5) * (1.0 - cliffFactor);
+        rock = mix(rock, moss, smoothstep(0.4, 0.6, mossFactor) * 0.4);
         float snowLine = smoothstep(4.0, 7.0, vPosition.y);
         finalColor = mix(rock, snow, snowLine * (1.0 - cliffFactor));
     }
     else {
-        vec3 grassLush = vec3(0.1, 0.4, 0.1);
-        vec3 grassDry = vec3(0.4, 0.45, 0.2);
-        finalColor = mix(grassLush, grassDry, smoothstep(0.2, 0.7, noiseBase));
+        vec3 grassLush = vec3(0.1, 0.45, 0.1);
+        vec3 grassDry = vec3(0.45, 0.5, 0.2);
+        vec3 flowers = vec3(0.8, 0.2, 0.5);
+        float flowerMask = step(0.92, snoise(vPosition.xz * 2.0));
+        float grassMix = smoothstep(0.2, 0.7, noiseBase + noiseDetail * 0.1);
+        finalColor = mix(grassLush, grassDry, grassMix);
+        finalColor = mix(finalColor, flowers, flowerMask * 0.4);
     }
 
     // --- LOD Calculation ---
