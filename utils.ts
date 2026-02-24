@@ -1,5 +1,5 @@
 
-import { Agent, AgentState, ResourceNode, LandParcel, POI, POIType, Monster, ResourceType } from './types';
+import { Agent, AgentState, ResourceNode, LandParcel, POI, POIType, Monster } from './types';
 
 // --- AXIOMATIC UTILITY ENGINE (AUE) ---
 
@@ -9,14 +9,6 @@ export interface AxiomaticSummary {
     logic: string;
     reason: string;
 }
-
-// A simple noise function for procedural generation
-const noise = (x: number, z: number, seed: number = 0): number => {
-    const n = x * 3 + z * 57 + seed;
-    const nn = (n << 13) ^ n;
-    return (1.0 - ((nn * (nn * nn * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0);
-}
-
 
 export const LORE_POOL = [
   "Die Matrix wurde auf den Ruinen einer alten Welt erbaut.",
@@ -44,6 +36,54 @@ export const getXPForNextLevel = (currentLevel: number): number => {
 export const getSkillEfficiency = (level: number): number => {
     // Linear efficiency increase: 1.0 + 0.1 per level
     return 1.0 + (level - 1) * 0.1;
+};
+
+export const generateProceduralPOIs = (count: number, minDistance: number = 30): POI[] => {
+  const pois: POI[] = [];
+  const types: POIType[] = ['MINE', 'FOREST', 'DUNGEON', 'RUIN', 'SHRINE', 'NEST', 'BANK_VAULT', 'FORGE'];
+  
+  // Always ensure a Bank and a Forge in the City (0,0)
+  pois.push({
+      id: 'poi_bank_central',
+      type: 'BANK_VAULT',
+      position: [5, 0, -5],
+      isDiscovered: true,
+      discoveryRadius: 20,
+      rewardInsight: 0,
+      threatLevel: 0
+  });
+
+  pois.push({
+    id: 'poi_forge_central',
+    type: 'FORGE',
+    position: [-5, 0, 5],
+    isDiscovered: true,
+    discoveryRadius: 20,
+    rewardInsight: 0,
+    threatLevel: 0
+});
+
+  for (let i = 0; i < count; i++) {
+    const type = types[Math.floor(Math.random() * types.length)];
+    const angle = Math.random() * Math.PI * 2;
+    const distance = minDistance + Math.random() * 200;
+    
+    const x = Math.cos(angle) * distance;
+    const z = Math.sin(angle) * distance;
+
+    pois.push({
+      id: `poi_${Date.now()}_${i}`,
+      type,
+      position: [x, 0, z],
+      isDiscovered: false,
+      discoveryRadius: type === 'NEST' ? 15 : 10,
+      rewardInsight: Math.floor(Math.random() * 15) + 5,
+      loreFragment: type === 'RUIN' ? LORE_POOL[Math.floor(Math.random() * LORE_POOL.length)] : undefined,
+      threatLevel: type === 'NEST' || type === 'DUNGEON' ? 0.6 : 0.1
+    });
+  }
+  
+  return pois;
 };
 
 export const calculateCombatHeuristics = (
@@ -140,25 +180,14 @@ export const calculateAxiomaticWeightWithReason = (
         case AgentState.GATHERING:
             if (invCount >= 10) {
                 baseUtility = -100; // Cannot gather if full
-                reason = "Inventar voll."
             } else {
                 let resourceScore = 0;
-                let preferredResourcesFound = false;
                 nearbyResources.forEach(res => {
                     const dist = Math.hypot(res.position[0] - agent.position[0], res.position[2] - agent.position[2]);
-                    if (dist < 120) {
-                        // Check if the resource is preferred by the agent
-                        const isPreferred = agent.economicDesires.preferredResources.includes(res.type as ResourceType);
-                        if (isPreferred) {
-                            resourceScore += 300 / (dist + 1); // Higher score for preferred resources
-                            preferredResourcesFound = true;
-                        } else {
-                            resourceScore += 50 / (dist + 1); // Lower score for non-preferred resources
-                        }
-                    }
+                    if (dist < 120) resourceScore += 100 / (dist + 1);
                 });
                 baseUtility += (resourceScore * 0.1 * (1.1 - (invCount/10)) * (K_ENERGY + 0.5));
-                reason = preferredResourcesFound ? "Bevorzugte Ressourcen in der Nähe entdeckt" : "Ressourcen in der Nähe entdeckt";
+                reason = "Ressourcen in der Nähe entdeckt";
             }
             break;
 
@@ -254,28 +283,8 @@ export const summarizeNeurologicChoice = (
 
 export const getBiomeForChunk = (x: number, z: number): string => {
     if (x === 0 && z === 0) return 'CITY';
-
-    // Large scale noise for continent generation
-    const continentNoise = (noise(x / 50, z / 50, 1234) + 1) / 2;
-
-    // Medium scale noise for biomes
-    const biomeNoise = (noise(x / 25, z / 25, 5678) + 1) / 2;
-
-    if (continentNoise < 0.4) {
-        return 'OCEAN';
-    }
-
-    if (biomeNoise < 0.3) {
-        return 'DESERT';
-    }
-
-    if (biomeNoise < 0.6) {
-        return 'GRASSLAND';
-    }
-    
-    if (biomeNoise < 0.8) {
-        return 'FOREST';
-    }
-
-    return 'SNOWY';
+    const val = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
+    if (val < 0.35) return 'FOREST';
+    if (val < 0.60) return 'MOUNTAIN';
+    return 'PLAINS';
 };

@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">ouroboros-neural-emergence</string>
-    <string name="title_activity_main">ouroboros-neural-emergence</string>
-    <string name="package_name">com.ouroboros.neuralemergence</string>
-    <string name="custom_url_scheme">com.ouroboros.neuralemergence</string>
-</resources>

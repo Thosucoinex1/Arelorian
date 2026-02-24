@@ -1,4 +1,5 @@
 
+
 declare global {
   interface Window {
     aistudio: {
@@ -46,12 +47,7 @@ export const MONSTER_TEMPLATES = {
   DRAGON: { name: 'Data Drake', hp: 800, atk: 55, def: 40, xp: 1500, color: '#ef4444', scale: 3.5 }
 };
 
-export enum MonsterType {
-    SLIME = 'SLIME',
-    GOBLIN = 'GOBLIN',
-    ORC = 'ORC',
-    DRAGON = 'DRAGON',
-}
+export type MonsterType = keyof typeof MONSTER_TEMPLATES;
 
 export interface Monster {
   id: string;
@@ -86,15 +82,7 @@ export interface MarketState {
   inventory: Record<ResourceType, number>;
 }
 
-export enum ItemRarity {
-    COMMON = 'COMMON',
-    UNCOMMON = 'UNCOMMON',
-    RARE = 'RARE',
-    EPIC = 'EPIC',
-    LEGENDARY = 'LEGENDARY',
-    AXIOMATIC = 'AXIOMATIC'
-}
-
+export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'AXIOMATIC';
 export type ItemType = 'WEAPON' | 'OFFHAND' | 'HELM' | 'CHEST' | 'LEGS' | 'MATERIAL' | 'CONSUMABLE' | 'RELIC';
 export type ResourceType = 'WOOD' | 'STONE' | 'IRON_ORE' | 'SILVER_ORE' | 'GOLD_ORE' | 'DIAMOND' | 'ANCIENT_RELIC' | 'SUNLEAF_HERB';
 export type ChatChannel = 'GLOBAL' | 'LOCAL' | 'COMBAT' | 'GUILD' | 'SYSTEM' | 'THOUGHT' | 'EVENT' | 'X_BRIDGE';
@@ -139,65 +127,6 @@ export interface SkillEntry {
   xp: number;
 }
 
-export enum Skill {
-  // Combat Skills
-  Attack = 'Attack',
-  Strength = 'Strength',
-  Defence = 'Defence',
-  Hitpoints = 'Hitpoints',
-  Ranged = 'Ranged',
-  Magic = 'Magic',
-  Prayer = 'Prayer',
-  Slayer = 'Slayer',
-
-  // Crafting Skills
-  Crafting = 'Crafting',
-  Smithing = 'Smithing',
-  Fletching = 'Fletching',
-  Runecrafting = 'Runecrafting',
-  Herblore = 'Herblore',
-  Construction = 'Construction',
-
-  // Resource Gathering Skills
-  Mining = 'Mining',
-  Woodcutting = 'Woodcutting',
-  Fishing = 'Fishing',
-  Hunter = 'Hunter',
-  Farming = 'Farming',
-
-  // Other Skills
-  Agility = 'Agility',
-  Thieving = 'Thieving',
-  Cooking = 'Cooking',
-  Firemaking = 'Firemaking'
-}
-
-export interface Skills {
-  [Skill.Attack]: SkillEntry;
-  [Skill.Strength]: SkillEntry;
-  [Skill.Defence]: SkillEntry;
-  [Skill.Hitpoints]: SkillEntry;
-  [Skill.Ranged]: SkillEntry;
-  [Skill.Magic]: SkillEntry;
-  [Skill.Prayer]: SkillEntry;
-  [Skill.Slayer]: SkillEntry;
-  [Skill.Crafting]: SkillEntry;
-  [Skill.Smithing]: SkillEntry;
-  [Skill.Fletching]: SkillEntry;
-  [Skill.Runecrafting]: SkillEntry;
-  [Skill.Herblore]: SkillEntry;
-  [Skill.Construction]: SkillEntry;
-  [Skill.Mining]: SkillEntry;
-  [Skill.Woodcutting]: SkillEntry;
-  [Skill.Fishing]: SkillEntry;
-  [Skill.Hunter]: SkillEntry;
-  [Skill.Farming]: SkillEntry;
-  [Skill.Agility]: SkillEntry;
-  [Skill.Thieving]: SkillEntry;
-  [Skill.Cooking]: SkillEntry;
-  [Skill.Firemaking]: SkillEntry;
-}
-
 export interface Agent {
   id: string;
   name: string;
@@ -233,7 +162,7 @@ export interface Agent {
     sociability?: number;
     aggression?: number;
   };
-  skills: Skills;
+  skills: Record<string, SkillEntry>;
   resources: Record<ResourceType, number>;
   inventory: (Item | null)[];
   bank: (Item | null)[];
@@ -262,7 +191,6 @@ export interface Agent {
     action: string;
     reasoning: string;
   }[];
-  guildId?: string | null;
 }
 
 export interface Chunk { 
@@ -276,9 +204,7 @@ export interface Chunk {
   axiomaticData?: number[][];
   stabilityIndex: number; // 0 to 1
   corruptionLevel: number; // 0 to 1
-  cellType: 'SANCTUARY' | 'WILDERNESS' | 'ANOMALY' | 'CITY';
-  ownerGuildId?: string | null;
-  structures?: Structure[];
+  cellType: 'SANCTUARY' | 'WILDERNESS' | 'ANOMALY';
 }
 
 export interface ResourceNode {
@@ -292,7 +218,7 @@ export interface LogEntry {
   id: string;
   timestamp: number;
   message: string;
-  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'WATCHDOG' | 'EVENT' | 'ERROR' | 'GUILD';
+  type: 'SYSTEM' | 'COMBAT' | 'TRADE' | 'AXIOM' | 'THOUGHT' | 'WATCHDOG' | 'EVENT' | 'ERROR';
   sender?: string;
 }
 
@@ -372,13 +298,12 @@ export interface LandParcel {
   structures: Structure[];
 }
 
-export type StructureType = 'HOUSE' | 'BANK' | 'FORGE' | 'MARKET_STALL' | 'DATA_HUB' | 'CITY_CENTER' | 'TRADE_POST' | 'CASTLE' | 'OUTPOST';
+export type StructureType = 'HOUSE' | 'BANK' | 'FORGE' | 'MARKET_STALL' | 'DATA_HUB';
 
 export interface Structure {
   id: string;
   type: StructureType;
   ownerId?: string;
-  guildId?: string | null;
 }
 
 export const AXIOMS = [
@@ -402,29 +327,4 @@ export interface StoreProduct {
     name: string;
     description: string;
     priceEUR: number;
-}
-
-export type GuildRank = 'MEMBER' | 'OFFICER' | 'LEADER';
-
-export interface GuildMember {
-  agentId: string;
-  rank: GuildRank;
-}
-
-export interface Guild {
-  id: string;
-  name: string;
-  leaderId: string;
-  members: GuildMember[];
-  allies: string[]; // Array of Guild IDs
-  resources: Record<ResourceType, number>;
-  gold: number;
-}
-
-export interface Kingdom {
-  id: string;
-  name: string;
-  leaderGuildId: string;
-  memberGuildIds: string[];
-  territory: string[]; // Array of biome names
 }

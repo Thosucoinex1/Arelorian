@@ -14,7 +14,7 @@ import {
   Code
 } from 'lucide-react';
 import { useStore } from '../../store';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const AxiomDebugger = () => {
   const showDebugger = useStore(state => state.showDebugger);
