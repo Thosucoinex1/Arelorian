@@ -4,8 +4,8 @@ import { WebSocketServer } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
-import pg from 'pg';
-import mysql from 'mysql2/promise';
+// import pg from 'pg';
+// import mysql from 'mysql2/promise';
 import admin from 'firebase-admin';
 
 // Initialize Firebase Admin
@@ -21,11 +21,11 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   }
 }
 
-const { Pool } = pg;
+// const { Pool } = pg;
 const PORT = 3000;
 
 // Database configuration
-const isMysql = process.env.DATABASE_URL?.startsWith('mysql://') || process.env.DB_PORT === '3306';
+// const isMysql = process.env.DATABASE_URL?.startsWith('mysql://') || process.env.DB_PORT === '3306';
 
 let pool: any;
 let mysqlPool: any;
@@ -37,61 +37,61 @@ const memoryStore = {
   worldState: new Map<string, any>()
 };
 
-if (isMysql) {
-  const mysqlConfig = process.env.DATABASE_URL 
-    ? { uri: process.env.DATABASE_URL }
-    : {
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME,
-        port: parseInt(process.env.DB_PORT || '3306'),
-        connectTimeout: 5000, // 5 second timeout
-      };
-  mysqlPool = mysql.createPool(mysqlConfig as any);
-  console.log('MySQL Pool initialized.');
-} else {
-  const dbConfig = process.env.DATABASE_URL 
-    ? { connectionString: process.env.DATABASE_URL }
-    : {
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME,
-        port: parseInt(process.env.DB_PORT || '5432'),
-      };
+// if (isMysql) {
+//   const mysqlConfig = process.env.DATABASE_URL 
+//     ? { uri: process.env.DATABASE_URL }
+//     : {
+//         host: process.env.DB_HOST,
+//         user: process.env.DB_USER,
+//         password: process.env.DB_PASSWORD,
+//         database: process.env.DB_NAME,
+//         port: parseInt(process.env.DB_PORT || '3306'),
+//         connectTimeout: 5000, // 5 second timeout
+//       };
+//   mysqlPool = mysql.createPool(mysqlConfig as any);
+//   console.log('MySQL Pool initialized.');
+// } else {
+//   const dbConfig = process.env.DATABASE_URL 
+//     ? { connectionString: process.env.DATABASE_URL }
+//     : {
+//         host: process.env.DB_HOST,
+//         user: process.env.DB_USER,
+//         password: process.env.DB_PASSWORD,
+//         database: process.env.DB_NAME,
+//         port: parseInt(process.env.DB_PORT || '5432'),
+//       };
 
-  pool = new Pool({
-    ...dbConfig,
-    connectionTimeoutMillis: 5000, // 5 second timeout
-    ssl: (process.env.DB_HOST || process.env.DATABASE_URL) ? {
-      ca: fs.existsSync(path.join(process.cwd(), 'certs/server-ca.pem')) 
-        ? fs.readFileSync(path.join(process.cwd(), 'certs/server-ca.pem')) 
-        : undefined,
-      key: fs.existsSync(path.join(process.cwd(), 'certs/client-key.pem'))
-        ? fs.readFileSync(path.join(process.cwd(), 'certs/client-key.pem'))
-        : undefined,
-      cert: fs.existsSync(path.join(process.cwd(), 'certs/client-cert.pem'))
-        ? fs.readFileSync(path.join(process.cwd(), 'certs/client-cert.pem'))
-        : undefined,
-      rejectUnauthorized: false
-    } : false
-  });
-  console.log('PostgreSQL Pool initialized.');
-}
+//   pool = new Pool({
+//     ...dbConfig,
+//     connectionTimeoutMillis: 5000, // 5 second timeout
+//     ssl: (process.env.DB_HOST || process.env.DATABASE_URL) ? {
+//       ca: fs.existsSync(path.join(process.cwd(), 'certs/server-ca.pem')) 
+//         ? fs.readFileSync(path.join(process.cwd(), 'certs/server-ca.pem')) 
+//         : undefined,
+//       key: fs.existsSync(path.join(process.cwd(), 'certs/client-key.pem'))
+//         ? fs.readFileSync(path.join(process.cwd(), 'certs/client-key.pem'))
+//         : undefined,
+//       cert: fs.existsSync(path.join(process.cwd(), 'certs/client-cert.pem'))
+//         ? fs.readFileSync(path.join(process.cwd(), 'certs/client-cert.pem'))
+//         : undefined,
+//       rejectUnauthorized: false
+//     } : false
+//   });
+//   console.log('PostgreSQL Pool initialized.');
+// }
 
-// Log connection attempt (masking sensitive info)
-const currentDbConfig = isMysql ? {
-  host: process.env.DB_HOST || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).hostname : 'unknown'),
-  port: process.env.DB_PORT || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).port : '3306'),
-  type: 'MySQL'
-} : {
-  host: process.env.DB_HOST || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).hostname : 'unknown'),
-  port: process.env.DB_PORT || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).port : '5432'),
-  type: 'PostgreSQL'
-};
+// // Log connection attempt (masking sensitive info)
+// const currentDbConfig = isMysql ? {
+//   host: process.env.DB_HOST || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).hostname : 'unknown'),
+//   port: process.env.DB_PORT || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).port : '3306'),
+//   type: 'MySQL'
+// } : {
+//   host: process.env.DB_HOST || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).hostname : 'unknown'),
+//   port: process.env.DB_PORT || (process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).port : '5432'),
+//   type: 'PostgreSQL'
+// };
 
-console.log('Database Connection Attempt:', currentDbConfig);
+// console.log('Database Connection Attempt:', currentDbConfig);
 
 // Initialize Database Tables
 async function initDb(retries = 3, delay = 2000) {
@@ -148,7 +148,7 @@ async function initDb(retries = 3, delay = 2000) {
 }
 
 async function startServer() {
-  await initDb();
+  // await initDb();
   const app = express();
   app.use(express.json({ limit: '50mb' }));
   const server = http.createServer(app);
@@ -183,28 +183,28 @@ async function startServer() {
 
   // API routes
   app.get('/api/health', async (_, res) => {
-    let dbStatus = dbAvailable ? 'HEALTHY' : 'MEMORY_MODE';
+    let dbStatus = 'MEMORY_MODE';
     let error = null;
     
-    if (dbAvailable) {
-      try {
-        if (isMysql) {
-          await mysqlPool.query('SELECT 1');
-        } else {
-          const client = await pool.connect();
-          client.release();
-        }
-      } catch (err: any) {
-        dbStatus = 'DEGRADED';
-        error = err.message;
-      }
-    }
+    // if (dbAvailable) {
+    //   try {
+    //     if (isMysql) {
+    //       await mysqlPool.query('SELECT 1');
+    //     } else {
+    //       const client = await pool.connect();
+    //       client.release();
+    //     }
+    //   } catch (err: any) {
+    //     dbStatus = 'DEGRADED';
+    //     error = err.message;
+    //   }
+    // }
 
     res.json({ 
       status: dbStatus, 
       error,
       service: 'Ouroboros Axiom Engine',
-      database: dbAvailable ? (isMysql ? 'MySQL' : 'PostgreSQL') : 'In-Memory',
+      database: 'In-Memory',
       playerCount: wss.clients.size 
     });
   });
@@ -214,79 +214,86 @@ async function startServer() {
     const { agents } = req.body;
     if (!Array.isArray(agents)) return res.status(400).json({ error: 'Invalid agents data' });
 
-    if (!dbAvailable) {
       agents.forEach(agent => memoryStore.agents.set(agent.id, agent));
       return res.json({ success: true, mode: 'memory' });
-    }
 
-    try {
-      if (isMysql) {
-        for (const agent of agents) {
-          await mysqlPool.query(
-            'INSERT INTO agents (id, data, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE data = ?, updated_at = NOW()',
-            [agent.id, JSON.stringify(agent), JSON.stringify(agent)]
-          );
-        }
-      } else {
-        const client = await pool.connect();
-        try {
-          await client.query('BEGIN');
-          for (const agent of agents) {
-            await client.query(
-              'INSERT INTO agents (id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()',
-              [agent.id, agent]
-            );
-          }
-          await client.query('COMMIT');
-        } catch (e: any) {
-          await client.query('ROLLBACK');
-          throw e;
-        } finally {
-          client.release();
-        }
-      }
-      res.json({ success: true });
-    } catch (err: any) {
-      console.error('Agents sync failed:', err.message);
-      res.status(500).json({ success: false, error: err.message });
-    }
+    // if (!dbAvailable) {
+    //   agents.forEach(agent => memoryStore.agents.set(agent.id, agent));
+    //   return res.json({ success: true, mode: 'memory' });
+    // }
+
+    // try {
+    //   if (isMysql) {
+    //     for (const agent of agents) {
+    //       await mysqlPool.query(
+    //         'INSERT INTO agents (id, data, updated_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE data = ?, updated_at = NOW()',
+    //         [agent.id, JSON.stringify(agent), JSON.stringify(agent)]
+    //       );
+    //     }
+    //   } else {
+    //     const client = await pool.connect();
+    //     try {
+    //       await client.query('BEGIN');
+    //       for (const agent of agents) {
+    //         await client.query(
+    //           'INSERT INTO agents (id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()',
+    //           [agent.id, agent]
+    //         );
+    //       }
+    //       await client.query('COMMIT');
+    //     } catch (e: any) {
+    //       await client.query('ROLLBACK');
+    //       throw e;
+    //     } finally {
+    //       client.release();
+    //     }
+    //   }
+    //   res.json({ success: true });
+    // } catch (err: any) {
+    //   console.error('Agents sync failed:', err.message);
+    //   res.status(500).json({ success: false, error: err.message });
+    // }
   });
 
   app.get('/api/sync/agents', async (_, res) => {
-    if (!dbAvailable) {
-      return res.json({ success: true, agents: Array.from(memoryStore.agents.values()), mode: 'memory' });
-    }
+    return res.json({ success: true, agents: Array.from(memoryStore.agents.values()), mode: 'memory' });
 
-    try {
-      if (isMysql) {
-        const [rows]: any = await mysqlPool.query('SELECT data FROM agents');
-        res.json({ success: true, agents: rows.map((r: any) => typeof r.data === 'string' ? JSON.parse(r.data) : r.data) });
-      } else {
-        const result = await pool.query('SELECT data FROM agents');
-        res.json({ success: true, agents: result.rows.map((r: { data: any }) => r.data) });
-      }
-    } catch (err: any) {
-      console.error('Agents fetch failed:', err.message);
-      res.status(500).json({ success: false, error: err.message });
-    }
+    // if (!dbAvailable) {
+    //   return res.json({ success: true, agents: Array.from(memoryStore.agents.values()), mode: 'memory' });
+    // }
+
+    // try {
+    //   if (isMysql) {
+    //     const [rows]: any = await mysqlPool.query('SELECT data FROM agents');
+    //     res.json({ success: true, agents: rows.map((r: any) => typeof r.data === 'string' ? JSON.parse(r.data) : r.data) });
+    //   } else {
+    //     const result = await pool.query('SELECT data FROM agents');
+    //     res.json({ success: true, agents: result.rows.map((r: { data: any }) => r.data) });
+    //   }
+    // } catch (err: any) {
+    //   console.error('Agents fetch failed:', err.message);
+    //   res.status(500).json({ success: false, error: err.message });
+    // }
   });
 
   app.get('/api/data', async (_, res) => {
-    if (!dbAvailable) {
-      return res.json({ success: true, data: [{ current_time: new Date() }], mode: 'memory' });
-    }
-    try {
-      if (isMysql) {
-        const [rows] = await mysqlPool.query('SELECT NOW() as current_time');
-        res.json({ success: true, data: rows });
-      } else {
-        const result = await pool.query('SELECT NOW() as current_time');
-        res.json({ success: true, data: result.rows });
-      }
-    } catch (err: any) {
-      console.error('Data fetch failed:', err.message);
-      res.status(500).json({ success: false, error: err.message });
-    }
+    return res.json({ success: true, data: [{ current_time: new Date() }], mode: 'memory' });
+
+    // if (!dbAvailable) {
+    //   return res.json({ success: true, data: [{ current_time: new Date() }], mode: 'memory' });
+    // }
+    // try {
+    //   if (isMysql) {
+    //     const [rows] = await mysqlPool.query('SELECT NOW() as current_time');
+    //     res.json({ success: true, data: rows });
+    //   } else {
+    //     const result = await pool.query('SELECT NOW() as current_time');
+    //     res.json({ success: true, data: result.rows });
+    //   }
+    // } catch (err: any) {
+    //   console.error('Data fetch failed:', err.message);
+    //   res.status(500).json({ success: false, error: err.message });
+    // }
   });
 
   // Vite middleware for development

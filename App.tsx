@@ -10,6 +10,7 @@ import { webSocketService } from './services/webSocketService';
 import GameUI from './certs/UI/GameUI';
 import { MainMenu } from './certs/UI/MainMenu';
 import WorldScene from './components/World/WorldScene';
+import { DeveloperTools } from './components/DeveloperTools';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
@@ -79,6 +80,7 @@ const App = () => {
   const toggleDebugger = useStore(state => state.toggleDebugger);
   const toggleAdmin = useStore(state => state.toggleAdmin);
   const showAdmin = useStore(state => state.showAdmin);
+  const showDeveloperTools = useStore(state => state.showDeveloperTools);
   const setUserApiKey = useStore(state => state.setUserApiKey);
   const setUser = useStore(state => state.setUser);
   const [showInitialHandshake, setShowInitialHandshake] = useState(false);
@@ -204,6 +206,7 @@ const App = () => {
       <WorldScene />
       <GameUI />
       <MainMenu />
+      {showDeveloperTools && <DeveloperTools />} 
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
       <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
       

@@ -2,6 +2,9 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { Agent, AgentState, ResourceNode, LogEntry, Quest } from "../types";
 import { summarizeNeurologicChoice } from "../utils";
 
+const API_COOLDOWN_MS = 5000; // 5 seconds cooldown
+let lastApiCallTime = 0;
+
 
 
 export interface AIDecision {
@@ -40,7 +43,17 @@ export const generateAutonomousDecision = async (
   localLogicField?: { vx: number, vz: number }
 ): Promise<AIDecision> => {
   const effectiveKey = userApiKey || process.env.GEMINI_API_KEY;
-  
+  const now = Date.now();
+
+  if (now - lastApiCallTime < API_COOLDOWN_MS) {
+    return {
+      justification: "API call throttled due to cooldown.",
+      decision: String(AgentState.THINKING), // Or a more appropriate fallback state
+      newState: AgentState.THINKING,
+      message: "API throttled."
+    };
+  }
+
   if (!canUseApi || !effectiveKey) {
     const local = summarizeNeurologicChoice(agent, nearbyAgents, nearbyResourceNodes, [], []);
     return {
@@ -98,6 +111,7 @@ const client = new GoogleGenAI({ apiKey: effectiveKey });
       }
     }));
 
+    lastApiCallTime = now; // Update last call time on success
     return JSON.parse(response.text || "{}") as AIDecision;
   } catch (error) {
     console.error("Gemini Decision Error:", error);
@@ -117,9 +131,9 @@ export const generateEmergentBehavior = async (
   recentLogs: LogEntry[],
   activeTradeOffers: any[],
   userApiKey?: string
-): Promise<{ 
-  action: string; 
-  reasoning: string; 
+): Promise<{
+  action: string;
+  reasoning: string;
   message?: string;
   tradeProposal?: {
     offeredType: string;
@@ -128,6 +142,16 @@ export const generateEmergentBehavior = async (
     requestedAmount: number;
   }
 }> => {
+  const now = Date.now();
+
+  if (now - lastApiCallTime < API_COOLDOWN_MS) {
+    return {
+      action: "API call throttled due to cooldown.",
+      reasoning: "Cannot generate emergent behavior due to API cooldown.",
+      message: "API throttled."
+    };
+  }
+
   const effectiveKey = userApiKey || process.env.GEMINI_API_KEY;
   if (!effectiveKey) {
     return {
@@ -213,6 +237,7 @@ export const generateEmergentBehavior = async (
       }
     }));
 
+    lastApiCallTime = now; // Update last call time on success
     return JSON.parse(response.text || "{}");
   } catch (error) {
     console.error("Emergent Behavior Error:", error);
@@ -355,7 +380,7 @@ export const diagnoseProject = async (
       model: "gemini-3.1-pro-preview",
       contents: `Project Context: ${context}\n\nError Logs: ${errorLog || "None provided."}`,
       config: {
-        systemInstruction: `You are the Ouroboros Deep Debugger. Analyze the provided context and logs. \n        Identify architectural flaws, migration errors (especially Google Cloud, Firebase, and Gemini API migration issues), and logic bugs.\n        Focus on:\n        1. Missing environment variables (GEMINI_API_KEY).\n        2. Dependency mismatches (React 18, Zustand 5, Three.js).\n        3. Matrix corruption (logic errors in state management).\n        4. "Crushed" build artifacts from failed migrations.\n        Return a structured JSON diagnostic report.`,
+        systemInstruction: `You are the Ouroboros Deep Debugger. Analyze the provided context and logs thoroughly. \n        Identify architectural flaws, migration errors (especially Google Cloud, Firebase, and Gemini API migration issues), and logic bugs.\n        Provide highly specific error messages and actionable recovery suggestions for the developer.\n        Focus on:\n        1. Missing or incorrect environment variables (e.g., GEMINI_API_KEY, DATABASE_URL, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT, FIREBASE_SERVICE_ACCOUNT_JSON).\n        2. Dependency mismatches or missing packages (e.g., React 18+, Zustand 5+, Three.js, @google/genai, mysql2, pg).\n        3. Build errors (e.g., TypeScript compilation failures, module not found, syntax errors) and suggest 'npm install' or 'npm run build'.\n        4. Runtime errors (e.g., connection timeouts, API key issues, logic bugs, 'ReferenceError').\n        5. Platform-specific errors like 'RESOURCE_EXHAUSTED' and suggest waiting, restarting the dev server, or checking quotas.\n        6. Matrix corruption (logic errors in state management, agent behavior, or world state updates).\n        7. "Crushed" build artifacts from failed migrations or incomplete updates.\n        For each issue, provide a clear description, its severity, a precise suggested fix, and the relevant file if applicable.\n        Return a structured JSON diagnostic report.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -388,11 +413,22 @@ export const diagnoseProject = async (
     return JSON.parse(response.text || "{}") as DiagnosticReport;
   } catch (error) {
     console.error("Gemini Diagnostic Error:", error);
+    const errorMessage = (error as Error).message || 'Unknown error during diagnostic scan.';
     return {
       status: 'CRITICAL',
-      summary: 'Diagnostic engine failed to initialize.',
-      issues: [{ severity: 'HIGH', description: 'Neural link interrupted during scan.', suggestedFix: 'Check API quota and connectivity.' }],
-      recoverySteps: ['Retry scan.', 'Verify Gemini API status.']
+      summary: `Diagnostic engine failed to initialize: ${errorMessage}`,
+      issues: [
+        { 
+          severity: 'HIGH', 
+          description: `Neural link interrupted during scan. Error: ${errorMessage}`, 
+          suggestedFix: 'Check Gemini API quota and connectivity. If the error is RESOURCE_EXHAUSTED, please wait a few minutes and try again, or restart the development environment.' 
+        }
+      ],
+      recoverySteps: [
+        'Retry the diagnostic scan.', 
+        'Verify your Gemini API key is correctly configured and not exceeding quotas.',
+        'If the issue persists, restart the development server.'
+      ]
     };
   }
 };

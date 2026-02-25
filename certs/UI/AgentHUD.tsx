@@ -69,12 +69,10 @@ export const AgentHUD = () => {
                     ✕
                 </button>
                 
-                <h2 className={`${isTablet ? 'text-2xl' : 'text-lg md:text-xl'} font-serif text-white mb-1`}>{String(agent.name || "Unknown")}</h2>
+                <h2 className={`${isTablet ? 'text-2xl' : 'text-lg md:text-xl'} font-serif text-white mb-1`}>{String(agent.name || "Unknown")} <span className="text-xs text-gray-400">({String(agent.state || AgentState.IDLE)})</span></h2>
                 <div className={`flex items-center space-x-2 ${isTablet ? 'text-xs' : 'text-[10px]'} mb-3`}>
                     <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan uppercase tracking-tighter">LVL {String(agent.level || 1)}</span>
-                    <span className={`px-2 py-0.5 rounded border border-axiom-purple/30 text-axiom-purple uppercase font-bold tracking-tighter`}>
-                        {String(agent.state || AgentState.IDLE)}
-                    </span>
+
                     {agent.isAwakened && (
                         <div className="flex items-center gap-1">
                             <span className={`${isTablet ? 'text-xs' : 'text-[10px]'} font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded || isThrottled ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>

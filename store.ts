@@ -51,6 +51,7 @@ interface GameState {
   showCharacterSheet: boolean;
   isAxiomAuthenticated: boolean;
   showDebugger: boolean;
+  showDeveloperTools: boolean;
   emergenceSettings: EmergenceSettings;
   debugBiomeEnabled: boolean;
   debugBiome: number;
@@ -75,6 +76,7 @@ interface GameState {
   toggleMap: (show: boolean) => void;
   toggleCharacterSheet: (show: boolean) => void;
   toggleDebugger: (show: boolean) => void;
+  toggleDeveloperTools: (show: boolean) => void;
   runDiagnostics: (errorLog?: string) => Promise<void>;
   runEmergentBehavior: (agentId: string) => Promise<void>;
   setAxiomAuthenticated: (auth: boolean) => void;
@@ -186,6 +188,7 @@ export const useStore = create<GameState>((set, get) => ({
   showMap: false,
   showCharacterSheet: false,
   showDebugger: false,
+  showDeveloperTools: false,
   diagnosticReport: null,
   isAxiomAuthenticated: false,
   debugBiomeEnabled: false,
@@ -965,6 +968,7 @@ export const useStore = create<GameState>((set, get) => ({
   toggleMap: (show) => set({ showMap: show }),
   toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
   toggleDebugger: (show) => set({ showDebugger: show }),
+  toggleDeveloperTools: (show) => set({ showDeveloperTools: show }),
   runDiagnostics: async (errorLog) => {
     const { diagnoseProject } = await import('./services/geminiService');
     set({ isScanning: true });

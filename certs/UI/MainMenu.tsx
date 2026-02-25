@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+
 import { useStore } from '../../store';
-import { User, Shield, Map, ShoppingCart, Github, LogOut } from 'lucide-react';
+import { User, Shield, Map, ShoppingCart, Github, LogOut, Settings } from 'lucide-react';
 
 export const MainMenu = () => {
   const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
@@ -8,6 +8,7 @@ export const MainMenu = () => {
   const toggleMap = useStore(state => state.toggleMap);
   const toggleMarket = useStore(state => state.toggleMarket);
   const showAdmin = useStore(state => state.showAdmin);
+  const toggleDeveloperTools = useStore(state => state.toggleDeveloperTools);
 
   const storeUser = useStore(state => state.user);
   const setUser = useStore(state => state.setUser);
@@ -31,9 +32,14 @@ export const MainMenu = () => {
         <ShoppingCart size={24} />
       </button>
       {showAdmin && (
-        <button onClick={() => toggleAdmin(true)} className="p-4 bg-axiom-purple/80 backdrop-blur-md rounded-full border border-axiom-purple/30 shadow-lg text-white hover:bg-axiom-purple hover:text-black transition-colors">
-          <Shield size={24} />
-        </button>
+        <>
+          <button onClick={() => toggleAdmin(true)} className="p-4 bg-axiom-purple/80 backdrop-blur-md rounded-full border border-axiom-purple/30 shadow-lg text-white hover:bg-axiom-purple hover:text-black transition-colors">
+            <Shield size={24} />
+          </button>
+          <button onClick={() => toggleDeveloperTools(true)} className="p-4 bg-axiom-purple/80 backdrop-blur-md rounded-full border border-axiom-purple/30 shadow-lg text-white hover:bg-axiom-purple hover:text-black transition-colors">
+            <Settings size={24} />
+          </button>
+        </>
       )}
     </div>
   );
