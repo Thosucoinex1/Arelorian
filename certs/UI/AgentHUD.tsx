@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../../store';
-import { AgentState, AXIOMS } from '../../types';
+import { AgentState } from '../../types';
 import { getXPForNextLevel } from '../../utils';
-import { Timer, ZapOff, Eye, Package, Shield, Swords, Pickaxe, Hammer, Brain, Zap } from 'lucide-react';
+import { Timer, ZapOff, Eye, Package, Swords, Pickaxe, Hammer, Brain, Zap } from 'lucide-react';
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
@@ -14,7 +14,8 @@ export const AgentHUD = () => {
   const toggleQuests = useStore(state => state.toggleQuests);
   const globalApiCooldown = useStore(state => state.globalApiCooldown);
   const isOpen = useStore(state => state.showCharacterSheet);
-  const { isMobile, isTablet, orientation, height: screenHeight } = useStore(state => state.device);
+  const { isMobile, isTablet, orientation } = useStore(state => state.device);
+  const isLandscapeMobile = isMobile && orientation === 'landscape';
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -27,8 +28,6 @@ export const AgentHUD = () => {
   if (!agent) return null;
 
   // Adjust positioning and sizing for mobile landscape
-  const isLandscapeMobile = isMobile && orientation === 'landscape';
-  const isTabletLandscape = isTablet && orientation === 'landscape';
   const hudWidth = isMobile ? (isLandscapeMobile ? 'w-56' : 'w-64') : (isTablet ? 'w-80' : 'w-72');
   const hudTop = isLandscapeMobile ? 'top-4' : (isTablet ? 'top-10' : 'top-8');
   const hudLeft = isLandscapeMobile ? 'left-4' : (isTablet ? 'left-10' : 'left-8');
@@ -36,10 +35,6 @@ export const AgentHUD = () => {
 
   const SCAN_COOLDOWN = 30 * 60 * 1000;
   const timeSinceLastScan = now - agent.lastScanTime;
-  const isOnScanCooldown = timeSinceLastScan < SCAN_COOLDOWN;
-  const remainingScanTime = Math.max(0, SCAN_COOLDOWN - timeSinceLastScan);
-  const minutes = Math.floor(remainingScanTime / 60000);
-  const seconds = Math.floor((remainingScanTime % 60000) / 1000);
 
   const invCount = agent.inventory.filter(i => i).length;
   const bankCount = agent.bank.filter(i => i).length;
@@ -113,7 +108,7 @@ export const AgentHUD = () => {
                         <div className="flex items-center gap-1 mb-1 not-italic font-black text-axiom-cyan uppercase">
                             <Brain className={`${isTablet ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`} /> 
                             {String(agent.lastDecision.decision)}
-                            {isThrottled && <span className={`${isTablet ? 'text-[9px]' : 'text-[7px]'} ml-auto text-red-500 font-mono`}>[HEURISTIC]</span>}
+                            {timeSinceLastScan < SCAN_COOLDOWN && <span className={`${isTablet ? 'text-[9px]' : 'text-[7px]'} ml-auto text-red-500 font-mono`}>[HEURISTIC]</span>}
                         </div>
                         {String(agent.lastDecision.justification)}
                     </div>

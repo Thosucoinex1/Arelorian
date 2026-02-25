@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useStore } from '../../store';
 import { X, Gavel, Timer, TrendingUp, Package } from 'lucide-react';
 
@@ -8,7 +8,6 @@ export const AuctionHouseOverlay = () => {
   const toggleAuctionHouse = useStore(state => state.toggleAuctionHouse);
   const auctionHouse = useStore(state => state.auctionHouse);
   const bidOnAuction = useStore(state => state.bidOnAuction);
-  const user = useStore(state => state.user);
   const agents = useStore(state => state.agents);
   const currentUserAgent = agents.find(a => a.faction === 'PLAYER');
 

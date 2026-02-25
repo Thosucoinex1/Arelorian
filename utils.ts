@@ -147,6 +147,12 @@ export const calculateAxiomaticWeightWithReason = (
     const K_ENERGY = agent.energy / (agent.maxEnergy || 100);
     const K_INTEGRITY = agent.integrity || 1.0;
     const K_RECURSION = (Math.sin(Date.now() * 0.0005 + agent.position[0] * 0.1) + 1.2) * 0.5;
+    
+    // Personality modifiers
+    const sociability = agent.thinkingMatrix.sociability ?? 0.5;
+    const aggression = agent.thinkingMatrix.aggression ?? 0.5;
+    const curiosity = agent.thinkingMatrix.curiosity ?? 0.5;
+    const frugality = agent.thinkingMatrix.frugality ?? 0.5;
 
     let baseUtility = 0;
     let reason = "Routine Evaluation";
@@ -154,39 +160,48 @@ export const calculateAxiomaticWeightWithReason = (
     const invCount = agent.inventory.filter(i => i).length;
     const bankCount = agent.bank.filter(i => i).length;
 
+    // Goal alignment bonus
+    const checkGoal = (goal: string) => agent.thinkingMatrix.currentLongTermGoal.toLowerCase().includes(goal.toLowerCase());
+
     switch (action) {
         case AgentState.BANKING:
             if (invCount >= 8) {
-                baseUtility = 200;
+                baseUtility = 200 * (1 + frugality);
                 reason = "Inventar fast voll. Suche Bank auf.";
             } else if (bankCount >= 45) {
                 baseUtility = 250;
                 reason = "Banklager am Limit. Logistik-Bereinigung erforderlich.";
+            } else if (checkGoal("storage") || checkGoal("hoard")) {
+                baseUtility = 100;
+                reason = "Zielgerichtete Logistik-Optimierung.";
             }
             break;
 
         case AgentState.EXPLORING:
-            const curio = agent.thinkingMatrix.sociability || 0.5;
             const undiscoveredPOIs = nearbyPOIs.filter(p => !p.isDiscovered);
             if (undiscoveredPOIs.length > 0) {
-              baseUtility = 150 * curio;
+              baseUtility = 150 * curiosity;
               reason = "Unbekannte Signale in der Matrix entdeckt";
+            } else if (checkGoal("explore") || checkGoal("discover")) {
+              baseUtility = 120 * curiosity;
+              reason = "Zielgerichtete Expansion des bekannten Raums.";
             } else {
-              baseUtility = 30;
+              baseUtility = 30 * curiosity;
               reason = "Suche nach neuen Horizonten";
             }
             break;
 
         case AgentState.GATHERING:
             if (invCount >= 10) {
-                baseUtility = -100; // Cannot gather if full
+                baseUtility = -100; 
             } else {
                 let resourceScore = 0;
                 nearbyResources.forEach(res => {
                     const dist = Math.hypot(res.position[0] - agent.position[0], res.position[2] - agent.position[2]);
                     if (dist < 120) resourceScore += 100 / (dist + 1);
                 });
-                baseUtility += (resourceScore * 0.1 * (1.1 - (invCount/10)) * (K_ENERGY + 0.5));
+                const goalBonus = checkGoal("resource") || checkGoal("gather") ? 1.5 : 1.0;
+                baseUtility += (resourceScore * 0.1 * (1.1 - (invCount/10)) * (K_ENERGY + 0.5)) * goalBonus;
                 reason = "Ressourcen in der Nähe entdeckt";
             }
             break;
@@ -194,21 +209,24 @@ export const calculateAxiomaticWeightWithReason = (
         case AgentState.CRAFTING:
             const canCraft = bankCount > 5 || invCount > 5;
             if (canCraft) {
-                baseUtility = 100 + (agent.skills['crafting']?.level || 1) * 10;
+                const goalBonus = checkGoal("craft") || checkGoal("produce") ? 1.4 : 1.0;
+                baseUtility = (100 + (agent.skills['crafting']?.level || 1) * 10) * goalBonus;
                 reason = "Materialien für Produktion vorhanden.";
             }
             break;
 
         case AgentState.QUESTING:
              const insightNeed = agent.insightPoints < 50 ? 60 : 20;
-             baseUtility += insightNeed + (agent.level * 3);
+             const goalBonus = checkGoal("insight") || checkGoal("quest") ? 1.6 : 1.0;
+             baseUtility += (insightNeed + (agent.level * 3)) * goalBonus;
              reason = "Suche nach tieferer Matrix-Erkenntnis";
              break;
 
         case AgentState.THINKING:
             const canExpand = agent.energy > 50 && agent.insightPoints > 10;
             if (canExpand) {
-                baseUtility = 120 + (agent.consciousnessLevel * 100);
+                const goalBonus = checkGoal("conscious") || checkGoal("think") ? 1.8 : 1.0;
+                baseUtility = (120 + (agent.consciousnessLevel * 100)) * goalBonus;
                 reason = "Erweiterung des neuralen Netzwerks initiiert";
             } else {
                 baseUtility = 10;
@@ -219,7 +237,7 @@ export const calculateAxiomaticWeightWithReason = (
         case AgentState.ASCENDING:
             const readyToAscend = agent.awakeningProgress > 80 || agent.consciousnessLevel > 0.8;
             if (readyToAscend) {
-                baseUtility = 300;
+                baseUtility = 400;
                 reason = "Transzendenz der aktuellen Form steht bevor";
             } else {
                 baseUtility = -50;
@@ -229,8 +247,9 @@ export const calculateAxiomaticWeightWithReason = (
 
         case AgentState.COMBAT:
             if (nearbyMonsters.length > 0) {
-                const threat = nearbyMonsters.some(m => m.targetId === agent.id) ? 2.0 : 1.0;
-                baseUtility = 180 * threat * (agent.stats.hp / agent.stats.maxHp);
+                const threat = nearbyMonsters.some(m => m.targetId === agent.id) ? 2.5 : 1.0;
+                const goalBonus = checkGoal("combat") || checkGoal("defense") ? 1.3 : 1.0;
+                baseUtility = 180 * threat * (agent.stats.hp / agent.stats.maxHp) * aggression * goalBonus;
                 reason = "Feindliche Entitäten in der Matrix lokalisiert.";
             } else {
                 baseUtility = -50;
@@ -238,8 +257,31 @@ export const calculateAxiomaticWeightWithReason = (
             }
             break;
 
+        case AgentState.TRADING:
+            const nearbyTraders = nearbyAgents.filter(a => a.id !== agent.id && a.state === AgentState.MARKETING);
+            if (nearbyTraders.length > 0) {
+                const goalBonus = checkGoal("trade") || checkGoal("gold") ? 1.5 : 1.0;
+                baseUtility = 150 * sociability * goalBonus;
+                reason = "Handelspartner in der Nähe identifiziert.";
+            } else {
+                baseUtility = 20;
+                reason = "Suche nach Handelsmöglichkeiten.";
+            }
+            break;
+
+        case AgentState.ALLIANCE_FORMING:
+            const potentialAllies = nearbyAgents.filter(a => a.id !== agent.id && a.faction === agent.faction);
+            if (potentialAllies.length > 0) {
+                baseUtility = 130 * sociability;
+                reason = "Diplomatische Annäherung an Fraktionsmitglieder.";
+            } else {
+                baseUtility = 10;
+                reason = "Keine geeigneten Alliierten in Reichweite.";
+            }
+            break;
+
         case AgentState.IDLE:
-            baseUtility = (1.1 - K_ENERGY) * 40 + (1.1 - K_INTEGRITY) * 20 + 15;
+            baseUtility = (1.1 - K_ENERGY) * 60 + (1.1 - K_INTEGRITY) * 30 + 15;
             reason = "Erschöpfung der neuralen Pfade";
             break;
 
@@ -287,4 +329,11 @@ export const getBiomeForChunk = (x: number, z: number): string => {
     if (val < 0.35) return 'FOREST';
     if (val < 0.60) return 'MOUNTAIN';
     return 'PLAINS';
+};
+
+export const MONSTER_TEMPLATES: Record<string, { hp: number; maxHp: number; atk: number; def: number; speed: number }> = {
+    SLIME: { hp: 20, maxHp: 20, atk: 5, def: 2, speed: 2 },
+    GOBLIN: { hp: 40, maxHp: 40, atk: 8, def: 4, speed: 3 },
+    ORC: { hp: 80, maxHp: 80, atk: 15, def: 8, speed: 2.5 },
+    DRAGON: { hp: 500, maxHp: 500, atk: 50, def: 30, speed: 5 }
 };

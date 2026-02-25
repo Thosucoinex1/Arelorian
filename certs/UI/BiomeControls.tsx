@@ -1,4 +1,3 @@
-import React from 'react';
 import { useStore } from '../../store';
 import { Switch } from './Switch'; // Assuming a Switch component exists
 

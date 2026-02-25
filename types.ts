@@ -161,7 +161,14 @@ export interface Agent {
     languagePreference: 'EN' | 'DE' | 'MIXED';
     sociability?: number;
     aggression?: number;
+    curiosity?: number;
+    frugality?: number;
   };
+  relationships: Record<string, {
+    affinity: number; // -1 to 1
+    interactions: number;
+    lastInteractionType?: string;
+  }>;
   skills: Record<string, SkillEntry>;
   resources: Record<ResourceType, number>;
   inventory: (Item | null)[];
@@ -202,6 +209,7 @@ export interface Chunk {
   explorationLevel: number;
   logicString?: string;
   axiomaticData?: number[][];
+  logicField?: { vx: number, vz: number }[][]; // Physics-based logic field vectors
   stabilityIndex: number; // 0 to 1
   corruptionLevel: number; // 0 to 1
   cellType: 'SANCTUARY' | 'WILDERNESS' | 'ANOMALY';
@@ -320,6 +328,24 @@ export interface EmergenceSettings {
   axiomaticWorldGeneration: boolean;
   physicsBasedActivation: boolean;
   showAxiomaticOverlay: boolean;
+}
+
+export interface Guild {
+  id: string;
+  name: string;
+  leaderId: string;
+  memberIds: string[];
+  level: number;
+  exp: number;
+  description: string;
+  motto?: string;
+}
+
+export interface Party {
+  id: string;
+  leaderId: string;
+  memberIds: string[];
+  isSearching: boolean;
 }
 
 export interface StoreProduct {

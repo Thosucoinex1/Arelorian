@@ -1,7 +1,6 @@
 
-import React from 'react';
 import { useStore } from '../../store';
-import { Settings, Brain, Zap, Globe, Eye, ShieldAlert } from 'lucide-react';
+import { Brain, Settings, ShieldAlert, Globe, Eye, Zap } from 'lucide-react';
 
 export const EmergenceAdminMenu = () => {
     const showAdmin = useStore(state => state.showAdmin);

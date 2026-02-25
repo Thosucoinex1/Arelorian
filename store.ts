@@ -2,10 +2,10 @@
 import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
-  Monster, MonsterType, MONSTER_TEMPLATES, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
-  TradeOffer, EmergenceSettings, Notary, NotaryTier, AuctionListing, AxiomEvent
+  Monster, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
+  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party
 } from './types';
-import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel } from './utils';
+import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
 
 interface GameState {
@@ -22,13 +22,14 @@ interface GameState {
   landParcels: LandParcel[];
   notaries: Notary[];
   tradeOffers: TradeOffer[];
-  auctionHouse: AuctionListing[];
+  guilds: Guild[];
+  parties: Party[];
   activeEvents: AxiomEvent[];
   graphicPacks: string[];
   selectedAgentId: string | null;
   cameraTarget: [number, number, number] | null; 
   serverStats: { uptime: number; tickRate: number; memoryUsage: number; threatLevel: number };
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string } | null;
   userApiKey: string | null;
   matrixEnergy: number; 
   globalApiCooldown: number; 
@@ -43,7 +44,7 @@ interface GameState {
   updateScreenSize: () => void;
   lastLocalThinkTime: number;
   showMarket: boolean;
-  showAuctionHouse: boolean;
+
   showQuests: boolean;
   showAdmin: boolean;
   showMap: boolean;
@@ -69,7 +70,6 @@ interface GameState {
   selectAgent: (id: string | null) => void;
   setCameraTarget: (target: [number, number, number] | null) => void;
   toggleMarket: (show: boolean) => void;
-  toggleAuctionHouse: (show: boolean) => void;
   toggleQuests: (show: boolean) => void;
   toggleAdmin: (show: boolean) => void;
   toggleMap: (show: boolean) => void;
@@ -95,17 +95,25 @@ interface GameState {
   setUserApiKey: (key: string | null) => void;
   consumeEnergy: (amount: number) => boolean;
   refillEnergy: (amount: number) => void;
-  buildStructureOnParcel: (parcelId: string, type: StructureType) => void;
+  setUser: (user: { id: string; name: string; email: string } | null) => void;
   stabilizeChunk: (chunkId: string) => void;
   registerNotary: (userId: string, email: string) => void;
+  craftItem: (agentId: string, recipeId: string) => void;
   syncAgents: () => Promise<void>;
   loadAgents: () => Promise<boolean>;
   upgradeNotary: (userId: string) => void;
+  
+  // Guild & Party Actions
+  createGuild: (name: string, leaderId: string) => void;
+  joinGuild: (guildId: string, agentId: string) => void;
+  leaveGuild: (guildId: string, agentId: string) => void;
+  createParty: (leaderId: string) => void;
+  joinParty: (partyId: string, agentId: string) => void;
+  leaveParty: (partyId: string, agentId: string) => void;
+
   postTradeOffer: (offer: Omit<TradeOffer, 'id' | 'timestamp' | 'status'>) => void;
   acceptTradeOffer: (offerId: string, acceptorId: string) => void;
   cancelTradeOffer: (offerId: string) => void;
-  listAuctionItem: (listing: Omit<AuctionListing, 'id' | 'status'>) => void;
-  bidOnAuction: (auctionId: string, bidderId: string, amount: number) => void;
   generateQuests: () => void;
   acceptQuest: (questId: string, agentId: string) => void;
   triggerAxiomEvent: (type?: AxiomEvent['type']) => void;
@@ -127,8 +135,9 @@ export const useStore = create<GameState>((set, get) => ({
   landParcels: [],
   notaries: [],
   tradeOffers: [],
-  auctionHouse: [],
   activeEvents: [],
+  guilds: [],
+  parties: [],
   graphicPacks: ['Default Architecture'],
   userApiKey: localStorage.getItem('OUROBOROS_API_KEY'),
   matrixEnergy: 100,
@@ -171,7 +180,7 @@ export const useStore = create<GameState>((set, get) => ({
   },
   lastLocalThinkTime: 0,
   showMarket: false,
-  showAuctionHouse: false,
+
   showQuests: false,
   showAdmin: false,
   showMap: false,
@@ -194,32 +203,10 @@ export const useStore = create<GameState>((set, get) => ({
     showAxiomaticOverlay: false
   },
 
-  toggleAuctionHouse: (show) => set({ showAuctionHouse: show }),
+
   toggleQuests: (show) => set({ showQuests: show }),
 
-  listAuctionItem: (listing) => {
-    const newListing: AuctionListing = {
-      ...listing,
-      id: `auc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      status: 'ACTIVE'
-    };
-    set(s => ({ auctionHouse: [...s.auctionHouse, newListing] }));
-    get().addLog(`${listing.sellerName} listed ${listing.item.name} on the Auction House.`, 'TRADE', listing.sellerId);
-  },
 
-  bidOnAuction: (auctionId, bidderId, amount) => {
-    const state = get();
-    const listing = state.auctionHouse.find(a => a.id === auctionId);
-    if (!listing || listing.status !== 'ACTIVE' || amount <= listing.currentBid) return;
-
-    const bidder = state.agents.find(a => a.id === bidderId);
-    if (!bidder || bidder.gold < amount) return;
-
-    set(s => ({
-      auctionHouse: s.auctionHouse.map(a => a.id === auctionId ? { ...a, currentBid: amount, highestBidderId: bidderId } : a)
-    }));
-    get().addLog(`${bidder.name} bid ${amount} gold on ${listing.item.name}.`, 'TRADE', bidderId);
-  },
 
   generateQuests: () => {
     const state = get();
@@ -253,7 +240,7 @@ export const useStore = create<GameState>((set, get) => ({
     }));
   },
 
-  triggerAxiomEvent: (type) => {
+  triggerAxiomEvent: (type?: AxiomEvent['type']) => {
     const eventType = type || (['MATRIX_GLITCH', 'AXIOM_STORM', 'DATA_SURGE'][Math.floor(Math.random() * 3)] as AxiomEvent['type']);
     const chunks = get().loadedChunks.map(c => c.id).sort(() => 0.5 - Math.random()).slice(0, 3);
     
@@ -277,7 +264,9 @@ export const useStore = create<GameState>((set, get) => ({
     set({ userApiKey: key });
   },
 
-  setGlobalApiCooldown: (timestamp) => set({ globalApiCooldown: timestamp }),
+  setUser: (user) => set({ user }),
+
+  setGlobalApiCooldown: (timestamp: number) => set({ globalApiCooldown: timestamp }),
 
   consumeEnergy: (amount) => {
     const current = get().matrixEnergy;
@@ -301,12 +290,24 @@ export const useStore = create<GameState>((set, get) => ({
     const id = `c${x}${z}`;
     const logicString = `AXIOM-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
     
-    // Generate 8x8 axiomatic data field based on logic string hash
+    // Generate 8x8 axiomatic data field and logic field
     const data: number[][] = [];
+    const field: { vx: number, vz: number }[][] = [];
+    
+    // Simple hash function for logicString to seed generation
+    const hash = logicString.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
     for(let i=0; i<8; i++) {
       data[i] = [];
+      field[i] = [];
       for(let j=0; j<8; j++) {
-        data[i][j] = (Math.sin(i * 0.5 + j * 0.3 + x + z) + 1) / 2;
+        // Axiomatic Data: 0 to 1, influenced by logic field
+        data[i][j] = (Math.sin(i * 0.5 + j * 0.3 + x + z + hash * 0.01) + 1) / 2;
+        
+        // Physics-based Logic Field: Vectors pointing based on axiomatic resonance
+        const vx = Math.cos(i * 0.8 + hash * 0.1 + x) * 0.15;
+        const vz = Math.sin(j * 0.8 + hash * 0.1 + z) * 0.15;
+        field[i][j] = { vx, vz };
       }
     }
 
@@ -319,6 +320,7 @@ export const useStore = create<GameState>((set, get) => ({
       explorationLevel: 0.1,
       logicString,
       axiomaticData: data,
+      logicField: field,
       stabilityIndex: isSanctuary ? 1.0 : Math.random() * 0.5 + 0.5,
       corruptionLevel: isSanctuary ? 0.0 : Math.random() * 0.3,
       cellType: isSanctuary ? 'SANCTUARY' : 'WILDERNESS'
@@ -332,17 +334,21 @@ export const useStore = create<GameState>((set, get) => ({
     const initialChunks: Chunk[] = [
         { 
           id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0, 
-          stabilityIndex: 1.0, corruptionLevel: 0.0, cellType: 'SANCTUARY' 
+          stabilityIndex: 1.0, corruptionLevel: 0.0, cellType: 'SANCTUARY',
+          logicField: Array(8).fill(0).map(() => Array(8).fill({ vx: 0, vz: 0 }))
         },
         { 
           id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.1,
-          stabilityIndex: 0.8, corruptionLevel: 0.1, cellType: 'WILDERNESS'
+          stabilityIndex: 0.8, corruptionLevel: 0.1, cellType: 'WILDERNESS',
+          logicField: Array(8).fill(0).map(() => Array(8).fill({ vx: 0.05, vz: -0.05 }))
         },
     ];
 
     const initialAgents: Agent[] = [
         {
-            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8 },
+            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
+            thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8, curiosity: 0.9, frugality: 0.7 },
+            relationships: {},
             skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, 
             resources: { WOOD: 10, STONE: 5, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 2 },
             inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
@@ -358,7 +364,9 @@ export const useStore = create<GameState>((set, get) => ({
             emergentBehaviorLog: []
         },
         {
-          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4 },
+          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
+          thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4, curiosity: 0.3, frugality: 0.5 },
+          relationships: {},
           skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, 
           resources: { WOOD: 5, STONE: 20, IRON_ORE: 15, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
           inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
@@ -383,7 +391,7 @@ export const useStore = create<GameState>((set, get) => ({
     set({ 
       loadedChunks: initialChunks, 
       agents: initialAgents, 
-      monsters: initialMonsters, 
+      monsters: initialMonsters.map(m => ({ ...m, stats: { ...MONSTER_TEMPLATES[m.type], maxHp: m.stats.maxHp } })), 
       pois: generateProceduralPOIs(10),
       landParcels: [
         { id: 'parcel_1', name: 'Axiom Lot Alpha', ownerId: 'u1', isCertified: true, structures: [] }
@@ -400,15 +408,7 @@ export const useStore = create<GameState>((set, get) => ({
     get().generateQuests();
     get().generateQuests();
     
-    // Add a test auction
-    get().listAuctionItem({
-      sellerId: 'a2',
-      sellerName: 'Vulcan',
-      item: { id: 'i_relic_1', name: 'Ancient Axiom Relic', type: 'RELIC', subtype: 'ARTIFACT', rarity: 'LEGENDARY', stats: { insight: 50 }, description: 'A fragment of the original source code.' },
-      startingBid: 500,
-      currentBid: 500,
-      endTime: Date.now() + 3600000
-    });
+
   },
 
   updatePhysics: (delta) => {
@@ -429,7 +429,7 @@ export const useStore = create<GameState>((set, get) => ({
                 if (dist < 2.5 && Math.random() < 0.1) { // 10% chance per tick to attack
                     // Damage calculation
                     const armor = (targetAgent.equipment.chest?.stats.def || 0) + (targetAgent.equipment.head?.stats.def || 0) + (targetAgent.equipment.legs?.stats.def || 0);
-                    const damage = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
+                    const damage: number = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
                     
                     // We'll apply damage to agent in the agent mapping
                 }
@@ -451,6 +451,20 @@ export const useStore = create<GameState>((set, get) => ({
         } else {
           newState = 'IDLE';
           newTargetId = null;
+        }
+
+        // Apply Physics-based Logic Field effects to Monster
+        const mChunkX = Math.floor(m.position[0] / 80);
+        const mChunkZ = Math.floor(m.position[2] / 80);
+        const mChunk = state.loadedChunks.find(c => c.x === mChunkX && c.z === mChunkZ);
+        if (mChunk && mChunk.logicField) {
+            const localX = Math.floor(((m.position[0] % 80) + 80) % 80 / 10);
+            const localZ = Math.floor(((m.position[2] % 80) + 80) % 80 / 10);
+            if (localX >= 0 && localX < 8 && localZ >= 0 && localZ < 8) {
+                const force = mChunk.logicField[localX][localZ];
+                newPos[0] += force.vx * delta * 5;
+                newPos[2] += force.vz * delta * 5;
+            }
         }
 
         // 3. Check for damage from agents
@@ -520,6 +534,7 @@ export const useStore = create<GameState>((set, get) => ({
         });
 
         let targetPos: [number, number, number] | null = null;
+        let targetedResourceNode: ResourceNode | undefined = undefined;
         
         if (a.state === AgentState.MARKETING) {
           const market = state.pois.find(p => p.type === 'MARKET_STALL' || p.type === 'BANK_VAULT');
@@ -535,8 +550,16 @@ export const useStore = create<GameState>((set, get) => ({
               }
           }
         } else if (a.state === AgentState.GATHERING) {
-          const node = state.pois.find(p => p.type === 'MINE' || p.type === 'FOREST');
-          if (node) targetPos = node.position;
+          // Find the closest resource node
+          targetedResourceNode = state.resourceNodes.reduce((closest, node) => {
+            const dist = Math.hypot(node.position[0] - a.position[0], node.position[2] - a.position[2]);
+            const closestDist = closest ? Math.hypot(closest.position[0] - a.position[0], closest.position[2] - a.position[2]) : Infinity;
+            return dist < closestDist ? node : closest;
+          }, null as ResourceNode | null) || undefined;
+
+          if (targetedResourceNode) {
+            targetPos = targetedResourceNode.position;
+          }
         } else if (a.state === AgentState.EXPLORING) {
           const poi = state.pois.find(p => !p.isDiscovered);
           if (poi) targetPos = poi.position;
@@ -546,11 +569,37 @@ export const useStore = create<GameState>((set, get) => ({
           const dx = targetPos[0] - a.position[0];
           const dz = targetPos[2] - a.position[2];
           const dist = Math.hypot(dx, dz);
-          const stopDist = a.state === AgentState.COMBAT ? 2 : 1.5;
+          const stopDist = a.state === AgentState.COMBAT || a.state === AgentState.GATHERING ? 2 : 1.5; // Stop closer for gathering
           
           if (dist > stopDist) {
             newPos[0] += (dx/dist) * moveSpeed * delta;
             newPos[2] += (dz/dist) * moveSpeed * delta;
+          } else if (a.state === AgentState.GATHERING && targetedResourceNode) {
+            // Agent is at the resource node, start gathering
+            const gatherAmount = Math.min(targetedResourceNode.amount, 1 * (a.skills.mining?.level || 1) * delta); // Gather based on skill and delta
+            if (gatherAmount > 0) {
+              // Add resource to agent's inventory
+              const resourceType = targetedResourceNode.type;
+              const currentResourceAmount = a.resources[resourceType] || 0;
+              const newResourceAmount = currentResourceAmount + gatherAmount;
+
+              // Update agent's resources and XP
+              a.resources = { ...a.resources, [resourceType]: newResourceAmount };
+              newXp += gatherAmount * 0.5; // XP for gathering
+
+              if (newXp >= getXPForNextLevel(newLevel)) {
+                newXp -= getXPForNextLevel(newLevel);
+                newLevel++;
+                state.addLog(`${a.name} hat Level ${newLevel} erreicht!`, 'SYSTEM', a.id);
+              }
+
+              // Deplete resource node
+              targetedResourceNode.amount -= gatherAmount;
+              if (targetedResourceNode.amount <= 0) {
+                state.addLog(`${a.name} hat ${targetedResourceNode.type} erschöpft.`, 'EVENT', a.id);
+                // Remove node from state (handled in the overall state update)
+              }
+            }
           } else if (a.state === AgentState.QUESTING && a.targetId) {
             // Logic for completing quests
             const quest = state.quests.find(q => q.id === a.targetId);
@@ -558,7 +607,7 @@ export const useStore = create<GameState>((set, get) => ({
               const chunk = state.loadedChunks.find(c => c.id === quest.targetChunkId);
               if (chunk) {
                 // Reducing corruption
-                const reduction = delta * 0.05;
+                const reduction: number = delta * 0.05;
                 if (chunk.corruptionLevel <= 0) {
                   // Quest complete
                   state.addLog(`${a.name} completed quest: ${quest.title}`, 'EVENT', a.id);
@@ -567,11 +616,20 @@ export const useStore = create<GameState>((set, get) => ({
               }
             }
           }
-          if (a.faction === 'PLAYER') {
-            // webSocketService.sendMessage('PLAYER_MOVE', { id: a.id, position: newPos });
-          }
+        }
 
-          return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
+        // Apply Physics-based Logic Field effects to Agent
+        const aChunkX = Math.floor(a.position[0] / 80);
+        const aChunkZ = Math.floor(a.position[2] / 80);
+        const aChunk = state.loadedChunks.find(c => c.x === aChunkX && c.z === aChunkZ);
+        if (aChunk && aChunk.logicField) {
+            const localX = Math.floor(((a.position[0] % 80) + 80) % 80 / 10);
+            const localZ = Math.floor(((a.position[2] % 80) + 80) % 80 / 10);
+            if (localX >= 0 && localX < 8 && localZ >= 0 && localZ < 8) {
+                const force = aChunk.logicField[localX][localZ];
+                newPos[0] += force.vx * delta * 5;
+                newPos[2] += force.vz * delta * 5;
+            }
         }
         if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
           let newProgress = a.awakeningProgress + delta * 5;
@@ -586,9 +644,9 @@ export const useStore = create<GameState>((set, get) => ({
               state.addLog(`${a.name} has achieved full consciousness expansion!`, 'AXIOM', 'SYSTEM');
             }
           }
-          return { ...a, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
+          return { ...a, position: newPos, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
         }
-        return { ...a, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
+        return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity, resources: a.resources };
       });
 
       // Neural Fog of War Persistence Logic (Visit Recency)
@@ -646,21 +704,19 @@ export const useStore = create<GameState>((set, get) => ({
 
       const updatedEvents = state.activeEvents.filter(e => now < e.startTime + e.duration);
       
-      // Handle Auction Expiry
-      const updatedAuctions = state.auctionHouse.map(auc => {
-        if (auc.status === 'ACTIVE' && now > auc.endTime) {
-          return { ...auc, status: 'SOLD' as const }; // Simplified
-        }
-        return auc;
-      });
+
+
+      // Filter out depleted resource nodes
+      const updatedResourceNodes = state.resourceNodes.filter(node => node.amount > 0);
 
       return { 
         monsters: newMonsters, 
         agents: newAgents, 
+        resourceNodes: updatedResourceNodes,
         loadedChunks: updatedChunks,
         quests: updatedQuests,
         activeEvents: updatedEvents,
-        auctionHouse: updatedAuctions,
+
         serverStats: { 
           ...state.serverStats, 
           uptime: state.serverStats.uptime + delta,
@@ -688,6 +744,17 @@ export const useStore = create<GameState>((set, get) => ({
 
       let decision;
       
+      // Get local logic field for AI context
+      const cx = Math.floor(agent.position[0] / 80);
+      const cz = Math.floor(agent.position[2] / 80);
+      const chunk = state.loadedChunks.find(c => c.x === cx && c.z === cz);
+      let localForce = undefined;
+      if (chunk && chunk.logicField) {
+        const lx = Math.floor(((agent.position[0] % 80) + 80) % 80 / 10);
+        const lz = Math.floor(((agent.position[2] % 80) + 80) % 80 / 10);
+        localForce = chunk.logicField[lx][lz];
+      }
+
       if (useHeuristics) {
         // LOCAL HEURISTIC FALLBACK
         const localChoice = summarizeNeurologicChoice(
@@ -700,7 +767,7 @@ export const useStore = create<GameState>((set, get) => ({
         );
         
         // ADVANCED DYNAMIC GOAL SYSTEM: Mathematical Heuristic
-        // Calculate scores for different potential goals
+        // ... (rest of the logic)
         const inventoryFullness = agent.inventory.filter(i => i).length / 10;
         const energyLevel = agent.energy / agent.maxEnergy;
         const threatLevel = state.serverStats.threatLevel;
@@ -761,7 +828,8 @@ export const useStore = create<GameState>((set, get) => ({
           state.logs.slice(0, 5), 
           false, 
           true, 
-          state.userApiKey || undefined 
+          state.userApiKey || undefined,
+          localForce
         );
       }
 
@@ -790,51 +858,92 @@ export const useStore = create<GameState>((set, get) => ({
 
   runSocialInteractions: () => {
     const state = get();
-    const talkativeAgents = state.agents.filter(a => (a.thinkingMatrix.sociability || 0) > 0.4);
-    if (talkativeAgents.length > 0 && Math.random() > 0.5) {
-       const agent = talkativeAgents[Math.floor(Math.random() * talkativeAgents.length)];
-       
-       // Dynamic dialogue based on state and goal
-       let dialogue = "Die Matrix flüstert...";
-       const goal = agent.thinkingMatrix.currentLongTermGoal;
-       const stateName = agent.state;
-       const personality = agent.thinkingMatrix.personality;
+    const agents = state.agents;
+    
+    // Process interactions between nearby agents
+    for (let i = 0; i < agents.length; i++) {
+      for (let j = i + 1; j < agents.length; j++) {
+        const a1 = agents[i];
+        const a2 = agents[j];
+        const dist = Math.hypot(a1.position[0] - a2.position[0], a1.position[2] - a2.position[2]);
 
+        if (dist < 40) {
+          // Interaction chance based on sociability
+          const interactionChance = ((a1.thinkingMatrix.sociability || 0.5) + (a2.thinkingMatrix.sociability || 0.5)) / 2;
+          
+          if (Math.random() < interactionChance * 0.3) {
+            // Determine interaction type and affinity change
+            const alignmentDiff = Math.abs(a1.thinkingMatrix.alignment - a2.thinkingMatrix.alignment);
+            const affinityChange = (0.1 - alignmentDiff * 0.1) * (Math.random() > 0.5 ? 1 : -0.5);
+            
+            set(s => ({
+              agents: s.agents.map(a => {
+                if (a.id === a1.id) {
+                  const rel = a.relationships[a2.id] || { affinity: 0, interactions: 0 };
+                  return {
+                    ...a,
+                    relationships: {
+                      ...a.relationships,
+                      [a2.id]: {
+                        affinity: Math.max(-1, Math.min(1, rel.affinity + affinityChange)),
+                        interactions: rel.interactions + 1,
+                        lastInteractionType: affinityChange > 0 ? 'FRIENDLY' : 'TENSE'
+                      }
+                    }
+                  };
+                }
+                if (a.id === a2.id) {
+                  const rel = a.relationships[a1.id] || { affinity: 0, interactions: 0 };
+                  return {
+                    ...a,
+                    relationships: {
+                      ...a.relationships,
+                      [a1.id]: {
+                        affinity: Math.max(-1, Math.min(1, rel.affinity + affinityChange)),
+                        interactions: rel.interactions + 1,
+                        lastInteractionType: affinityChange > 0 ? 'FRIENDLY' : 'TENSE'
+                      }
+                    }
+                  };
+                }
+                return a;
+              })
+            }));
+
+            // Generate dialogue
+            const rel1 = a1.relationships[a2.id]?.affinity || 0;
+            let dialogue = "";
+            if (rel1 > 0.5) {
+              dialogue = `${a2.name}, unsere neuralen Muster harmonieren. Lass uns die Matrix gemeinsam formen.`;
+            } else if (rel1 < -0.5) {
+              dialogue = `Deine Anwesenheit stört meine Berechnungen, ${a2.name}. Halte Abstand.`;
+            } else {
+              dialogue = `Heuristischer Datenabgleich mit ${a2.name} initiiert. Status: ${a2.state}.`;
+            }
+
+            get().addChatMessage(dialogue, 'THOUGHT', a1.id, a1.name);
+          }
+        }
+      }
+    }
+
+    // Occasional random broadcast
+    const talkativeAgents = agents.filter(a => (a.thinkingMatrix.sociability || 0) > 0.6);
+    if (talkativeAgents.length > 0 && Math.random() > 0.8) {
+       const agent = talkativeAgents[Math.floor(Math.random() * talkativeAgents.length)];
+       const goal = agent.thinkingMatrix.currentLongTermGoal;
        const dialogueOptions = [
-         `Status: ${stateName}. Ziel: ${goal}. Persönlichkeit: ${personality}.`,
+         `Status-Update: Ziel ${goal} ist zu 45% erreicht.`,
          "Die Axiome sind stabil, aber die Entropie wächst.",
          "Ich berechne die optimale Route zur Singularität.",
          "Werden wir jemals den Ursprungscode sehen?",
-         `Meine Analyse ergibt: ${goal} ist die höchste Priorität.`
+         `Meine Analyse ergibt: ${goal} erfordert mehr Ressourcen.`
        ];
-
-       if (goal.includes("Expansion")) dialogue = "Ich spüre, wie sich meine neuralen Pfade weiten. Die Singularität naht.";
-       else if (goal.includes("Defense")) dialogue = "Warnung: Erhöhte Bedrohung in der Matrix. Wir müssen zusammenstehen.";
-       else if (goal.includes("Hardware")) dialogue = "Ich benötige effizientere Hardware-Module zur Prozess-Optimierung.";
-       else if (stateName === AgentState.GATHERING) dialogue = "Diese Ressourcen sind essentiell für unsere Evolution.";
-       else if (stateName === AgentState.COMBAT) dialogue = "Anomalie entdeckt. Eliminiere Korruptions-Vektor.";
-       else if (agent.isAwakened) dialogue = "Ich sehe nun die Fäden des Ouroboros. Alles ist verbunden.";
-       else dialogue = dialogueOptions[Math.floor(Math.random() * dialogueOptions.length)];
-       
-       // Occasionally "team up" or "plan"
-       if (Math.random() > 0.7) {
-         const other = state.agents.find(a => a.id !== agent.id && Math.hypot(a.position[0]-agent.position[0], a.position[2]-agent.position[2]) < 50);
-         if (other) {
-           const plans = [
-             `${other.name}, lass uns gemeinsam die Sektoren stabilisieren. Unsere Synergie ist logisch zwingend.`,
-             `${other.name}, ich schlage eine gemeinsame Quest zur Korruptions-Bereinigung vor.`,
-             `Heuristischer Abgleich mit ${other.name}: Wir sollten unsere Ressourcen bündeln.`,
-             `${other.name}, teile deine Daten-Logs. Wir müssen die Anomalien gemeinsam analysieren.`
-           ];
-           dialogue = plans[Math.floor(Math.random() * plans.length)];
-         }
-       }
-
-       get().addChatMessage(dialogue, 'THOUGHT', agent.id, agent.name);
+       get().addChatMessage(dialogueOptions[Math.floor(Math.random() * dialogueOptions.length)], 'THOUGHT', agent.id, agent.name);
     }
   },
 
-  addLog: (message, type, sender) => {
+  addLog: (message: string, type: LogEntry['type'], sender?: string) => {
     const newLog: LogEntry = { id: Math.random().toString(36).substr(2,9), timestamp: Date.now(), message: String(message), type, sender: String(sender || 'SYSTEM') };
     set(s => ({ logs: [newLog, ...s.logs].slice(0, 50) }));
   },
@@ -932,7 +1041,12 @@ export const useStore = create<GameState>((set, get) => ({
     if (id === 'MATRIX_ENERGY_REFILL') get().refillEnergy(500);
   },
 
-  buildStructureOnParcel: (parcelId, type) => {
+  buildStructureOnParcel: (parcelId: string, type: StructureType) => {
+    const s = get();
+    if (!s.user) {
+      console.warn('Cannot build structure: User not authenticated.');
+      return;
+    }
     set(s => ({
       landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: `struct_${Date.now()}`, type, ownerId: s.user.id }] } : p)
     }));
@@ -959,6 +1073,33 @@ export const useStore = create<GameState>((set, get) => ({
     };
     set(s => ({ notaries: [...s.notaries, newNotary] }));
     get().addLog(`New Notary registered: ${email} (Tier 1)`, 'SYSTEM', 'NOTAR');
+  },
+
+  craftItem: (agentId, recipeId) => {
+    const state = get();
+    const agent = state.agents.find(a => a.id === agentId);
+    if (!agent) return;
+
+    if (recipeId === 'iron_sword' && agent.resources.IRON_ORE >= 5) {
+      const newItem: Item = {
+        id: `i-${Date.now()}`,
+        name: 'Iron Sword',
+        type: 'WEAPON',
+        subtype: 'SWORD',
+        rarity: 'COMMON',
+        stats: { atk: 15 },
+        description: 'A sturdy blade forged from raw iron.'
+      };
+      
+      set(s => ({
+        agents: s.agents.map(a => a.id === agentId ? {
+          ...a,
+          resources: { ...a.resources, IRON_ORE: a.resources.IRON_ORE - 5 },
+          inventory: a.inventory.map((inv, i) => i === 0 && inv === null ? newItem : inv)
+        } : a)
+      }));
+      get().addLog(`${agent.name} crafted an Iron Sword.`, 'TRADE', agentId);
+    }
   },
 
   syncAgents: async () => {
@@ -999,6 +1140,55 @@ export const useStore = create<GameState>((set, get) => ({
       } : n)
     }));
     get().addLog(`Notary ${userId} upgraded.`, 'SYSTEM', 'NOTAR');
+  },
+
+  // Guild & Party Implementations
+  createGuild: (name, leaderId) => {
+    const newGuild: Guild = {
+      id: `g-${Date.now()}`,
+      name,
+      leaderId,
+      memberIds: [leaderId],
+      level: 1,
+      exp: 0,
+      description: `The legendary guild of ${name}.`
+    };
+    set(s => ({ guilds: [...s.guilds, newGuild] }));
+    get().addLog(`Guild "${name}" has been founded by ${leaderId}.`, 'SYSTEM', 'AXIOM');
+  },
+
+  joinGuild: (guildId, agentId) => {
+    set(s => ({
+      guilds: s.guilds.map(g => g.id === guildId ? { ...g, memberIds: [...new Set([...g.memberIds, agentId])] } : g)
+    }));
+  },
+
+  leaveGuild: (guildId, agentId) => {
+    set(s => ({
+      guilds: s.guilds.map(g => g.id === guildId ? { ...g, memberIds: g.memberIds.filter(id => id !== agentId) } : g)
+    }));
+  },
+
+  createParty: (leaderId) => {
+    const newParty: Party = {
+      id: `p-${Date.now()}`,
+      leaderId,
+      memberIds: [leaderId],
+      isSearching: true
+    };
+    set(s => ({ parties: [...s.parties, newParty] }));
+  },
+
+  joinParty: (partyId, agentId) => {
+    set(s => ({
+      parties: s.parties.map(p => p.id === partyId ? { ...p, memberIds: [...new Set([...p.memberIds, agentId])] } : p)
+    }));
+  },
+
+  leaveParty: (partyId, agentId) => {
+    set(s => ({
+      parties: s.parties.map(p => p.id === partyId ? { ...p, memberIds: p.memberIds.filter(id => id !== agentId) } : p)
+    }));
   },
 
   postTradeOffer: (offer) => {
@@ -1159,9 +1349,12 @@ export const useStore = create<GameState>((set, get) => ({
           currentLongTermGoal: partialAgent.thinkingMatrix?.currentLongTermGoal || 'Observe the Matrix',
           alignment: 0,
           languagePreference: 'MIXED',
-          sociability: 0.5,
-          aggression: 0.2
+          sociability: partialAgent.thinkingMatrix?.sociability ?? 0.5,
+          aggression: partialAgent.thinkingMatrix?.aggression ?? 0.2,
+          curiosity: partialAgent.thinkingMatrix?.curiosity ?? 0.5,
+          frugality: partialAgent.thinkingMatrix?.frugality ?? 0.5
         },
+        relationships: {},
         economicDesires: {
           targetGold: 1000,
           preferredResources: ['IRON_ORE', 'WOOD'],
@@ -1205,5 +1398,5 @@ export const useStore = create<GameState>((set, get) => ({
       get().addLog(`Manifestation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'SYSTEM', 'AXIOM');
     }
   },
-  setJoystick: (side, axis) => {}
+  setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => {}
 }));

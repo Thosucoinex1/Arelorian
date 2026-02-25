@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
 import { Send } from 'lucide-react';
-import { ChatMessage, ChatChannel } from '../../types';
+import { ChatChannel } from '../../types';
 
 const getChannelColor = (channel: ChatChannel) => {
   switch (channel) {

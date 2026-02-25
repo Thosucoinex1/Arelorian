@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { useStore } from '../../store';
 import { X, ScrollText, MapPin, ShieldAlert, Zap, CheckCircle2 } from 'lucide-react';
 

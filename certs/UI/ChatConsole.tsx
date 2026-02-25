@@ -1,13 +1,12 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
-import { ChatChannel, ChatMessage } from '../../types';
-import { Brain, MessageSquare, Shield, Zap, Info, Globe, ChevronUp, ChevronDown, Sparkles, Languages } from 'lucide-react';
+import { ChatChannel } from '../../types';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 export const ChatConsole = () => {
     const messages = useStore(state => state.chatMessages);
-    const agents = useStore(state => state.agents);
-    const { isMobile, orientation, height: screenHeight } = useStore(state => state.device);
+    const { isMobile, orientation } = useStore(state => state.device);
     const [activeTab, setActiveTab] = useState<ChatChannel | 'ALL' | 'THOUGHT'>('ALL');
     const [isExpanded, setIsExpanded] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -40,7 +39,6 @@ export const ChatConsole = () => {
                 <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
                     {filteredMessages.map((msg) => {
                         const isCognition = msg.channel === 'THOUGHT';
-                        const agent = agents.find(a => a.id === msg.senderId);
                         return (
                             <div key={msg.id} className={`flex flex-col p-2 rounded-xl border ${isCognition ? 'bg-axiom-cyan/5 border-axiom-cyan/20' : 'bg-white/5 border-transparent'}`}>
                                 <div className="flex items-center gap-2 mb-1">

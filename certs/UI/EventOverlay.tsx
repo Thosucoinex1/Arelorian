@@ -1,7 +1,6 @@
 
-import React from 'react';
 import { useStore } from '../../store';
-import { AlertTriangle, Zap, Activity, Info } from 'lucide-react';
+import { AlertTriangle, Zap, Activity } from 'lucide-react';
 
 export const EventOverlay = () => {
   const activeEvents = useStore(state => state.activeEvents);

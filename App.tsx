@@ -1,40 +1,27 @@
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { 
-  ShieldCheck, 
-  Key, 
-  Send,
-  Terminal,
-  BrainCircuit,
-  Activity,
-  Infinity as InfinityIcon,
-  Lock,
-  AlertTriangle
-} from 'lucide-react';
+/// <reference types="vite/client" />
+
+import { useEffect, useState } from 'react';
+import { ShieldCheck, Key, BrainCircuit, Lock, AlertTriangle } from 'lucide-react';
 import { useStore } from './store';
 import { webSocketService } from './services/webSocketService';
-import { AXIOMS } from './types';
 
 // UI Component Imports
-import { EmergenceAdminMenu } from './components/UI/EmergenceAdminMenu';
-import { AxiomaticOverlay } from './components/UI/AxiomaticOverlay';
-import { BiomeControls } from './components/UI/BiomeControls';
-import { InspectorPanel } from './components/UI/InspectorPanel';
-import GameUI from './components/UI/GameUI';
-import { MainMenu } from './components/UI/MainMenu';
+import GameUI from './certs/UI/GameUI';
+import { MainMenu } from './certs/UI/MainMenu';
 import WorldScene from './components/World/WorldScene';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
 
-const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
+const AxiomHandshakeModal = ({ onClose, storeUser }: { onClose: () => void; storeUser: any }) => {
   const [keyInput, setKeyInput] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState(false);
   const setAxiomAuthenticated = useStore(state => state.setAxiomAuthenticated);
-  const user = useStore(state => state.user);
+  // const user = useStore(state => state.user); // Removed local user reference
 
-  if (user?.email !== ADMIN_EMAIL) return null;
+  if (storeUser?.email !== ADMIN_EMAIL) return null;
 
   const handleHandshake = () => {
     if (String(keyInput).trim() === UNIVERSAL_KEY) {
@@ -81,73 +68,6 @@ const AxiomHandshakeModal = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
-const NeuralTerminal = () => {
-  const logs = useStore(state => state.logs);
-  const storeUser = useStore(state => state.user);
-  const sendSignal = useStore(state => state.sendSignal);
-  const isAxiomAuthenticated = useStore(state => state.isAxiomAuthenticated);
-  const toggleDebugger = useStore(state => state.toggleDebugger);
-  const [input, setInput] = useState("");
-  const [showHandshake, setShowHandshake] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const user = useMemo(() => storeUser, [storeUser]);
-
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [logs]);
-  const isAdmin = user?.email === ADMIN_EMAIL;
-  const canSend = isAdmin && isAxiomAuthenticated;
-
-  return (
-    <>
-      {showHandshake && isAdmin && <AxiomHandshakeModal onClose={() => setShowHandshake(false)} />}
-      <div className="fixed bottom-8 left-8 w-[450px] pointer-events-auto font-sans z-50 hidden md:flex">
-        <div className="bg-[#050505]/95 border-2 border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col h-[550px] backdrop-blur-3xl">
-          <div className="bg-white/5 p-5 border-b border-white/5 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <Terminal className="w-5 h-5 text-axiom-cyan" />
-              <div className="flex flex-col">
-                <span className="text-[10px] font-black text-white uppercase tracking-widest">Axiom Neural Terminal</span>
-                <span className="text-[8px] text-axiom-cyan font-mono opacity-60">SYSTEM://RECURSIVE_DYNAMICS</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              {isAdmin && (
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => toggleDebugger(true)} 
-                    className="p-2 hover:bg-white/5 rounded-lg text-emerald-500 transition-all hover:scale-110"
-                    title="Deep Solving Debugger"
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setShowHandshake(true)} className={`transition-all transform hover:scale-110 active:scale-90 ${isAxiomAuthenticated ? 'text-green-400' : 'text-axiom-cyan'}`}><InfinityIcon className="w-5 h-5" /></button>
-                </div>
-              )}
-              <Activity className="w-5 h-5 text-axiom-gold animate-pulse" />
-            </div>
-          </div>
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-[radial-gradient(circle_at_bottom_left,_rgba(79,70,229,0.05)_0%,_transparent_50%)]">
-            {logs.map(log => (
-              <div key={log.id} className="animate-in fade-in slide-in-from-bottom-3 duration-500">
-                <div className="flex items-center gap-2 mb-1.5 opacity-60">
-                  <span className="text-[8px] font-mono text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-                  <span className={`text-[9px] font-black uppercase tracking-tighter ${log.sender === 'NOTAR' ? 'text-axiom-cyan' : 'text-axiom-gold'}`}>{String(log.sender || 'SYSTEM')}</span>
-                </div>
-                <div className={`text-[11px] p-4 rounded-3xl border transition-all ${log.sender === 'NOTAR' ? 'bg-axiom-cyan/5 text-cyan-50 border-axiom-cyan/10 hover:border-axiom-cyan/30' : 'bg-axiom-gold/5 text-axiom-gold border-axiom-gold/10 hover:border-axiom-gold/30'}`}>{String(log.message)}</div>
-              </div>
-            ))}
-          </div>
-          <div className="p-6 bg-black/40 border-t border-white/5 relative">
-            <div className="flex gap-3">
-              <input className={`flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs text-white focus:outline-none focus:border-axiom-cyan/40 transition-all ${!canSend ? 'opacity-40 cursor-not-allowed italic' : 'shadow-inner'}`} placeholder={canSend ? "Sende Impuls an Matrix..." : "Observer Mode: Neural Bridge Locked"} value={String(input)} disabled={!canSend} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && input && canSend && (sendSignal(input), setInput(""))} />
-              <button onClick={() => { if(input && canSend) { sendSignal(input); setInput(""); } }} disabled={!canSend} className={`p-4 rounded-2xl transition-all shadow-xl ${canSend ? 'bg-axiom-cyan hover:bg-white text-black shadow-cyan-900/30' : 'bg-gray-900 text-gray-700'}`}><Send className="w-5 h-5" /></button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
-
 const App = () => {
   const initGame = useStore(state => state.initGame);
   const runSocialInteractions = useStore(state => state.runSocialInteractions);
@@ -160,11 +80,12 @@ const App = () => {
   const toggleAdmin = useStore(state => state.toggleAdmin);
   const showAdmin = useStore(state => state.showAdmin);
   const setUserApiKey = useStore(state => state.setUserApiKey);
+  const setUser = useStore(state => state.setUser);
   const [showInitialHandshake, setShowInitialHandshake] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
-  const user = useMemo(() => storeUser, [storeUser]);
+  // const user = useMemo(() => storeUser, [storeUser]); // Removed local user state
 
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const isAdmin = storeUser?.email === ADMIN_EMAIL; // Use storeUser directly
 
   const updateScreenSize = useStore(state => state.updateScreenSize);
 
@@ -187,12 +108,17 @@ const App = () => {
     };
     checkApiKey();
 
+    // Set initial guest user if not authenticated
+    if (!storeUser) {
+      setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
-  }, [initGame, setUserApiKey, updateScreenSize]);
-  useEffect(() => { if (user?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [user?.email, isAxiomAuthenticated]);
+  }, [initGame, setUserApiKey, updateScreenSize, storeUser, setUser]);
+  useEffect(() => { if (storeUser?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [storeUser?.email, isAxiomAuthenticated]);
 
   // Global Error Listener for Deep Solving
   useEffect(() => {
@@ -247,7 +173,7 @@ const App = () => {
 
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative select-none font-sans">
-      {showInitialHandshake && user?.email === ADMIN_EMAIL && <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} />} 
+      {showInitialHandshake && storeUser?.email === ADMIN_EMAIL && <AxiomHandshakeModal onClose={() => setShowInitialHandshake(false)} storeUser={storeUser} />}
 
       {!hasApiKey && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-[100] p-6 font-sans backdrop-blur-3xl pointer-events-auto animate-in fade-in duration-700">

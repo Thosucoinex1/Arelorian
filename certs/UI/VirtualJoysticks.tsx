@@ -6,7 +6,7 @@ const DEAD_ZONE = 0.1;
 
 const Joystick = ({ side }: { side: 'left' | 'right' }) => {
     const setJoystick = useStore(state => state.setJoystick);
-    const { isMobile, isTablet } = useStore(state => state.device);
+    const { isTablet } = useStore(state => state.device);
     const touchId = useRef<number | null>(null);
     
     // Dynamic sizing based on device type

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
 import { Brain, History, Zap } from 'lucide-react';

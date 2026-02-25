@@ -1,8 +1,8 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
-import { Settings, Brain, Zap, Globe, Eye, ShieldAlert, Database, Activity } from 'lucide-react';
+import { Brain, Zap, Database } from 'lucide-react';
 
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
 
@@ -58,7 +58,7 @@ export const AdminDashboard = () => {
         try {
             const res = await fetch('/api/data');
             if (!res.ok) throw new Error('Network response was not ok');
-            const data = await res.json();
+            await res.json();
             setFetchDataMessage({ type: 'success', text: 'Data fetched successfully!' });
         } catch (err: any) {
             setFetchDataMessage({ type: 'error', text: err.message || 'Failed to fetch data' });

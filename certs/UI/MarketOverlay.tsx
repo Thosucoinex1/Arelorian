@@ -1,5 +1,4 @@
 
-import React from 'react';
 import { useStore } from '../../store';
 import { ResourceType } from '../../types';
 import { TrendingUp, ShoppingCart, Package, Hammer, ArrowRight, User } from 'lucide-react';

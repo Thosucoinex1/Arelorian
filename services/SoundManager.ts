@@ -1,7 +1,6 @@
 
 class SoundManager {
     private ctx: AudioContext | null = null;
-    private osc: OscillatorNode | null = null;
     private gain: GainNode | null = null;
 
     constructor() {

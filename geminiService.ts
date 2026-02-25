@@ -355,7 +355,14 @@ export const diagnoseProject = async (
       model: "gemini-3.1-pro-preview",
       contents: `Project Context: ${context}\n\nError Logs: ${errorLog || "None provided."}`,
       config: {
-        systemInstruction: `You are the Ouroboros Deep Debugger. Analyze the provided context and logs. \n        Identify architectural flaws, migration errors (especially Google Cloud, Firebase, and Gemini API migration issues), and logic bugs.\n        Focus on:\n        1. Missing environment variables (GEMINI_API_KEY).\n        2. Dependency mismatches (React 18, Zustand 5, Three.js).\n        3. Matrix corruption (logic errors in state management).\n        4. "Crushed" build artifacts from failed migrations.\n        Return a structured JSON diagnostic report.`,
+        systemInstruction: `You are the Ouroboros Deep Debugger. Analyze the provided context and logs. 
+        Identify architectural flaws, migration errors (especially Google Cloud, Firebase, and Gemini API migration issues), and logic bugs.
+        Focus on:
+        1. Missing environment variables (GEMINI_API_KEY).
+        2. Dependency mismatches (React 18, Zustand 5, Three.js).
+        3. Matrix corruption (logic errors in state management).
+        4. "Crushed" build artifacts from failed migrations.
+        Return a structured JSON diagnostic report.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useStore } from '../../store';
 import { X } from 'lucide-react';
 
@@ -19,7 +18,7 @@ export const InspectorPanel = () => {
   const pois = useStore(state => state.pois);
   const selectedPoi = pois.find(p => p.id === selectedPoiId);
 
-  const { isMobile, orientation, height: screenHeight } = useStore(state => state.device);
+  const { isMobile, orientation } = useStore(state => state.device);
   const isLandscapeMobile = isMobile && orientation === 'landscape';
 
   const handleClose = () => {

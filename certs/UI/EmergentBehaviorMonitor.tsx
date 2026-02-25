@@ -1,6 +1,4 @@
-import React from 'react';
 import { useStore } from '../../store';
-import { motion, AnimatePresence } from 'motion/react';
 import { Brain, Zap, History, TrendingUp, X, Activity } from 'lucide-react';
 
 export const EmergentBehaviorMonitor = () => {

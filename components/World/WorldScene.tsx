@@ -235,17 +235,25 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
 
 const AxiomaticDataField: React.FC<{ chunk: Chunk }> = ({ chunk }) => {
     const showOverlay = useStore(state => state.emergenceSettings.showAxiomaticOverlay);
-    if (!showOverlay || !chunk.axiomaticData) return null;
+    if (!showOverlay) return null;
 
     return (
         <group position={[chunk.x * 80, 2, chunk.z * 80]}>
-            {chunk.axiomaticData.map((row, i) => 
+            {chunk.axiomaticData?.map((row, i) => 
                 row.map((val, j) => val > 0.7 ? (
                     <mesh key={`${i}-${j}`} position={[i * 10 - 35, val * 2, j * 10 - 35]}>
                         <boxGeometry args={[0.2, 0.2, 0.2]} />
                         <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={2} transparent opacity={0.6} />
                     </mesh>
                 ) : null)
+            )}
+            {chunk.logicField?.map((row, i) => 
+                row.map((force, j) => (
+                    <mesh key={`force-${i}-${j}`} position={[i * 10 - 35, 0.1, j * 10 - 35]} rotation={[0, Math.atan2(force.vx, force.vz), 0]}>
+                        <boxGeometry args={[0.05, 0.05, 1.5]} />
+                        <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={0.5} transparent opacity={0.2} />
+                    </mesh>
+                ))
             )}
             {chunk.logicString && (
                 <Html position={[0, 10, 0]} center>

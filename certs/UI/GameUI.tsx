@@ -1,4 +1,3 @@
-import React from 'react';
 import { useStore } from '../../store';
 import { CharacterSheet } from './CharacterSheet';
 import { AdminDashboard } from './AdminDashboard';
@@ -9,6 +8,7 @@ import { EventOverlay } from './EventOverlay';
 import { MarketOverlay } from './MarketOverlay';
 import { InspectorPanel } from './InspectorPanel';
 import { ChatLog } from './ChatLog';
+import { GuildPartyOverlay } from './GuildPartyOverlay';
 
 const GameUI = () => {
   const showCharacterSheet = useStore(state => state.showCharacterSheet);
@@ -28,6 +28,7 @@ const GameUI = () => {
       {showQuests && <QuestBoardOverlay />}
       <EventOverlay />
       <InspectorPanel />
+      <GuildPartyOverlay />
       <ChatLog />
     </>
   );

@@ -1,11 +1,9 @@
 
-import React from 'react';
 import { useStore } from '../../store';
 
 export const AxiomaticOverlay = () => {
     const settings = useStore(state => state.emergenceSettings);
     const chunks = useStore(state => state.loadedChunks);
-    const agents = useStore(state => state.agents);
 
     if (!settings.showAxiomaticOverlay) return null;
 

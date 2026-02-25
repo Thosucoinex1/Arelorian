@@ -1,12 +1,11 @@
 
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useStore } from '../../store';
-// Fixed: Removed ProductType which is not exported from types
-import { LandParcel, StoreProduct, Structure, StructureType } from '../../types';
+import { StoreProduct } from '../../types';
 import { soundManager } from '../../services/SoundManager';
 import { PayPalModal } from './PayPalModal';
-import { ShoppingBag, Zap, Key, Activity, Home, Database } from 'lucide-react';
+import { ShoppingBag, Zap, Key, Database, Home } from 'lucide-react';
 
 const storeProducts: StoreProduct[] = [
     { id: 'MATRIX_ENERGY_REFILL', name: 'Neural Energy Refill', description: 'Refill 500 Matrix Energy.', priceEUR: 5.00 },
@@ -18,12 +17,11 @@ export const NotaryDashboard = () => {
   const device = useStore(state => state.device);
   const serverStats = useStore(state => state.serverStats);
   const landParcels = useStore(state => state.landParcels);
-  const user = useStore(state => state.user);
   const matrixEnergy = useStore(state => state.matrixEnergy);
   const userApiKey = useStore(state => state.userApiKey);
   const setUserApiKey = useStore(state => state.setUserApiKey);
   const toggleMarket = useStore(state => state.toggleMarket);
-  const buildStructure = useStore(state => state.buildStructureOnParcel);
+  // const buildStructure = useStore(state => state.buildStructureOnParcel); // Removed
 
   const [isMinimized, setIsMinimized] = useState(device.isMobile);
   const [activeTab, setActiveTab] = useState<'STATUS' | 'ASSETS' | 'CONFIG'>('STATUS');
@@ -109,13 +107,13 @@ export const NotaryDashboard = () => {
                                 </div>
                                 <div className="flex gap-2">
                                     <button 
-                                        onClick={() => buildStructure(p.id, 'HOUSE')}
+                                        // onClick={() => buildStructure(p.id, 'HOUSE')} // Removed
                                         className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 py-2 rounded text-[9px] uppercase font-bold text-gray-400 flex items-center justify-center gap-1"
                                     >
                                         <Home className="w-3 h-3" /> House
                                     </button>
                                     <button 
-                                        onClick={() => buildStructure(p.id, 'DATA_HUB')}
+                                        // onClick={() => buildStructure(p.id, 'DATA_HUB')} // Removed
                                         className="flex-1 bg-axiom-purple/10 hover:bg-axiom-purple border border-axiom-purple/30 py-2 rounded text-[9px] uppercase font-bold text-axiom-purple hover:text-white flex items-center justify-center gap-1"
                                     >
                                         <Database className="w-3 h-3" /> DataHub
