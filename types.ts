@@ -27,7 +27,7 @@ export enum AgentState {
   MARKETING = 'MARKETING'
 }
 
-export type POIType = 'MINE' | 'FOREST' | 'DUNGEON' | 'RUIN' | 'SHRINE' | 'NEST' | 'LORE_TRIGGER' | 'BANK_VAULT' | 'FORGE' | 'MARKET_STALL';
+export type POIType = 'MINE' | 'FOREST' | 'DUNGEON' | 'RUIN' | 'SHRINE' | 'NEST' | 'LORE_TRIGGER' | 'BANK_VAULT' | 'FORGE' | 'MARKET_STALL' | 'TREE' | 'BUILDING';
 
 export interface POI {
   id: string;

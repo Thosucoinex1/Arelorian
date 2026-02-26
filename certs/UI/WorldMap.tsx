@@ -6,6 +6,7 @@ export const WorldMap = () => {
     const toggleMap = useStore(state => state.toggleMap);
     const loadedChunks = useStore(state => state.loadedChunks);
     const agents = useStore(state => state.agents);
+    const showAxiomaticOverlay = useStore(state => state.emergenceSettings.showAxiomaticOverlay);
 
     if (!showMap) return null;
 
@@ -34,6 +35,27 @@ export const WorldMap = () => {
                         >
                             {chunk.biome === 'CITY' && (
                                 <div className="w-full h-full bg-axiom-purple/30 flex items-center justify-center text-[8px] text-white font-bold">SANCTUARY</div>
+                            )}
+                            
+                            {showAxiomaticOverlay && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <div className="text-[6px] text-axiom-cyan font-mono bg-black/60 px-1 mb-1">{chunk.logicString}</div>
+                                    <div className="grid grid-cols-4 gap-0.5 opacity-40">
+                                        {chunk.logicField?.slice(0, 4).map((row, i) => 
+                                            row.slice(0, 4).map((force, j) => {
+                                                const angle = Math.atan2(force.vz, force.vx) * (180 / Math.PI);
+                                                return (
+                                                    <div key={`mf-${i}-${j}`} className="w-1.5 h-1.5 flex items-center justify-center">
+                                                        <div 
+                                                            className="w-full h-[0.5px] bg-axiom-cyan origin-center"
+                                                            style={{ transform: `rotate(${angle}deg)` }}
+                                                        />
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
                             )}
                         </div>
                     ))}

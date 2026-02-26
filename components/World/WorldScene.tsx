@@ -84,6 +84,8 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
             case 'NEST': return '#ef4444';
             case 'DUNGEON': return '#4b5563';
             case 'MARKET_STALL': return '#f59e0b';
+            case 'TREE': return '#166534';
+            case 'BUILDING': return '#374151';
             default: return '#f59e0b';
         }
     };
@@ -94,6 +96,24 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
                 {poi.type === 'MARKET_STALL' && (
                     <mesh castShadow>
                         <boxGeometry args={[3, 1, 3]} />
+                        <meshStandardMaterial color={getPOIColor()} />
+                    </mesh>
+                )}
+                {poi.type === 'TREE' && (
+                    <group>
+                        <mesh position={[0, 1.5, 0]} castShadow>
+                            <cylinderGeometry args={[0.2, 0.4, 3]} />
+                            <meshStandardMaterial color="#422006" />
+                        </mesh>
+                        <mesh position={[0, 3.5, 0]} castShadow>
+                            <coneGeometry args={[1.5, 3, 8]} />
+                            <meshStandardMaterial color={getPOIColor()} />
+                        </mesh>
+                    </group>
+                )}
+                {poi.type === 'BUILDING' && (
+                    <mesh position={[0, 2.5, 0]} castShadow>
+                        <boxGeometry args={[4, 5, 4]} />
                         <meshStandardMaterial color={getPOIColor()} />
                     </mesh>
                 )}
@@ -249,10 +269,18 @@ const AxiomaticDataField: React.FC<{ chunk: Chunk }> = ({ chunk }) => {
             )}
             {chunk.logicField?.map((row, i) => 
                 row.map((force, j) => (
-                    <mesh key={`force-${i}-${j}`} position={[i * 10 - 35, 0.1, j * 10 - 35]} rotation={[0, Math.atan2(force.vx, force.vz), 0]}>
-                        <boxGeometry args={[0.05, 0.05, 1.5]} />
-                        <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={0.5} transparent opacity={0.2} />
-                    </mesh>
+                    <group key={`force-${i}-${j}`} position={[i * 10 - 35, 0.1, j * 10 - 35]} rotation={[0, Math.atan2(force.vx, force.vz), 0]}>
+                        {/* Arrow Body */}
+                        <mesh>
+                            <boxGeometry args={[0.05, 0.05, 1.5]} />
+                            <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={0.5} transparent opacity={0.2} />
+                        </mesh>
+                        {/* Arrow Head */}
+                        <mesh position={[0, 0, 0.75]}>
+                            <coneGeometry args={[0.15, 0.3, 4]} rotation={[Math.PI / 2, 0, 0]} />
+                            <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={1} transparent opacity={0.4} />
+                        </mesh>
+                    </group>
                 ))
             )}
             {chunk.logicString && (

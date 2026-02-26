@@ -1,16 +1,78 @@
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Rajdhani:wght@300;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Cinzel+Decorative:wght@700&family=JetBrains+Mono:wght@300;400;500;700&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap');
+
+/* ═══════════════════════════════════════════════
+   ARELORIAN DESIGN TOKEN CONTRACT v1.0
+   The canonical source of truth for all UI.
+═══════════════════════════════════════════════ */
+:root {
+  /* Core palette */
+  --arl-void:        #060810;
+  --arl-deep:        #0a0d1a;
+  --arl-surface:     #0f1524;
+  --arl-elevated:    #141b30;
+  --arl-panel:       #1a2240;
+  --arl-border:      #1e2a4a;
+  --arl-border-glow: #2a3d6e;
+
+  /* Arcane spectrum */
+  --arl-gold:        #c9a227;
+  --arl-gold-dim:    #7a5f12;
+  --arl-gold-glow:   rgba(201,162,39,0.18);
+  --arl-amber:       #e8921a;
+  --arl-amber-glow:  rgba(232,146,26,0.15);
+  --arl-arcane:      #7b4fd4;
+  --arl-arcane-mid:  #5a35a0;
+  --arl-arcane-glow: rgba(123,79,212,0.2);
+  --arl-teal:        #1fb8b8;
+  --arl-teal-dim:    #0e6060;
+  --arl-teal-glow:   rgba(31,184,184,0.15);
+  --arl-blood:       #c0392b;
+  --arl-blood-dim:   #7a1f15;
+  --arl-sage:        #3d7a4a;
+  --arl-sage-bright: #4eaa60;
+
+  /* Text */
+  --arl-text-primary:   #e8dfc8;
+  --arl-text-secondary: #8a9bb8;
+  --arl-text-muted:     #4a5570;
+  --arl-text-code:      #a8d8b0;
+
+  /* Status */
+  --arl-ok:      #4eaa60;
+  --arl-warn:    #e8921a;
+  --arl-danger:  #c0392b;
+  --arl-ghost:   rgba(123,79,212,0.4);
+
+  /* Typography */
+  --font-display: 'Cinzel Decorative', serif;
+  --font-heading: 'Cinzel', serif;
+  --font-body:    'Crimson Pro', serif;
+  --font-code:    'JetBrains Mono', monospace;
+
+  /* Spacing */
+  --sp-xs: 4px; --sp-sm: 8px; --sp-md: 16px;
+  --sp-lg: 24px; --sp-xl: 32px; --sp-2xl: 48px;
+
+  /* Radii */
+  --r-sm: 4px; --r-md: 8px; --r-lg: 12px; --r-xl: 20px;
+
+  /* Transitions */
+  --t-fast: 150ms ease; --t-mid: 300ms ease; --t-slow: 600ms ease;
+}
+
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Rajdhani", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Cinzel", "Playfair Display", serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-heading), serif;
+  --font-mono: var(--font-code), ui-monospace, SFMono-Regular, monospace;
 
-  --color-axiom-dark: #0a0a0f;
-  --color-axiom-purple: #4f46e5;
-  --color-axiom-cyan: #06b6d4;
-  --color-axiom-gold: #d97706;
-  --color-soul-fire: #ff4500;
+  --color-axiom-dark: var(--arl-void);
+  --color-axiom-purple: var(--arl-arcane);
+  --color-axiom-cyan: var(--arl-teal);
+  --color-axiom-gold: var(--arl-gold);
+  --color-soul-fire: var(--arl-blood);
 }
 
 @layer base {

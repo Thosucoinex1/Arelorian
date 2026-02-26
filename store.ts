@@ -3,10 +3,11 @@ import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
-  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party
+  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
+import { WorldBuildingService } from './services/WorldBuildingService';
 
 interface GameState {
   agents: Agent[];
@@ -330,6 +331,15 @@ export const useStore = create<GameState>((set, get) => ({
     };
 
     set(s => ({ loadedChunks: [...s.loadedChunks, newChunk] }));
+    
+    // Generate content based on Axiomatic Rules
+    const content = WorldBuildingService.generateAxiomaticContent(newChunk);
+    set(s => ({
+      pois: [...s.pois, ...content.pois],
+      monsters: [...s.monsters, ...content.monsters],
+      resourceNodes: [...s.resourceNodes, ...content.resources]
+    }));
+
     get().addLog(`Axiomatic Chunk ${id} generated via Logic Field: ${logicString}`, 'AXIOM', 'SYSTEM');
   },
 
@@ -830,7 +840,6 @@ export const useStore = create<GameState>((set, get) => ({
           state.resourceNodes, 
           state.logs.slice(0, 5), 
           false, 
-          true, 
           state.userApiKey || undefined,
           localForce
         );
@@ -1052,7 +1061,7 @@ export const useStore = create<GameState>((set, get) => ({
       return;
     }
     set(s => ({
-      landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: `struct_${Date.now()}`, type, ownerId: s.user.id }] } : p)
+      landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: `struct_${Date.now()}`, type, ownerId: s.user?.id || 'unknown' }] } : p)
     }));
   },
 

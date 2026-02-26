@@ -11,6 +11,8 @@ import GameUI from './certs/UI/GameUI';
 import { MainMenu } from './certs/UI/MainMenu';
 import WorldScene from './components/World/WorldScene';
 import { DeveloperTools } from './components/DeveloperTools';
+import { AxiomaticOverlay } from './certs/UI/AxiomaticOverlay';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
@@ -115,9 +117,18 @@ const App = () => {
       setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
     }
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '`') {
+        const state = useStore.getState();
+        state.toggleDeveloperTools(!state.showDeveloperTools);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [initGame, setUserApiKey, updateScreenSize, storeUser, setUser]);
   useEffect(() => { if (storeUser?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [storeUser?.email, isAxiomAuthenticated]);
@@ -203,10 +214,27 @@ const App = () => {
         </div>
       )}
 
-      <WorldScene />
-      <GameUI />
-      <MainMenu />
-      {showDeveloperTools && <DeveloperTools />} 
+      <ErrorBoundary name="World Scene">
+        <WorldScene />
+      </ErrorBoundary>
+      
+      <ErrorBoundary name="Game UI">
+        <GameUI />
+      </ErrorBoundary>
+      
+      <ErrorBoundary name="Main Menu">
+        <MainMenu />
+      </ErrorBoundary>
+      
+      <ErrorBoundary name="Axiomatic Overlay">
+        <AxiomaticOverlay />
+      </ErrorBoundary>
+      
+      {showDeveloperTools && (
+        <ErrorBoundary name="Developer Tools">
+          <DeveloperTools />
+        </ErrorBoundary>
+      )} 
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
       <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
       
