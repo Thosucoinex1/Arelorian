@@ -10,6 +10,7 @@ import cors from 'cors';
 import { initPool, initDb, ensureSchema, seedAdminAccount } from './server/db.js';
 import { registerRoutes } from './server/routes.js';
 import { registerAdminRoutes } from './server/admin-routes.js';
+import paypalRouter from './server/paypal.js';
 import { startTickEngine } from './server/tick-engine.js';
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -91,6 +92,7 @@ async function startServer() {
 
   registerRoutes(app, wss);
   registerAdminRoutes(app, wss);
+  app.use('/api/paypal', paypalRouter);
 
   startTickEngine();
 

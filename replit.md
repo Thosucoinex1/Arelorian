@@ -122,6 +122,21 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 - `services/SoundManager.ts` — WebAudio procedural sound effects
 - `services/CharacterImporter.ts` — External character data import
 
+## PayPal Integration (Live)
+
+- `server/paypal.ts` — PayPal REST API v2 integration (order creation + capture)
+- `certs/UI/PayPalModal.tsx` — Real PayPal JS SDK buttons (dynamically loaded)
+- `certs/UI/EnergyShopOverlay.tsx` — Energy shop UI triggering PayPal checkout
+- **Mode**: Live (production PayPal API)
+- **Currency**: EUR
+- **Products**: ENERGY_100 (€0.99), ENERGY_500 (€3.99), ENERGY_2000 (€9.99)
+- **Flow**: Shop → PayPal modal → SDK buttons → create-order → PayPal approval → capture-order → credit ME
+- **API Endpoints**:
+  - `GET /api/paypal/client-id` — Returns client ID for SDK init
+  - `POST /api/paypal/create-order` — Creates PayPal order for a product
+  - `POST /api/paypal/capture-order` — Captures approved payment, returns energy amount
+- **Env vars**: PAYPAL_CLIENT_ID, PAYPAL_SECRET_KEY, PAYPAL_MODE
+
 ## OSCC (Omniscient System Control Console)
 
 Admin dashboard accessible at `/oscc` with military-grade security.
