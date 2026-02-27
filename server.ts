@@ -31,8 +31,15 @@ const memoryStore = {
   worldState: new Map<string, any>()
 };
 
-if (process.env.DB_HOST) {
-  const dbConfig = {
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 5000,
+    ssl: false
+  });
+  console.log('PostgreSQL Pool initialized (Replit DB).');
+} else if (process.env.DB_HOST) {
+  pool = new Pool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -51,40 +58,22 @@ if (process.env.DB_HOST) {
         : undefined,
       rejectUnauthorized: false
     }
-  };
-  pool = new Pool(dbConfig);
-  console.log('PostgreSQL Pool initialized.');
+  });
+  console.log('PostgreSQL Pool initialized (external DB).');
 }
 
-console.log('Database Connection Config:', {
-  host: process.env.DB_HOST || 'unknown',
-  port: process.env.DB_PORT || '5432',
-  type: 'PostgreSQL'
-});
-
 async function initDb(retries = 3, delay = 2000) {
-  if (!process.env.DB_HOST) {
+  if (!pool) {
     console.log('No database configuration found. Persistence disabled (Memory Mode).');
     return;
   }
   
   try {
     const client = await pool.connect();
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS agents (
-        id TEXT PRIMARY KEY,
-        data JSONB NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS world_state (
-        key TEXT PRIMARY KEY,
-        value JSONB NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+    await client.query('SELECT 1');
     client.release();
     dbAvailable = true;
-    console.log('Database tables initialized successfully. Persistence: ACTIVE');
+    console.log('Database connected successfully. Persistence: ACTIVE');
   } catch (err: any) {
     if (retries > 0 && (err.code === 'ETIMEDOUT' || err.message?.includes('timeout'))) {
       console.warn(`Database connection timed out. Retrying in ${delay}ms... (${retries} retries left)`);
@@ -142,13 +131,31 @@ async function startServer() {
       }
     }
 
+    const worldState = dbAvailable
+      ? (await pool.query('SELECT * FROM world_state ORDER BY id DESC LIMIT 1')).rows[0] || {}
+      : {};
+
     res.json({ 
       status: dbStatus, 
       error,
       service: 'Ouroboros Axiom Engine',
       database: dbAvailable ? 'PostgreSQL' : 'In-Memory',
-      playerCount: wss.clients.size 
+      playerCount: wss.clients.size,
+      worldState
     });
+  });
+
+  app.get('/api/agents', async (_, res) => {
+    if (!dbAvailable) {
+      return res.json({ success: true, agents: Array.from(memoryStore.agents.values()), mode: 'memory' });
+    }
+    try {
+      const result = await pool.query('SELECT * FROM agents ORDER BY name');
+      res.json({ success: true, agents: result.rows });
+    } catch (err: any) {
+      console.error('Agents fetch failed:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   app.post('/api/sync/agents', async (req, res) => {
@@ -156,7 +163,7 @@ async function startServer() {
     if (!Array.isArray(agents)) return res.status(400).json({ error: 'Invalid agents data' });
 
     if (!dbAvailable) {
-      agents.forEach(agent => memoryStore.agents.set(agent.id, agent));
+      agents.forEach(agent => memoryStore.agents.set(agent.uid || agent.id, agent));
       return res.json({ success: true, mode: 'memory' });
     }
 
@@ -166,8 +173,21 @@ async function startServer() {
         await client.query('BEGIN');
         for (const agent of agents) {
           await client.query(
-            'INSERT INTO agents (id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = NOW()',
-            [agent.id, agent]
+            `INSERT INTO agents (uid, name, npc_class, level, hp, max_hp, exp, pos_x, pos_y, pos_z, inventory, dna_history, memory_cache, awakened, last_update)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+             ON CONFLICT (uid) DO UPDATE SET
+               name = EXCLUDED.name, npc_class = EXCLUDED.npc_class, level = EXCLUDED.level,
+               hp = EXCLUDED.hp, max_hp = EXCLUDED.max_hp, exp = EXCLUDED.exp,
+               pos_x = EXCLUDED.pos_x, pos_y = EXCLUDED.pos_y, pos_z = EXCLUDED.pos_z,
+               inventory = EXCLUDED.inventory, dna_history = EXCLUDED.dna_history,
+               memory_cache = EXCLUDED.memory_cache, awakened = EXCLUDED.awakened, last_update = NOW()`,
+            [
+              agent.uid, agent.name, agent.npc_class || 'NEURAL_EMERGENT',
+              agent.level || 1, agent.hp || 100, agent.max_hp || 100, agent.exp || 0,
+              agent.pos_x || 0, agent.pos_y || 0.5, agent.pos_z || 0,
+              JSON.stringify(agent.inventory || []), JSON.stringify(agent.dna_history || []),
+              JSON.stringify(agent.memory_cache || []), agent.awakened || false
+            ]
           );
         }
         await client.query('COMMIT');
@@ -188,12 +208,50 @@ async function startServer() {
     if (!dbAvailable) {
       return res.json({ success: true, agents: Array.from(memoryStore.agents.values()), mode: 'memory' });
     }
-
     try {
-      const result = await pool.query('SELECT data FROM agents');
-      res.json({ success: true, agents: result.rows.map((r: { data: any }) => r.data) });
+      const result = await pool.query('SELECT * FROM agents ORDER BY name');
+      res.json({ success: true, agents: result.rows });
     } catch (err: any) {
       console.error('Agents fetch failed:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/chronicles', async (_, res) => {
+    if (!dbAvailable) {
+      return res.json({ success: true, chronicles: [], mode: 'memory' });
+    }
+    try {
+      const result = await pool.query('SELECT * FROM chronicles ORDER BY created_at DESC');
+      res.json({ success: true, chronicles: result.rows });
+    } catch (err: any) {
+      console.error('Chronicles fetch failed:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/duden', async (_, res) => {
+    if (!dbAvailable) {
+      return res.json({ success: true, entries: [], mode: 'memory' });
+    }
+    try {
+      const result = await pool.query('SELECT * FROM duden_register ORDER BY created_at DESC LIMIT 100');
+      res.json({ success: true, entries: result.rows });
+    } catch (err: any) {
+      console.error('Duden register fetch failed:', err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/world-state', async (_, res) => {
+    if (!dbAvailable) {
+      return res.json({ success: true, state: { stability_index: 1.0, active_players: 0 }, mode: 'memory' });
+    }
+    try {
+      const result = await pool.query('SELECT * FROM world_state ORDER BY id DESC LIMIT 1');
+      res.json({ success: true, state: result.rows[0] || { stability_index: 1.0, active_players: 0 } });
+    } catch (err: any) {
+      console.error('World state fetch failed:', err.message);
       res.status(500).json({ success: false, error: err.message });
     }
   });

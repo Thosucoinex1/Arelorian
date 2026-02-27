@@ -6,8 +6,29 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 
 - **Frontend**: React 18, Three.js (@react-three/fiber), Tailwind CSS v4, Zustand
 - **Backend**: Express 5 + HTTP server with WebSocket (ws) support
+- **Database**: Replit PostgreSQL (Neon-backed), schema v32.0
 - **Dev Server**: Both frontend and backend run together via `tsx server.ts` on port 5000
 - **Build System**: Vite 6 with TypeScript
+
+## Database Schema
+
+- `agents` — Game agents/NPCs with UUID PKs, stats (hp, level, exp), position (pos_x/y/z), JSONB inventory/dna_history/memory_cache
+- `duden_register` — Notary event log (Petra Markgraf), tracks quests/system/emanation events
+- `chronicles` — Archive/hörbuch chapters with notary seals
+- `world_state` — System monitoring: stability index, active players, Vertex AI status
+
+Initial agents: Aurelius (Enterprise Paladin) and Vulcan (Meister-Schmied).
+
+## API Endpoints
+
+- `GET /api/health` — Server status, DB status, world state, player count
+- `GET /api/agents` — List all agents
+- `GET /api/sync/agents` — List agents (sync endpoint)
+- `POST /api/sync/agents` — Upsert agents (body: `{ agents: [...] }`)
+- `GET /api/chronicles` — List chronicles
+- `GET /api/duden` — List duden register entries (last 100)
+- `GET /api/world-state` — Current world state
+- `GET /api/data` — DB connectivity test
 
 ## Project Structure
 
@@ -26,11 +47,10 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 
 ## Environment Variables
 
-See `.env.example` for all available variables:
+- `DATABASE_URL` — Replit-managed PostgreSQL connection string (auto-set)
 - `GEMINI_API_KEY` — Required for AI features
 - `VITE_FIREBASE_*` — Firebase client configuration
 - `FIREBASE_SERVICE_ACCOUNT_JSON` — Firebase Admin (server-side)
-- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` — PostgreSQL database (falls back to in-memory if unreachable)
 - `GOOGLE_CLOUD_PROJECT` / `GOOGLE_APPLICATION_CREDENTIALS` — For Genkit/Vertex AI
 
 ## Development
