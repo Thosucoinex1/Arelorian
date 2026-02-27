@@ -25,7 +25,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   }
 }
 
-const PORT = 5000;
+const PORT = parseInt(process.env.PORT || '5000', 10);
 
 async function startServer() {
   initPool();
@@ -39,13 +39,14 @@ async function startServer() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:", "https://www.paypal.com", "https://*.paypal.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         connectSrc: ["'self'", "ws:", "wss:", "https:"],
         fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
         workerSrc: ["'self'", "blob:"],
         objectSrc: ["'none'"],
+        frameSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
         frameAncestors: ["'self'"],
       }
     },
@@ -96,18 +97,27 @@ async function startServer() {
 
   startTickEngine();
 
-  if (process.env.NODE_ENV !== 'production') {
+  const __dirname = path.dirname(new URL(import.meta.url).pathname);
+  const distPath = path.join(__dirname, 'dist');
+  const distExists = await import('fs').then(fs => fs.existsSync(distPath));
+
+  if (distExists) {
+    console.log('Production mode: serving static files from dist/');
+    app.use(express.static(distPath));
+    app.use((req, res, next) => {
+      if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/ws')) {
+        res.sendFile(path.join(distPath, 'index.html'));
+      } else {
+        next();
+      }
+    });
+  } else {
+    console.log('Development mode: using Vite middleware');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const __dirname = path.dirname(new URL(import.meta.url).pathname);
-    app.use(express.static(path.join(__dirname, '../dist')));
-    app.get('*', (_, res) => {
-        res.sendFile(path.join(__dirname, '../dist/index.html'));
-    });
   }
 
   server.listen(PORT, '0.0.0.0', () => {
