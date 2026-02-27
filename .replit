@@ -41,3 +41,12 @@ externalPort = 80
 deploymentTarget = "vm"
 run = ["npx", "tsx", "server.ts"]
 build = ["npm", "run", "build"]
+
+[userenv]
+
+[userenv.shared]
+DB_NAME = "ouroboros_db"
+DB_HOST = "34.185.177.59"
+DB_USER = "postgres"
+DB_PORT = "5432"
+DB_PASSWORD = "2N00py123-"

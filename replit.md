@@ -30,7 +30,7 @@ See `.env.example` for all available variables:
 - `GEMINI_API_KEY` — Required for AI features
 - `VITE_FIREBASE_*` — Firebase client configuration
 - `FIREBASE_SERVICE_ACCOUNT_JSON` — Firebase Admin (server-side)
-- `DATABASE_URL` / `DB_*` — Optional database (disabled/memory mode by default)
+- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` — PostgreSQL database (falls back to in-memory if unreachable)
 - `GOOGLE_CLOUD_PROJECT` / `GOOGLE_APPLICATION_CREDENTIALS` — For Genkit/Vertex AI
 
 ## Development
