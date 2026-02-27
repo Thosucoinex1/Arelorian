@@ -237,6 +237,25 @@ export function stopTickEngine(): void {
   }
 }
 
+export function pauseTickEngine(): { success: boolean; message: string } {
+  if (!tickTimer) {
+    return { success: false, message: 'Tick Engine is not running.' };
+  }
+  clearInterval(tickTimer);
+  tickTimer = null;
+  console.log('Tick Engine PAUSED by admin.');
+  return { success: true, message: `Tick Engine paused at tick ${tickNumber}.` };
+}
+
+export function resumeTickEngine(): { success: boolean; message: string } {
+  if (tickTimer) {
+    return { success: false, message: 'Tick Engine is already running.' };
+  }
+  tickTimer = setInterval(executeTick, TICK_INTERVAL_MS);
+  console.log('Tick Engine RESUMED by admin.');
+  return { success: true, message: `Tick Engine resumed from tick ${tickNumber}.` };
+}
+
 export async function getTickState(limit = 20): Promise<any[]> {
   const res = await queryDb(
     'SELECT * FROM tick_state ORDER BY tick_number DESC LIMIT $1',

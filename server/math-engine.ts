@@ -2,6 +2,41 @@ export const KAPPA = 1000;
 export const CHUNK_SIZE = 16;
 export const TICK_INTERVAL_MS = 600;
 
+let kappaOverride: number | null = null;
+let kappaOverrideTicksLeft = 0;
+
+export function getEffectiveKappa(): number {
+  return kappaOverride ?? KAPPA;
+}
+
+export function setTemporaryKappa(newKappa: number, durationTicks: number): { success: boolean; message: string } {
+  if (newKappa <= 0 || newKappa > 100000) {
+    return { success: false, message: 'κ must be between 1 and 100000.' };
+  }
+  kappaOverride = newKappa;
+  kappaOverrideTicksLeft = durationTicks;
+  console.log(`κ temporarily set to ${newKappa} for ${durationTicks} ticks.`);
+  return { success: true, message: `κ set to ${newKappa} for ${durationTicks} ticks.` };
+}
+
+export function tickKappaOverride(): void {
+  if (kappaOverride !== null && kappaOverrideTicksLeft > 0) {
+    kappaOverrideTicksLeft--;
+    if (kappaOverrideTicksLeft <= 0) {
+      console.log(`κ override expired. Reverting to ${KAPPA}.`);
+      kappaOverride = null;
+    }
+  }
+}
+
+export function getKappaStatus(): { current: number; isOverridden: boolean; ticksLeft: number } {
+  return {
+    current: getEffectiveKappa(),
+    isOverridden: kappaOverride !== null,
+    ticksLeft: kappaOverrideTicksLeft
+  };
+}
+
 function seededRandom(seed: number): () => number {
   let s = seed;
   return () => {

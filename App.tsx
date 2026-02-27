@@ -13,6 +13,7 @@ import WorldScene from './components/World/WorldScene';
 import { DeveloperTools } from './components/DeveloperTools';
 import { AxiomaticOverlay } from './certs/UI/AxiomaticOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import OsccDashboard from './certs/UI/OsccDashboard';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
@@ -71,7 +72,14 @@ const AxiomHandshakeModal = ({ onClose, storeUser }: { onClose: () => void; stor
   );
 };
 
-const App = () => {
+const AppRouter = () => {
+  if (window.location.pathname === '/oscc') {
+    return <OsccDashboard />;
+  }
+  return <GameApp />;
+};
+
+const GameApp = () => {
   const initGame = useStore(state => state.initGame);
   const runSocialInteractions = useStore(state => state.runSocialInteractions);
   const runEmergentBehavior = useStore(state => state.runEmergentBehavior);
@@ -259,4 +267,5 @@ const App = () => {
   );
 };
 
+const App = AppRouter;
 export default App;

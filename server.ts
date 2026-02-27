@@ -4,9 +4,12 @@ import { WebSocketServer } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import admin from 'firebase-admin';
+import helmet from 'helmet';
+import cors from 'cors';
 
-import { initPool, initDb, ensureSchema } from './server/db.js';
+import { initPool, initDb, ensureSchema, seedAdminAccount } from './server/db.js';
 import { registerRoutes } from './server/routes.js';
+import { registerAdminRoutes } from './server/admin-routes.js';
 import { startTickEngine } from './server/tick-engine.js';
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
@@ -27,9 +30,37 @@ async function startServer() {
   initPool();
   await initDb();
   await ensureSchema();
+  await seedAdminAccount();
 
   const app = express();
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'", "ws:", "wss:", "https:"],
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+        workerSrc: ["'self'", "blob:"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+      }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  }));
+
+  app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
+
   app.use(express.json({ limit: '50mb' }));
+
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
@@ -59,6 +90,7 @@ async function startServer() {
   });
 
   registerRoutes(app, wss);
+  registerAdminRoutes(app, wss);
 
   startTickEngine();
 

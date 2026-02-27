@@ -97,10 +97,73 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 - `GET /api/loot/generate` — Loot preview
 - `GET /api/axiom-compliance` — Self-evaluation matrix
 
+## OSCC (Omniscient System Control Console)
+
+Admin dashboard accessible at `/oscc` with military-grade security.
+
+### Security Architecture
+- **Authentication**: bcrypt (saltRounds=12) + JWT access tokens (15min) + refresh tokens (7 days)
+- **Zero-trust**: Every request re-validates JWT + session in DB; no session memory trust
+- **Brute-force protection**: 5 failed attempts → 15min lockout
+- **Rate limiting**: 100 req/15min on admin endpoints
+- **Audit logging**: Every admin action logged to `admin_audit_logs` with IP, timestamp, details
+- **Anomaly detection**: Suspicious patterns logged to `anomaly_logs`
+- **Secure headers**: Helmet.js (CSP, X-Frame-Options, CORS)
+
+### Admin API Endpoints
+- `POST /api/admin/login` — Email+password → JWT tokens
+- `POST /api/admin/refresh` — Refresh token → new access token
+- `POST /api/admin/logout` — Revoke all sessions
+- `GET /api/admin/session` — Validate current session
+- `POST /api/admin/change-password` — Password rotation
+- `POST /api/admin/events/create` — Spawn live world events
+- `GET /api/admin/events` — List events
+- `POST /api/admin/events/:id/resolve` — Resolve event
+- `POST /api/admin/tick/pause` — Pause tick engine
+- `POST /api/admin/tick/resume` — Resume tick engine
+- `POST /api/admin/tick/modify-kappa` — Temporary κ override
+- `GET /api/admin/tick/status` — Tick engine status
+- `POST /api/admin/world/economic-shock` — Price manipulation
+- `POST /api/admin/world/biome-shift` — Biome probability modification
+- `POST /api/admin/world/spawn-invasion` — Combat event injection
+- `POST /api/admin/world/inject-lore` — Global lore broadcast
+- `POST /api/admin/world/rollback` — Emergency state rollback
+- `GET /api/admin/audit-logs` — Paginated audit trail
+- `GET /api/admin/anomaly-logs` — Security alerts
+- `GET /api/admin/dashboard-stats` — Live system stats
+
+### Event Impact Formulas
+- EventImpact = BaseImpact × ln(κ) × Severity
+- Economic Shock: Price = Price × (1 + ShockMagnitude/κ)
+- Biome Shift: P_new = P_old × e^(EventWeight/κ)
+
+### Admin Database Tables (9 new, 22 total)
+- `admins` — Admin accounts (bcrypt hashed, sovereign/operator/observer roles)
+- `admin_roles` — Role-permission mapping
+- `admin_sessions` — JWT session tracking with revocation
+- `admin_audit_logs` — Full admin action audit trail
+- `admin_event_logs` — Event creation logs
+- `anomaly_logs` — Security anomaly detection
+- `security_lockouts` — Brute-force lockout tracking
+- `live_events` — Active/resolved world events
+- `event_effects` — Event impact records (before/after state)
+
+### Backend Modules
+- `server/admin-security.ts` — JWT, bcrypt, rate limiting, audit logging, brute-force protection
+- `server/admin-routes.ts` — All admin API endpoints with transaction-safe operations
+- `server/math-engine.ts` — Added getEffectiveKappa(), setTemporaryKappa(), tickKappaOverride()
+- `server/tick-engine.ts` — Added pauseTickEngine(), resumeTickEngine()
+
+### Frontend
+- `certs/UI/OsccDashboard.tsx` — Full admin console (login + 3-panel dashboard)
+- Route: `/oscc` detected in App.tsx via AppRouter component
+
 ## Environment Variables
 
 - `DATABASE_URL` — Replit-managed PostgreSQL (auto-set)
 - `GEMINI_API_KEY` — Required for AI features (set as env var or via window.aistudio)
+- `ADMIN_JWT_SECRET` — JWT signing secret for admin auth
+- `ADMIN_DEFAULT_PASSWORD` — Initial admin password (optional, defaults to seeded value)
 - `VITE_FIREBASE_*` — Firebase client configuration (optional)
 - `FIREBASE_SERVICE_ACCOUNT_JSON` — Firebase Admin server-side (optional)
 

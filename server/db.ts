@@ -249,13 +249,146 @@ export async function ensureSchema(): Promise<void> {
       notary_seal BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(50) DEFAULT 'operator',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      last_login TIMESTAMP WITH TIME ZONE,
+      force_password_change BOOLEAN DEFAULT FALSE,
+      failed_attempts INTEGER DEFAULT 0,
+      locked_until TIMESTAMP WITH TIME ZONE
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_roles (
+      id SERIAL PRIMARY KEY,
+      role_name VARCHAR(50) UNIQUE NOT NULL,
+      permissions JSONB DEFAULT '[]',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id SERIAL PRIMARY KEY,
+      admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE,
+      token_hash VARCHAR(255),
+      refresh_token_hash VARCHAR(255),
+      ip_address VARCHAR(100),
+      user_agent TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP WITH TIME ZONE,
+      revoked BOOLEAN DEFAULT FALSE
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id SERIAL PRIMARY KEY,
+      admin_id INTEGER,
+      action VARCHAR(255) NOT NULL,
+      target_type VARCHAR(100),
+      target_id VARCHAR(255),
+      details JSONB DEFAULT '{}',
+      ip_address VARCHAR(100),
+      timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_event_logs (
+      id SERIAL PRIMARY KEY,
+      admin_id INTEGER,
+      event_type VARCHAR(100) NOT NULL,
+      payload JSONB DEFAULT '{}',
+      result JSONB DEFAULT '{}',
+      timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS anomaly_logs (
+      id SERIAL PRIMARY KEY,
+      source_ip VARCHAR(100),
+      pattern VARCHAR(255),
+      severity VARCHAR(50) DEFAULT 'LOW',
+      details JSONB DEFAULT '{}',
+      timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS security_lockouts (
+      id SERIAL PRIMARY KEY,
+      identifier VARCHAR(255) NOT NULL,
+      lockout_type VARCHAR(50) DEFAULT 'LOGIN',
+      attempts INTEGER DEFAULT 0,
+      locked_until TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS live_events (
+      id SERIAL PRIMARY KEY,
+      admin_id INTEGER,
+      event_type VARCHAR(100) NOT NULL,
+      name VARCHAR(255),
+      severity REAL DEFAULT 1.0,
+      parameters JSONB DEFAULT '{}',
+      status VARCHAR(50) DEFAULT 'ACTIVE',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMP WITH TIME ZONE
+    );
+
+    CREATE TABLE IF NOT EXISTS event_effects (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER REFERENCES live_events(id) ON DELETE CASCADE,
+      effect_type VARCHAR(100),
+      target VARCHAR(255),
+      before_state JSONB DEFAULT '{}',
+      after_state JSONB DEFAULT '{}',
+      timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin_id ON admin_sessions(admin_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_timestamp ON admin_audit_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_id ON admin_audit_logs(admin_id);
+    CREATE INDEX IF NOT EXISTS idx_anomaly_logs_timestamp ON anomaly_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_live_events_status ON live_events(status);
+    CREATE INDEX IF NOT EXISTS idx_live_events_admin_id ON live_events(admin_id);
+    CREATE INDEX IF NOT EXISTS idx_event_effects_event_id ON event_effects(event_id);
+    CREATE INDEX IF NOT EXISTS idx_security_lockouts_identifier ON security_lockouts(identifier);
   `;
 
   try {
     await pool.query(ddl);
-    console.log('Schema verified/created (13 tables).');
+    console.log('Schema verified/created (22 tables).');
   } catch (err: any) {
     console.error('Schema initialization error:', err.message);
+  }
+}
+
+export async function seedAdminAccount(): Promise<void> {
+  if (!pool || !dbAvailable) return;
+
+  try {
+    const existing = await pool.query('SELECT id FROM admins WHERE email = $1', ['projectouroboroscollective@gmail.com']);
+    if (existing.rows.length > 0) return;
+
+    const bcrypt = await import('bcryptjs');
+    const password = process.env.ADMIN_DEFAULT_PASSWORD || '2N00py123-';
+    const hash = await bcrypt.hash(password, 12);
+
+    await pool.query(
+      `INSERT INTO admins (email, password_hash, role, created_at, force_password_change)
+       VALUES ($1, $2, 'sovereign', NOW(), TRUE)`,
+      ['projectouroboroscollective@gmail.com', hash]
+    );
+
+    await pool.query(
+      `INSERT INTO admin_roles (role_name, permissions, created_at) VALUES
+       ('sovereign', '["*"]', NOW()),
+       ('operator', '["view","events","tick_control"]', NOW()),
+       ('observer', '["view"]', NOW())
+       ON CONFLICT (role_name) DO NOTHING`
+    );
+
+    console.log('Admin account seeded (sovereign).');
+  } catch (err: any) {
+    if (!err.message?.includes('duplicate')) {
+      console.error('Admin seed error:', err.message);
+    }
   }
 }
 
