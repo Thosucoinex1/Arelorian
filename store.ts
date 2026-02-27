@@ -4,7 +4,8 @@ import {
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, ChatChannel, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
   TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier, WindowType, WindowState, AuctionListing,
-  ImportedAgentMeta, MAX_IMPORTED_AGENTS, STRUCTURE_COSTS, StoreProduct
+  ImportedAgentMeta, MAX_IMPORTED_AGENTS, STRUCTURE_COSTS, StoreProduct,
+  StatName, GAME_SKILLS, SKILL_ACTIONS, getDefaultSkills, getUnlockedActions, SkillAction
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES, KAPPA, generateLoot } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
@@ -135,6 +136,13 @@ interface GameState {
   reflectOnMemory: (agentId: string) => Promise<void>;
   reflectOnAxioms: (agentId: string) => Promise<void>;
   uploadGraphicPack: (name: string) => void;
+  controlledAgentId: string | null;
+  takeControl: (agentId: string) => void;
+  releaseControl: () => void;
+  gainSkillXP: (agentId: string, skillName: string, amount: number) => void;
+  allocateStatPoint: (agentId: string, stat: StatName) => void;
+  executeSkillAction: (agentId: string, skillName: string, actionIndex: number) => void;
+
   importedAgents: ImportedAgentMeta[];
   importAgent: (source: string, type: 'URL' | 'JSON') => void;
   removeImportedAgent: (agentId: string) => void;
@@ -252,6 +260,7 @@ export const useStore = create<GameState>((set, get) => ({
 
   auctionHouse: [],
   importedAgents: [],
+  controlledAgentId: null,
 
   windowStates: {
     MARKET: { isOpen: false, isMinimized: false },
@@ -482,14 +491,19 @@ export const useStore = create<GameState>((set, get) => ({
       }
     }
 
+    const makeStats = (s: number, d: number, ag: number, st: number, h: number, m: number, i: number) => ({
+      str: s, agi: ag, int: i, vit: st, hp: h * 10 + st * 5, maxHp: h * 10 + st * 5,
+      strength: s, dexterity: d, agility: ag, stamina: st, health: h, mana: m * 10, maxMana: m * 10, intelligence: i
+    });
+
     const initialAgents: Agent[] = [
         {
-            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 25, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
+            id: 'a1', name: 'Aurelius', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 25, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
             thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8, curiosity: 0.9, frugality: 0.7 },
             relationships: {},
-            skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, 
+            skills: getDefaultSkills(), 
             resources: { WOOD: 10, STONE: 5, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 2 },
-            inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 10, agi: 10, int: 10, vit: 10, hp: 100, maxHp: 100 }, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
+            inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: makeStats(10, 10, 10, 10, 10, 10, 10), unspentStatPoints: 0, lastScanTime: 0, isAwakened: true, isAdvancedIntel: false,
             economicDesires: { 
               targetGold: 1000, 
               preferredResources: ['GOLD_ORE', 'SILVER_ORE'], 
@@ -502,12 +516,12 @@ export const useStore = create<GameState>((set, get) => ({
             emergentBehaviorLog: []
         },
         {
-          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
+          id: 'a2', name: 'Vulcan', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
           thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4, curiosity: 0.3, frugality: 0.5 },
           relationships: {},
-          skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, 
+          skills: { ...getDefaultSkills(), mining: { level: 2, xp: 0 }, smithing: { level: 8, xp: 0 }, melee: { level: 4, xp: 0 } }, 
           resources: { WOOD: 5, STONE: 20, IRON_ORE: 15, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
-          inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 15, agi: 8, int: 5, vit: 15, hp: 150, maxHp: 150 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
+          inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: makeStats(15, 8, 8, 15, 15, 5, 5), unspentStatPoints: 0, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
           economicDesires: { 
             targetGold: 5000, 
             preferredResources: ['IRON_ORE', 'GOLD_ORE'], 
@@ -520,12 +534,12 @@ export const useStore = create<GameState>((set, get) => ({
           emergentBehaviorLog: []
         },
         {
-          id: 'a3', name: 'Lyra', classType: 'Explorer', faction: 'NPC', position: [10, 0, -10], rotationY: 0, level: 2, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 30, state: AgentState.IDLE, soulDensity: 0.9, gold: 200, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x3', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.15, awakeningProgress: 0, 
+          id: 'a3', name: 'Lyra', faction: 'NPC', position: [10, 0, -10], rotationY: 0, level: 2, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 30, state: AgentState.IDLE, soulDensity: 0.9, gold: 200, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x3', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.15, awakeningProgress: 0, 
           thinkingMatrix: { personality: 'Curious', currentLongTermGoal: 'Map the Void', alignment: 0.8, languagePreference: 'EN', sociability: 0.9, curiosity: 1.0, frugality: 0.3 },
           relationships: {},
-          skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 2, xp: 0 } }, 
+          skills: { ...getDefaultSkills(), ranged: { level: 3, xp: 0 }, agility_skill: { level: 5, xp: 0 }, herbalism: { level: 2, xp: 0 } }, 
           resources: { WOOD: 0, STONE: 0, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 10 },
-          inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 8, agi: 14, int: 12, vit: 8, hp: 90, maxHp: 90 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
+          inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: makeStats(8, 14, 14, 8, 9, 12, 12), unspentStatPoints: 0, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
           economicDesires: { 
             targetGold: 2000, 
             preferredResources: ['DIAMOND', 'ANCIENT_RELIC'], 
@@ -651,13 +665,15 @@ export const useStore = create<GameState>((set, get) => ({
         let newIntegrity = a.integrity;
         const moveSpeed = 6;
         
-        // 1. Combat Damage from Monsters
+        // 1. Combat Damage from Monsters (stats-driven)
         state.monsters.forEach(m => {
             if (m.state === 'COMBAT' && m.targetId === a.id) {
                 const dist = Math.hypot(m.position[0] - a.position[0], m.position[2] - a.position[2]);
-                if (dist < 2.5 && Math.random() < 0.1) {
+                const dodgeChance = Math.min(0.3, (a.stats.agility ?? 10) * 0.005);
+                if (dist < 2.5 && Math.random() < 0.1 && Math.random() > dodgeChance) {
                     const armor = (a.equipment.chest?.stats.def || 0) + (a.equipment.head?.stats.def || 0) + (a.equipment.legs?.stats.def || 0);
-                    const damage = Math.max(1, m.stats.atk - (a.stats.vit * 0.5 + armor));
+                    const defenseLevel = (a.skills.defense?.level || 1);
+                    const damage = Math.max(1, m.stats.atk - ((a.stats.stamina ?? a.stats.vit ?? 10) * 0.5 + armor + defenseLevel * 0.5));
                     newHp -= damage;
                 }
             }
@@ -687,13 +703,18 @@ export const useStore = create<GameState>((set, get) => ({
             }
         }
 
-        // 3. XP Gain & Loot from Dead Monsters
+        // 3. XP Gain & Loot from Dead Monsters — skill-based XP
+        let skillXpGains: Record<string, number> = {};
         newMonsters.forEach(m => {
             if (m.state === 'DEAD' && state.monsters.find(oldM => oldM.id === m.id)?.state !== 'DEAD') {
                 if (a.state === AgentState.COMBAT && a.targetId === m.id) {
                     newXp += m.xpReward;
                     
-                    // Loot Drop (Diablo 2 style)
+                    const combatSkill = (a.skills.magic?.level || 1) > (a.skills.melee?.level || 1) ? 'magic' : 
+                                       (a.skills.ranged?.level || 1) > (a.skills.melee?.level || 1) ? 'ranged' : 'melee';
+                    skillXpGains[combatSkill] = (skillXpGains[combatSkill] || 0) + m.xpReward;
+                    skillXpGains['defense'] = (skillXpGains['defense'] || 0) + Math.floor(m.xpReward * 0.3);
+
                     const loot = generateLoot(m.type);
                     if (loot) {
                         const emptySlot = a.inventory.findIndex(slot => slot === null);
@@ -754,17 +775,18 @@ export const useStore = create<GameState>((set, get) => ({
             newPos[0] += (dx/dist) * moveSpeed * delta;
             newPos[2] += (dz/dist) * moveSpeed * delta;
           } else if (a.state === AgentState.GATHERING && targetedResourceNode) {
-            // Agent is at the resource node, start gathering
-            const gatherAmount = Math.min(targetedResourceNode.amount, 1 * (a.skills.mining?.level || 1) * delta); // Gather based on skill and delta
+            const gatherSkillMap: Record<string, string> = { 'IRON_ORE': 'mining', 'SILVER_ORE': 'mining', 'GOLD_ORE': 'mining', 'STONE': 'mining', 'DIAMOND': 'mining', 'WOOD': 'woodcutting', 'SUNLEAF_HERB': 'herbalism', 'ANCIENT_RELIC': 'dungeoneering' };
+            const gatherSkillName = gatherSkillMap[targetedResourceNode.type] || 'mining';
+            const gatherSkillLevel = a.skills[gatherSkillName]?.level || 1;
+            const gatherAmount = Math.min(targetedResourceNode.amount, 1 * gatherSkillLevel * delta);
             if (gatherAmount > 0) {
-              // Add resource to agent's inventory
               const resourceType = targetedResourceNode.type;
               const currentResourceAmount = a.resources[resourceType] || 0;
               const newResourceAmount = currentResourceAmount + gatherAmount;
 
-              // Update agent's resources and XP
               a.resources = { ...a.resources, [resourceType]: newResourceAmount };
-              newXp += gatherAmount * 0.5; // XP for gathering
+              newXp += gatherAmount * 0.5;
+              skillXpGains[gatherSkillName] = (skillXpGains[gatherSkillName] || 0) + gatherAmount * 2;
 
               if (newXp >= getXPForNextLevel(newLevel)) {
                 newXp -= getXPForNextLevel(newLevel);
@@ -772,11 +794,9 @@ export const useStore = create<GameState>((set, get) => ({
                 state.addLog(`${a.name} hat Level ${newLevel} erreicht!`, 'SYSTEM', a.id);
               }
 
-              // Deplete resource node
               targetedResourceNode.amount -= gatherAmount;
               if (targetedResourceNode.amount <= 0) {
                 state.addLog(`${a.name} hat ${targetedResourceNode.type} erschöpft.`, 'EVENT', a.id);
-                // Remove node from state (handled in the overall state update)
               }
             }
           } else if (a.state === AgentState.QUESTING && a.targetId) {
@@ -812,7 +832,30 @@ export const useStore = create<GameState>((set, get) => ({
           }
           return { ...a, position: newPos, awakeningProgress: newProgress, consciousnessLevel: newLevel, isAwakened: awakened, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity };
         }
-        return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity, resources: a.resources };
+        let updatedSkills = { ...a.skills };
+        let gainedStatPoints = 0;
+        for (const [skillName, xpAmount] of Object.entries(skillXpGains)) {
+          if (xpAmount > 0 && updatedSkills[skillName]) {
+            const skill = { ...updatedSkills[skillName] };
+            skill.xp += xpAmount;
+            let xpNeeded = skill.level * 100 + skill.level * skill.level * 10;
+            while (skill.xp >= xpNeeded) {
+              skill.xp -= xpNeeded;
+              skill.level++;
+              gainedStatPoints++;
+              state.addLog(`${a.name}: ${GAME_SKILLS[skillName]?.name || skillName} reached level ${skill.level}!`, 'SYSTEM', a.id);
+              xpNeeded = skill.level * 100 + skill.level * skill.level * 10;
+            }
+            updatedSkills[skillName] = skill;
+          }
+        }
+        const newStatPoints = (a.unspentStatPoints || 0) + gainedStatPoints;
+
+        const hpRegen = (a.stats.stamina ?? 10) * 0.01 * delta;
+        const regenHp = Math.min(a.stats.maxHp, newHp + hpRegen);
+        const finalHp = newHp <= 0 ? newHp : regenHp;
+
+        return { ...a, position: newPos, stats: { ...a.stats, hp: finalHp }, xp: newXp, level: newLevel, gold: newGold, integrity: newIntegrity, resources: a.resources, skills: updatedSkills, unspentStatPoints: newStatPoints };
       });
 
       // Neural Fog of War Persistence Logic (Visit Recency)
@@ -1296,7 +1339,7 @@ export const useStore = create<GameState>((set, get) => ({
     const mapped = agents.map(a => ({
       uid: a.id,
       name: a.name,
-      npc_class: a.classType,
+      npc_class: a.classType || 'NONE',
       level: a.level,
       hp: a.stats.hp,
       max_hp: a.stats.maxHp,
@@ -1394,9 +1437,39 @@ export const useStore = create<GameState>((set, get) => ({
       const saved = localStorage.getItem('ouroboros_save_v1');
       if (!saved) return false;
       const data = JSON.parse(saved);
+
+      const migrateAgent = (a: any): Agent => {
+        const defaultSkills = getDefaultSkills();
+        const migratedSkills = { ...defaultSkills };
+        if (a.skills) {
+          for (const [key, val] of Object.entries(a.skills)) {
+            if (key === 'combat') { migratedSkills['melee'] = val as any; }
+            else if (key === 'crafting') { migratedSkills['smithing'] = val as any; }
+            else { migratedSkills[key] = val as any; }
+          }
+        }
+        return {
+          ...a,
+          skills: migratedSkills,
+          unspentStatPoints: a.unspentStatPoints ?? 0,
+          stats: {
+            ...a.stats,
+            strength: a.stats?.strength ?? a.stats?.str ?? 10,
+            dexterity: a.stats?.dexterity ?? 10,
+            agility: a.stats?.agility ?? a.stats?.agi ?? 10,
+            stamina: a.stats?.stamina ?? a.stats?.vit ?? 10,
+            health: a.stats?.health ?? 10,
+            mana: a.stats?.mana ?? 100,
+            maxMana: a.stats?.maxMana ?? 100,
+            intelligence: a.stats?.intelligence ?? a.stats?.int ?? 10,
+          }
+        };
+      };
+
+      const migratedAgents = (data.agents || []).map(migrateAgent);
       
       set(state => ({
-        agents: data.agents || state.agents,
+        agents: migratedAgents.length > 0 ? migratedAgents : state.agents,
         monsters: data.monsters || state.monsters,
         resourceNodes: data.resourceNodes || state.resourceNodes,
         pois: data.pois || state.pois,
@@ -1625,7 +1698,6 @@ export const useStore = create<GameState>((set, get) => ({
       const newAgent: Agent = {
         id: agentId,
         name: partialAgent.name || 'Unknown Entity',
-        classType: partialAgent.classType || 'SCHOLAR',
         faction: (partialAgent.faction as any) || 'NPC',
         position: [Math.cos(spawnAngle) * spawnRadius, 0, Math.sin(spawnAngle) * spawnRadius],
         rotationY: 0,
@@ -1674,18 +1746,23 @@ export const useStore = create<GameState>((set, get) => ({
           chest: null,
           legs: null
         },
-        skills: {
-          mining: { level: 1, xp: 0 },
-          combat: { level: 1, xp: 0 },
-          crafting: { level: 1, xp: 0 }
-        },
+        skills: getDefaultSkills(),
+        unspentStatPoints: 0,
         stats: {
           str: partialAgent.stats?.str ?? 10,
           agi: partialAgent.stats?.agi ?? 10,
           int: partialAgent.stats?.int ?? 10,
           vit: partialAgent.stats?.vit ?? 10,
           hp: 100,
-          maxHp: 100
+          maxHp: 100,
+          strength: partialAgent.stats?.str ?? 10,
+          dexterity: 10,
+          agility: partialAgent.stats?.agi ?? 10,
+          stamina: partialAgent.stats?.vit ?? 10,
+          health: 10,
+          mana: 100,
+          maxMana: 100,
+          intelligence: partialAgent.stats?.int ?? 10,
         },
         resources: { WOOD: 0, STONE: 0, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 0 },
         lastScanTime: 0,
@@ -1710,8 +1787,109 @@ export const useStore = create<GameState>((set, get) => ({
       get().addLog(`Manifestation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'SYSTEM', 'AXIOM');
     }
   },
+  takeControl: (agentId) => {
+    const agent = get().agents.find(a => a.id === agentId);
+    if (!agent) return;
+    set({ controlledAgentId: agentId, selectedAgentId: agentId });
+    get().addLog(`Taking control of ${agent.name}. Third-person mode activated.`, 'SYSTEM', agentId);
+  },
+
+  releaseControl: () => {
+    const controlled = get().controlledAgentId;
+    if (controlled) {
+      const agent = get().agents.find(a => a.id === controlled);
+      get().addLog(`Released control of ${agent?.name || 'agent'}. Autonomous mode resumed.`, 'SYSTEM', controlled);
+    }
+    set({ controlledAgentId: null });
+  },
+
+  gainSkillXP: (agentId, skillName, amount) => {
+    set(s => ({
+      agents: s.agents.map(a => {
+        if (a.id !== agentId) return a;
+        const skills = { ...a.skills };
+        if (!skills[skillName]) skills[skillName] = { level: 1, xp: 0 };
+        const skill = { ...skills[skillName] };
+        skill.xp += amount;
+        let gainedPoints = 0;
+        let xpNeeded = skill.level * 100 + skill.level * skill.level * 10;
+        while (skill.xp >= xpNeeded) {
+          skill.xp -= xpNeeded;
+          skill.level++;
+          gainedPoints++;
+          xpNeeded = skill.level * 100 + skill.level * skill.level * 10;
+          get().addLog(`${a.name}: ${GAME_SKILLS[skillName]?.name || skillName} reached level ${skill.level}!`, 'SYSTEM', a.id);
+        }
+        skills[skillName] = skill;
+        return { ...a, skills, unspentStatPoints: (a.unspentStatPoints || 0) + gainedPoints };
+      })
+    }));
+  },
+
+  allocateStatPoint: (agentId, stat) => {
+    set(s => ({
+      agents: s.agents.map(a => {
+        if (a.id !== agentId || (a.unspentStatPoints || 0) <= 0) return a;
+        const newStats = { ...a.stats };
+        (newStats as any)[stat] = ((newStats as any)[stat] || 1) + 1;
+        if (stat === 'strength') newStats.str = newStats.strength;
+        if (stat === 'agility') newStats.agi = newStats.agility;
+        if (stat === 'intelligence') { newStats.int = newStats.intelligence; }
+        if (stat === 'stamina') newStats.vit = newStats.stamina;
+        if (stat === 'health') { newStats.maxHp = newStats.health * 10 + newStats.stamina * 5; newStats.hp = Math.min(newStats.hp, newStats.maxHp); }
+        if (stat === 'mana') { newStats.maxMana = newStats.mana; }
+        return { ...a, stats: newStats, unspentStatPoints: a.unspentStatPoints - 1 };
+      })
+    }));
+  },
+
+  executeSkillAction: (agentId, skillName, actionIndex) => {
+    const state = get();
+    const agent = state.agents.find(a => a.id === agentId);
+    if (!agent) return;
+    const actions = getUnlockedActions(skillName, agent.skills[skillName]?.level || 1);
+    const action = actions[actionIndex];
+    if (!action) return;
+
+    if (action.manaCost && (agent.stats.mana ?? 0) < action.manaCost) {
+      get().addLog(`${agent.name}: Not enough mana for ${action.name}!`, 'COMBAT', agentId);
+      return;
+    }
+
+    let baseDamage = action.damage || 0;
+    if (GAME_SKILLS[skillName]?.category === 'COMBAT') {
+      if (skillName === 'melee') baseDamage += (agent.stats.strength ?? agent.stats.str ?? 10) * 2;
+      if (skillName === 'ranged') baseDamage += (agent.stats.dexterity ?? 10) * 1.8;
+      if (skillName === 'magic') baseDamage += (agent.stats.intelligence ?? agent.stats.int ?? 10) * 2.2;
+    }
+
+    if (agent.state === AgentState.COMBAT && agent.targetId) {
+      const target = state.monsters.find(m => m.id === agent.targetId);
+      if (target && target.state !== 'DEAD') {
+        const finalDamage = Math.max(1, Math.floor(baseDamage - target.stats.def * 0.3));
+        set(s => ({
+          monsters: s.monsters.map(m => m.id === target.id ? {
+            ...m, stats: { ...m.stats, hp: Math.max(0, m.stats.hp - finalDamage) },
+            state: m.stats.hp - finalDamage <= 0 ? 'DEAD' as const : m.state
+          } : m),
+          agents: s.agents.map(a => a.id === agentId && action.manaCost ? {
+            ...a, stats: { ...a.stats, mana: (a.stats.mana ?? 0) - (action.manaCost || 0) }
+          } : a)
+        }));
+        get().addLog(`${agent.name} used ${action.name} on ${target.name} for ${finalDamage} damage!`, 'COMBAT', agentId);
+        get().gainSkillXP(agentId, skillName, Math.floor(finalDamage * 0.5));
+      }
+    } else {
+      get().addLog(`${agent.name} used ${action.name}!`, 'EVENT', agentId);
+      if (GAME_SKILLS[skillName]?.category === 'GATHERING') {
+        get().gainSkillXP(agentId, skillName, 5);
+      } else if (GAME_SKILLS[skillName]?.category === 'CRAFTING') {
+        get().gainSkillXP(agentId, skillName, 10);
+      }
+    }
+  },
+
   setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => {
-    // side and axis are used for joystick control logic
     console.log(`Joystick ${side} moved:`, axis);
   }
 }));

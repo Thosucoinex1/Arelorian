@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react';
 import { useStore } from '../../store';
-// Cleaned up imports to reflect the current state of exported members in types.ts
-import { Agent, Item, ItemEffect } from '../../types';
+import { Agent, Item, ItemEffect, GAME_SKILLS, SkillCategory, StatName, STAT_DESCRIPTIONS, getUnlockedActions } from '../../types';
 import { ITEM_SETS } from '../../utils';
 import { AgentMemoryDisplay } from './AgentMemoryDisplay';
 
@@ -169,7 +168,7 @@ const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
     if (activeBonuses.length === 0) return null;
 
     return (
-        <div className="mt-6">
+        <div className="mt-4">
             <h3 className="text-green-400 text-xs font-bold uppercase mb-2 tracking-widest">Set Bonuses</h3>
             <div className="space-y-1 text-sm bg-black/20 p-2 rounded">
                 {activeBonuses.map((effect, i) => (
@@ -182,7 +181,14 @@ const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
     );
 };
 
-import { Minus, X } from 'lucide-react';
+const CATEGORY_COLORS: Record<SkillCategory, string> = {
+    COMBAT: 'text-red-400',
+    GATHERING: 'text-green-400',
+    CRAFTING: 'text-yellow-400',
+    UTILITY: 'text-purple-400',
+};
+
+import { Minus, X, Plus, ChevronRight } from 'lucide-react';
 
 export const CharacterSheet = () => {
     const selectedAgentId = useStore(state => state.selectedAgentId);
@@ -192,12 +198,14 @@ export const CharacterSheet = () => {
     const equipItem = useStore(state => state.equipItem);
     const unequipItem = useStore(state => state.unequipItem);
     const moveInventoryItem = useStore(state => state.moveInventoryItem);
+    const allocateStatPoint = useStore(state => state.allocateStatPoint);
     
     const agent = agents.find(a => a.id === selectedAgentId);
     
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [tooltip, setTooltip] = useState<{item: Item, pos: {x: number, y: number}} | null>(null);
-    const [activeTab, setActiveTab] = useState<'GEAR' | 'MEMORY'>('GEAR');
+    const [activeTab, setActiveTab] = useState<'GEAR' | 'SKILLS' | 'MEMORY'>('GEAR');
+    const [expandedCategory, setExpandedCategory] = useState<SkillCategory | null>('COMBAT');
 
     if (!agent) return null;
 
@@ -222,23 +230,36 @@ export const CharacterSheet = () => {
         setDraggedIndex(null);
     };
 
+    const statNames: StatName[] = ['strength', 'dexterity', 'agility', 'stamina', 'health', 'mana', 'intelligence'];
+
+    const groupedSkills = Object.entries(GAME_SKILLS).reduce((acc, [key, def]) => {
+        if (!acc[def.category]) acc[def.category] = [];
+        acc[def.category].push({ key, ...def });
+        return acc;
+    }, {} as Record<SkillCategory, Array<{key: string; name: string; category: SkillCategory; icon: string}>>);
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4 md:p-10">
-            <div className="w-full max-w-[800px] h-full max-h-[700px] bg-axiom-dark border border-axiom-purple/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl pointer-events-auto shadow-[0_0_50px_rgba(79,70,229,0.3)]">
+            <div className="w-full max-w-[900px] h-full max-h-[750px] bg-axiom-dark border border-axiom-purple/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl pointer-events-auto shadow-[0_0_50px_rgba(79,70,229,0.3)]">
                 {tooltip && <ItemTooltip item={tooltip.item} agent={agent} position={tooltip.pos} />}
                 
-                {/* Header with Tabs */}
                 <div className="p-1 bg-axiom-purple/20 border-b border-axiom-purple/30 flex items-center">
                     <div className="flex-1 flex gap-1 px-4">
                         <button 
                             onClick={() => setActiveTab('GEAR')}
-                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'GEAR' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
+                            className={`px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'GEAR' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
                         >
                             Neural Gear
                         </button>
                         <button 
+                            onClick={() => setActiveTab('SKILLS')}
+                            className={`px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'SKILLS' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
+                        >
+                            Skills & Stats
+                        </button>
+                        <button 
                             onClick={() => setActiveTab('MEMORY')}
-                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MEMORY' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
+                            className={`px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MEMORY' ? 'text-white border-b-2 border-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
                         >
                             Axiom Memory
                         </button>
@@ -275,24 +296,7 @@ export const CharacterSheet = () => {
                                         <div></div><EquipmentSlot agent={agent} slot="legs" onUnequip={handleUnequip} /><div></div>
                                     </div>
                                  </div>
-                                 <div className="mt-6">
-                                    <h3 className="text-axiom-gold text-[10px] font-bold uppercase mb-2 tracking-widest">Core Matrix</h3>
-                                    <div className="grid grid-cols-2 gap-2 text-xs bg-black/40 p-3 rounded-xl border border-white/5">
-                                        <div className="flex justify-between"><span>STR</span> <span className="text-white font-bold">{String(agent.stats.str)}</span></div>
-                                        <div className="flex justify-between"><span>AGI</span> <span className="text-white font-bold">{String(agent.stats.agi)}</span></div>
-                                        <div className="flex justify-between"><span>INT</span> <span className="text-white font-bold">{String(agent.stats.int)}</span></div>
-                                        <div className="flex justify-between"><span>VIT</span> <span className="text-white font-bold">{String(agent.stats.vit)}</span></div>
-                                    </div>
-                                    <ActiveSetBonuses agent={agent} />
-                                </div>
-                                <div className="mt-4">
-                                    <h3 className="text-axiom-gold text-[10px] font-bold uppercase mb-2 tracking-widest">Skill Matrix</h3>
-                                    <div className="grid grid-cols-2 gap-2 text-xs bg-black/40 p-3 rounded-xl border border-white/5">
-                                        <div className="flex justify-between"><span>Mining</span> <span className="text-white font-bold">{String(agent.skills.mining.level)}</span></div>
-                                        <div className="flex justify-between"><span>Crafting</span> <span className="text-white font-bold">{String(agent.skills.crafting.level)}</span></div>
-                                        <div className="flex justify-between"><span>Combat</span> <span className="text-white font-bold">{String(agent.skills.combat.level)}</span></div>
-                                    </div>
-                                </div>
+                                 <ActiveSetBonuses agent={agent} />
                             </div>
 
                             <div className="flex-1 flex flex-col overflow-hidden">
@@ -319,6 +323,91 @@ export const CharacterSheet = () => {
                                   <h4 className="text-[10px] text-axiom-purple not-italic font-black mb-2 uppercase tracking-widest">Neural Monologue</h4>
                                   "{String(agent.loreSnippet || "The consciousness is still forming, grasping at fragmented data streams...")}"
                                 </section>
+                            </div>
+                        </div>
+                    ) : activeTab === 'SKILLS' ? (
+                        <div className="flex flex-col md:flex-row h-full gap-6 overflow-y-auto">
+                            <div className="w-full md:w-1/2 pr-4 overflow-y-auto custom-scrollbar">
+                                <h3 className="text-axiom-cyan text-[10px] font-bold uppercase mb-3 tracking-widest">Skill Matrix</h3>
+                                {(['COMBAT', 'GATHERING', 'CRAFTING', 'UTILITY'] as SkillCategory[]).map(cat => (
+                                    <div key={cat} className="mb-3">
+                                        <button 
+                                            onClick={() => setExpandedCategory(expandedCategory === cat ? null : cat)}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg bg-black/30 border border-white/5 hover:border-white/20 transition-all ${CATEGORY_COLORS[cat]}`}
+                                        >
+                                            <span className="text-[10px] font-black uppercase tracking-widest">{cat}</span>
+                                            <ChevronRight className={`w-3 h-3 transition-transform ${expandedCategory === cat ? 'rotate-90' : ''}`} />
+                                        </button>
+                                        {expandedCategory === cat && groupedSkills[cat]?.map(skill => {
+                                            const entry = agent.skills[skill.key] || { level: 1, xp: 0 };
+                                            const xpNeeded = entry.level * 100 + entry.level * entry.level * 10;
+                                            const unlocked = getUnlockedActions(skill.key, entry.level);
+                                            return (
+                                                <div key={skill.key} className="mt-1 bg-black/20 p-2 rounded-lg border border-white/5">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-xs text-white font-bold">{skill.name}</span>
+                                                        <span className="text-[10px] text-axiom-cyan font-mono">Lv.{entry.level}</span>
+                                                    </div>
+                                                    <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden mb-1">
+                                                        <div className="h-full bg-gradient-to-r from-axiom-cyan to-blue-500 transition-all" style={{ width: `${(entry.xp / xpNeeded) * 100}%` }} />
+                                                    </div>
+                                                    <div className="text-[8px] text-gray-500 mb-1">{entry.xp}/{xpNeeded} XP</div>
+                                                    {unlocked.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {unlocked.map(action => (
+                                                                <span key={action.name} className="text-[8px] bg-white/10 text-gray-300 px-1.5 py-0.5 rounded" title={action.description}>
+                                                                    {action.name}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="w-full md:w-1/2 pl-4 border-l border-white/5">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-axiom-gold text-[10px] font-bold uppercase tracking-widest">Stat Allocation</h3>
+                                    {(agent.unspentStatPoints || 0) > 0 && (
+                                        <span className="bg-axiom-gold/20 text-axiom-gold text-[10px] font-bold px-2 py-0.5 rounded animate-pulse">
+                                            {agent.unspentStatPoints} points available
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    {statNames.map(stat => (
+                                        <div key={stat} className="flex items-center gap-3 bg-black/30 p-2.5 rounded-lg border border-white/5">
+                                            <div className="flex-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-white font-bold capitalize">{stat}</span>
+                                                    <span className="text-sm text-axiom-cyan font-mono font-bold">{(agent.stats as any)[stat] ?? 10}</span>
+                                                </div>
+                                                <span className="text-[8px] text-gray-500">{STAT_DESCRIPTIONS[stat]}</span>
+                                            </div>
+                                            {(agent.unspentStatPoints || 0) > 0 && (
+                                                <button
+                                                    onClick={() => allocateStatPoint(agent.id, stat)}
+                                                    className="w-8 h-8 bg-axiom-gold/20 hover:bg-axiom-gold/40 border border-axiom-gold/50 rounded-lg text-axiom-gold font-bold transition-all active:scale-90 flex items-center justify-center"
+                                                >
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4 bg-black/20 p-3 rounded-xl border border-white/5">
+                                    <h4 className="text-[10px] text-gray-400 font-black uppercase mb-2">Combat Stats</h4>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="flex justify-between"><span className="text-gray-500">HP</span> <span className="text-red-400">{Math.floor(agent.stats.hp)}/{agent.stats.maxHp}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-500">Mana</span> <span className="text-blue-400">{Math.floor(agent.stats.mana ?? 100)}/{agent.stats.maxMana ?? 100}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-500">STR</span> <span className="text-white">{agent.stats.str}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-500">AGI</span> <span className="text-white">{agent.stats.agi}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-500">INT</span> <span className="text-white">{agent.stats.int}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-500">VIT</span> <span className="text-white">{agent.stats.vit}</span></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     ) : (

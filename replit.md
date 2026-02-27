@@ -104,6 +104,28 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 - `VITE_FIREBASE_*` — Firebase client configuration (optional)
 - `FIREBASE_SERVICE_ACCOUNT_JSON` — Firebase Admin server-side (optional)
 
+## Classless Skill System (RuneScape-style)
+
+- **No class system** — classType is optional flavor text only, not gameplay-relevant
+- **15 skills** across 4 categories:
+  - Combat: Melee, Ranged, Magic, Defense
+  - Gathering: Mining, Woodcutting, Fishing, Herbalism
+  - Crafting: Smithing, Alchemy, Cooking, Runecrafting
+  - Utility: Agility, Thieving, Dungeoneering
+- **Skill XP**: Each action grants XP to the specific skill used (mining ore→Mining XP, killing with melee→Melee XP)
+- **Skill Actions**: Every 25 levels unlocks a new ability (Lv1, 25, 50, 75, 100) — defined in `SKILL_ACTIONS` (types.ts)
+- **Stat Points**: Every skill level-up grants 1 stat point to allocate to: Strength, Dexterity, Agility, Stamina, Health, Mana, Intelligence
+- **Stats affect gameplay**: STR→melee dmg, DEX→ranged dmg/crit, AGI→dodge/speed, STA→HP regen, HP→maxHP, MANA→spell capacity, INT→magic dmg
+- **Legacy compatibility**: Old saves with `combat`/`crafting` skills auto-migrate to `melee`/`smithing`
+
+## Player Agent Control
+
+- **Take Control**: User can control 1 agent at a time via Take Control button in AgentHUD
+- **Third-person camera**: When controlling, camera smoothly follows agent from behind/above (WorldScene.tsx ThirdPersonCamera component)
+- **Skill Action Bar**: Bottom HUD bar (SkillActionBar.tsx) showing categories → skills → unlocked actions
+- **Optimized for Android/tablets**: Large touch targets (48-56px), horizontal scrolling, HP/Mana bars
+- **controlledAgentId**: Store state tracks which agent the user is playing
+
 ## Key Design Decisions
 
 - Default user is `null` (guest) — admin handshake modal only for projectouroboroscollective@gmail.com

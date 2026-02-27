@@ -11,6 +11,7 @@ import { ChatLog } from './ChatLog';
 import { GuildPartyOverlay } from './GuildPartyOverlay';
 import { AgentManagerOverlay } from './AgentManagerOverlay';
 import { EnergyShopOverlay } from './EnergyShopOverlay';
+import { SkillActionBar } from './SkillActionBar';
 
 import { WindowHUD } from './WindowHUD';
 
@@ -31,6 +32,7 @@ const GameUI = () => {
       {windowStates.CHAT.isOpen && !windowStates.CHAT.isMinimized && <ChatLog />}
       {windowStates.AGENT_MANAGER.isOpen && !windowStates.AGENT_MANAGER.isMinimized && <AgentManagerOverlay />}
       {windowStates.ENERGY_SHOP.isOpen && !windowStates.ENERGY_SHOP.isMinimized && <EnergyShopOverlay />}
+      <SkillActionBar />
       <WindowHUD />
     </>
   );

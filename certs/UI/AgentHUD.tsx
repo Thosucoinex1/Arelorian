@@ -1,9 +1,23 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../../store';
-import { AgentState } from '../../types';
+import { AgentState, GAME_SKILLS } from '../../types';
 import { getXPForNextLevel } from '../../utils';
-import { Timer, ZapOff, Eye, Package, Swords, Pickaxe, Hammer, Brain, Zap } from 'lucide-react';
+import { Timer, ZapOff, Eye, Package, Swords, Pickaxe, Hammer, Brain, Zap, Gamepad2, LogOut, Crosshair, Sparkles, Shield, Axe } from 'lucide-react';
+
+const getSkillIcon = (iconName: string, className: string = 'w-3 h-3') => {
+  const props = { className };
+  switch (iconName) {
+    case 'Swords': return <Swords {...props} />;
+    case 'Crosshair': return <Crosshair {...props} />;
+    case 'Sparkles': return <Sparkles {...props} />;
+    case 'Shield': return <Shield {...props} />;
+    case 'Pickaxe': return <Pickaxe {...props} />;
+    case 'Axe': return <Axe {...props} />;
+    case 'Hammer': return <Hammer {...props} />;
+    default: return <Package {...props} />;
+  }
+};
 
 export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
@@ -15,6 +29,9 @@ export const AgentHUD = () => {
   const isOpen = windowStates.CHARACTER.isOpen;
   const { isMobile, isTablet, orientation } = useStore(state => state.device);
   const isLandscapeMobile = isMobile && orientation === 'landscape';
+  const controlledAgentId = useStore(state => state.controlledAgentId);
+  const takeControl = useStore(state => state.takeControl);
+  const releaseControl = useStore(state => state.releaseControl);
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -26,7 +43,6 @@ export const AgentHUD = () => {
 
   if (!agent) return null;
 
-  // Adjust positioning and sizing for mobile landscape
   const hudWidth = isMobile ? (isLandscapeMobile ? 'w-56' : 'w-64') : (isTablet ? 'w-80' : 'w-72');
   const hudTop = isLandscapeMobile ? 'top-4' : (isTablet ? 'top-10' : 'top-8');
   const hudLeft = isLandscapeMobile ? 'left-4' : (isTablet ? 'left-10' : 'left-8');
@@ -39,19 +55,11 @@ export const AgentHUD = () => {
   const bankCount = agent.bank.filter(i => i).length;
   
   const isThrottled = now < globalApiCooldown;
+  const isControlled = controlledAgentId === agent.id;
 
   const topSkills = Object.entries(agent.skills || {})
     .sort(([, a], [, b]) => b.level - a.level)
-    .slice(0, 3);
-
-  const getSkillIcon = (name: string) => {
-    switch(String(name).toLowerCase()) {
-        case 'mining': return <Pickaxe className="w-3 h-3" />;
-        case 'combat': return <Swords className="w-3 h-3" />;
-        case 'crafting': return <Hammer className="w-3 h-3" />;
-        default: return <Package className="w-3 h-3" />;
-    }
-  };
+    .slice(0, 5);
 
   return (
     <div className={`fixed ${hudTop} ${hudLeft} pointer-events-auto transition-all duration-300 z-50 ${hudWidth}`}>
@@ -72,6 +80,16 @@ export const AgentHUD = () => {
                 <div className={`flex items-center space-x-2 ${isTablet ? 'text-xs' : 'text-[10px]'} mb-3`}>
                     <span className="bg-white/10 px-2 py-0.5 rounded text-axiom-cyan uppercase tracking-tighter">LVL {String(agent.level || 1)}</span>
 
+                    {(agent.unspentStatPoints || 0) > 0 && (
+                        <span className="bg-axiom-gold/20 px-2 py-0.5 rounded text-axiom-gold font-bold animate-pulse">+{agent.unspentStatPoints} SP</span>
+                    )}
+
+                    {isControlled && (
+                        <span className="bg-green-500/20 px-2 py-0.5 rounded text-green-400 font-bold flex items-center gap-1">
+                            <Gamepad2 className="w-3 h-3" /> PLAYING
+                        </span>
+                    )}
+
                     {agent.isAwakened && (
                         <div className="flex items-center gap-1">
                             <span className={`${isTablet ? 'text-xs' : 'text-[10px]'} font-black uppercase flex items-center gap-1 ${agent.apiQuotaExceeded || isThrottled ? 'text-red-500 animate-pulse' : 'text-axiom-gold'}`}>
@@ -85,7 +103,6 @@ export const AgentHUD = () => {
                     )}
                 </div>
 
-                {/* XP PROGRESS SECTION */}
                 <div className="mb-4">
                     <div className={`flex justify-between ${isTablet ? 'text-[11px]' : 'text-[9px]'} text-gray-500 uppercase font-black mb-1`}>
                         <span>Experience</span>
@@ -99,7 +116,6 @@ export const AgentHUD = () => {
                     </div>
                 </div>
 
-                {/* Cognitive Trace - FIXED ERROR #31 */}
                 {agent.lastDecision && (
                     <div className={`mb-4 bg-axiom-cyan/5 border border-axiom-cyan/20 p-2 rounded ${isTablet ? 'text-[11px]' : 'text-[9px]'} italic text-cyan-100 leading-tight`}>
                         <div className="flex items-center gap-1 mb-1 not-italic font-black text-axiom-cyan uppercase">
@@ -111,17 +127,22 @@ export const AgentHUD = () => {
                     </div>
                 )}
 
-                {/* SKILLS SECTION */}
-                <div className="grid grid-cols-3 gap-1 mb-4">
-                    {topSkills.map(([name, skill]) => (
-                        <div key={name} className="bg-black/40 p-1.5 rounded border border-white/5 flex flex-col items-center">
-                            <span className="text-[7px] text-gray-500 uppercase font-black">{String(name)}</span>
-                            <div className="flex items-center gap-1 text-white">
-                                {getSkillIcon(name)}
-                                <span className="text-[10px] font-bold">{String(skill.level)}</span>
+                <div className="space-y-1 mb-4">
+                    <div className={`${isTablet ? 'text-[10px]' : 'text-[8px]'} text-gray-500 uppercase font-black mb-1`}>Top Skills</div>
+                    {topSkills.map(([name, skill]) => {
+                        const def = GAME_SKILLS[name];
+                        const xpNeeded = skill.level * 100 + skill.level * skill.level * 10;
+                        return (
+                            <div key={name} className="flex items-center gap-2 bg-black/30 px-2 py-1 rounded">
+                                {def && getSkillIcon(def.icon, 'w-3 h-3 text-gray-400')}
+                                <span className="text-[9px] text-gray-300 flex-1">{def?.name || name}</span>
+                                <span className="text-[10px] text-white font-bold">{String(skill.level)}</span>
+                                <div className="w-12 h-1 bg-black/40 rounded-full overflow-hidden">
+                                    <div className="h-full bg-axiom-cyan transition-all" style={{ width: `${(skill.xp / xpNeeded) * 100}%` }} />
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-4">
@@ -191,6 +212,21 @@ export const AgentHUD = () => {
                 </div>
                 
                 <div className="flex flex-col gap-2">
+                    {isControlled ? (
+                        <button 
+                            onClick={() => releaseControl()}
+                            className="w-full bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 text-red-400 text-[10px] font-bold py-2.5 rounded transition-colors uppercase tracking-wider active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            <LogOut className="w-3.5 h-3.5" /> Release Control
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => takeControl(agent.id)}
+                            className="w-full bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 text-green-400 text-[10px] font-bold py-2.5 rounded transition-colors uppercase tracking-wider active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            <Gamepad2 className="w-3.5 h-3.5" /> Take Control
+                        </button>
+                    )}
                     <div className="flex space-x-2">
                         <button 
                             onClick={() => toggleWindow('CHARACTER', true)}

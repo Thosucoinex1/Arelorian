@@ -292,7 +292,6 @@ export const importAgentFromSource = async (
           - name: string
           - personality: string (in thinkingMatrix)
           - currentLongTermGoal: string (in thinkingMatrix)
-          - classType: string (e.g., MAGE, WARRIOR, ROGUE, SCHOLAR)
           - faction: 'PLAYER' | 'ANOMALY' | 'CREATURE' | 'SYSTEM' | 'NPC'
           - loreSnippet: string (a short background story)
           
@@ -306,7 +305,6 @@ export const importAgentFromSource = async (
           type: Type.OBJECT,
           properties: {
             name: { type: Type.STRING },
-            classType: { type: Type.STRING },
             faction: { type: Type.STRING },
             loreSnippet: { type: Type.STRING },
             thinkingMatrix: {
@@ -334,7 +332,7 @@ export const importAgentFromSource = async (
               }
             }
           },
-          required: ["name", "classType", "faction", "thinkingMatrix"]
+          required: ["name", "faction", "thinkingMatrix"]
         }
       }
     }));

@@ -389,6 +389,40 @@ const SceneManager = () => {
     return null;
 };
 
+const ThirdPersonCamera = () => {
+    const controlledAgentId = useStore(state => state.controlledAgentId);
+    const agents = useStore(state => state.agents);
+    const controlsRef = useRef<any>(null);
+
+    useFrame((state) => {
+        if (!controlledAgentId) return;
+        const agent = agents.find(a => a.id === controlledAgentId);
+        if (!agent) return;
+
+        const targetPos = new THREE.Vector3(agent.position[0], agent.position[1] + 2, agent.position[2]);
+        const camOffset = new THREE.Vector3(0, 12, 20);
+        const desiredCamPos = targetPos.clone().add(camOffset);
+
+        state.camera.position.lerp(desiredCamPos, 0.05);
+        state.camera.lookAt(targetPos);
+
+        if (controlsRef.current) {
+            controlsRef.current.target.lerp(targetPos, 0.1);
+        }
+    });
+
+    return (
+        <OrbitControls 
+            ref={controlsRef}
+            maxDistance={controlledAgentId ? 30 : 120} 
+            minDistance={controlledAgentId ? 5 : 10} 
+            maxPolarAngle={Math.PI / 2.1} 
+            enableDamping 
+            enablePan={!controlledAgentId}
+        />
+    );
+};
+
 const WorldScene = () => {
     const agents = useStore(state => state.agents);
     const monsters = useStore(state => state.monsters);
@@ -398,14 +432,11 @@ const WorldScene = () => {
     const emergenceSettings = useStore(state => state.emergenceSettings);
     const generateAxiomaticChunk = useStore(state => state.generateAxiomaticChunk);
 
-    // Physics-based Axiomatic Activation
     useEffect(() => {
         if (!emergenceSettings.physicsBasedActivation || !emergenceSettings.axiomaticWorldGeneration) return;
 
         const interval = setInterval(() => {
             for (const agent of agents) {
-                // Check surrounding chunks for all agents, not just player
-                // This ensures the world expands as any agent explores
                 const currentChunkX = Math.floor((agent.position[0] + 40) / 80);
                 const currentChunkZ = Math.floor((agent.position[2] + 40) / 80);
 
@@ -431,7 +462,7 @@ const WorldScene = () => {
             <Suspense fallback={null}>
                 <SceneManager />
                 <color attach="background" args={['#050505']} /> 
-                <OrbitControls maxDistance={120} minDistance={10} maxPolarAngle={Math.PI / 2.1} enableDamping />
+                <ThirdPersonCamera />
                 <ambientLight intensity={0.4} />
                 <directionalLight position={[100, 150, 100]} intensity={1.5} castShadow />
                 <DynamicSky />

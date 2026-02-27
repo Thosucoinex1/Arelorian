@@ -210,7 +210,7 @@ export const calculateAxiomaticWeightWithReason = (
             const canCraft = bankCount > 5 || invCount > 5;
             if (canCraft) {
                 const goalBonus = checkGoal("craft") || checkGoal("produce") ? 1.4 : 1.0;
-                baseUtility = (100 + (agent.skills['crafting']?.level || 1) * 10) * goalBonus;
+                baseUtility = (100 + (agent.skills['smithing']?.level || agent.skills['crafting']?.level || 1) * 10) * goalBonus;
                 reason = "Materialien für Produktion vorhanden.";
             }
             break;

@@ -74,7 +74,7 @@ export const AgentManagerOverlay = () => {
                       }} />
                     </div>
                     <p className="text-[10px] text-white font-bold truncate text-center">{data.agent.name}</p>
-                    <p className="text-[8px] text-gray-500 text-center uppercase">Lv.{data.agent.level} {data.agent.classType}</p>
+                    <p className="text-[8px] text-gray-500 text-center uppercase">Lv.{data.agent.level}</p>
                     <button
                       onClick={(e) => { e.stopPropagation(); removeImportedAgent(data.meta.agentId); soundManager.playUI('CLICK'); }}
                       className="absolute -top-1 -right-1 bg-red-500/80 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -107,7 +107,7 @@ export const AgentManagerOverlay = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-white font-bold text-xs">{agent.name}</span>
-                        <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-bold">{agent.classType}</span>
+                        <span className="text-[8px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-bold">Lv.{agent.level}</span>
                       </div>
                       <p className="text-[10px] text-gray-400 truncate mb-2">{agent.thinkingMatrix.personality} — {agent.thinkingMatrix.currentLongTermGoal}</p>
                       <div className="flex gap-3 text-[9px]">
