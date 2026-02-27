@@ -77,6 +77,7 @@ interface GameState {
     height: number;
     isAndroid: boolean;
   };
+  inputAxis: { x: number; y: number };
   updateScreenSize: () => void;
   lastLocalThinkTime: number;
   lastSaveTime: number;
@@ -203,6 +204,7 @@ export const useStore = create<GameState>((set, get) => ({
   graphicPacks: ['Default Architecture'],
   userApiKey: localStorage.getItem('OUROBOROS_API_KEY'),
   matrixEnergy: 100,
+  inputAxis: { x: 0, y: 0 },
   globalApiCooldown: 0,
   market: {
     prices: { WOOD: 5, STONE: 8, IRON_ORE: 15, SILVER_ORE: 40, GOLD_ORE: 100, DIAMOND: 500, ANCIENT_RELIC: 1000, SUNLEAF_HERB: 25 },
@@ -746,6 +748,16 @@ export const useStore = create<GameState>((set, get) => ({
                 }
             }
         });
+
+        const isControlled = a.id === state.controlledAgentId;
+        const input = state.inputAxis;
+        if (isControlled && (Math.abs(input.x) > 0.01 || Math.abs(input.y) > 0.01)) {
+          newPos[0] += input.x * moveSpeed * delta;
+          newPos[2] += input.y * moveSpeed * delta;
+          if (Math.abs(input.x) > 0.1 || Math.abs(input.y) > 0.1) {
+            a = { ...a, rotationY: Math.atan2(input.x, input.y) };
+          }
+        }
 
         let targetPos: [number, number, number] | null = null;
         let targetedResourceNode: ResourceNode | undefined = undefined;
@@ -1973,6 +1985,8 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => {
-    console.log(`Joystick ${side} moved:`, axis);
+    if (side === 'left') {
+      set({ inputAxis: axis });
+    }
   }
 }));

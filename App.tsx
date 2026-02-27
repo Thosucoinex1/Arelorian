@@ -16,6 +16,7 @@ import OsccDashboard from './certs/UI/OsccDashboard';
 import LandingPage from './certs/UI/LandingPage';
 import CharacterCreation from './certs/UI/CharacterCreation';
 import TutorialOverlay from './certs/UI/TutorialOverlay';
+import { VirtualJoysticks } from './certs/UI/VirtualJoysticks';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
@@ -174,18 +175,48 @@ const GameApp = () => {
       setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
     }
 
+    const keysPressed = new Set<string>();
+    const updateInput = () => {
+      const state = useStore.getState();
+      if (!state.controlledAgentId) return;
+      let x = 0, y = 0;
+      if (keysPressed.has('a') || keysPressed.has('arrowleft')) x -= 1;
+      if (keysPressed.has('d') || keysPressed.has('arrowright')) x += 1;
+      if (keysPressed.has('w') || keysPressed.has('arrowup')) y -= 1;
+      if (keysPressed.has('s') || keysPressed.has('arrowdown')) y += 1;
+      const len = Math.hypot(x, y);
+      if (len > 0) { x /= len; y /= len; }
+      state.setJoystick('left', { x, y });
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === '`') {
         const state = useStore.getState();
         state.toggleDeveloperTools(!state.showDeveloperTools);
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        keysPressed.add(k);
+        updateInput();
       }
     };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      keysPressed.delete(k);
+      updateInput();
+    };
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
   }, [initGame, setUserApiKey, updateScreenSize, storeUser, setUser]);
   useEffect(() => { if (storeUser?.email === ADMIN_EMAIL && !isAxiomAuthenticated) setShowInitialHandshake(true); }, [storeUser?.email, isAxiomAuthenticated]);
@@ -288,14 +319,13 @@ const GameApp = () => {
       </ErrorBoundary>
       
       <TutorialOverlay />
+      <VirtualJoysticks />
       
       {showDeveloperTools && (
         <ErrorBoundary name="Developer Tools">
           <DeveloperTools />
         </ErrorBoundary>
       )} 
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(0,0,0,0.5)_100%)] z-10" />
-      <div className="fixed inset-0 pointer-events-none border-[20px] border-white/5 z-50" />
       
       {isAdmin && (
         <button 

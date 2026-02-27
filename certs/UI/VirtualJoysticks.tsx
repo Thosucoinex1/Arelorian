@@ -86,10 +86,11 @@ const Joystick = ({ side }: { side: 'left' | 'right' }) => {
     const containerStyle: React.CSSProperties = {
         position: 'absolute',
         bottom: '5%',
-        width: '40%',
-        height: '40%',
-        [side]: '5%',
+        width: '35%',
+        height: '35%',
+        [side]: '2%',
         zIndex: 50,
+        pointerEvents: 'auto',
     };
 
     const baseStyle: React.CSSProperties = {
@@ -147,7 +148,7 @@ export const VirtualJoysticks = () => {
     if (!isMobile && !isTablet) return null;
 
     return (
-        <div className="absolute inset-0 pointer-events-auto z-30">
+        <div className="absolute inset-0 pointer-events-none z-30">
             <Joystick side="left" />
             <Joystick side="right" />
         </div>

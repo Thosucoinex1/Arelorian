@@ -207,6 +207,11 @@ Admin dashboard accessible at `/oscc` with military-grade security.
 
 - **Take Control**: User controls 1 agent via Take Control button in AgentHUD
 - **Third-person camera**: Smooth follow from behind/above
+- **WASD / Arrow Keys**: Keyboard movement for desktop (normalized diagonal, skip when in text inputs)
+- **Virtual Joysticks**: Touch joystick for mobile/tablet via `certs/UI/VirtualJoysticks.tsx`
+  - Left joystick: movement (wired to `store.inputAxis` → `updatePhysics`)
+  - Right joystick: camera (reserved)
+  - Auto-detects mobile/tablet via userAgent
 - **Skill Action Bar**: Bottom HUD bar with categories → skills → unlocked actions
 - **Optimized for Android/tablets**: Large touch targets (48-56px)
 

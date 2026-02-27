@@ -118,28 +118,104 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
         <group position={[poi.position[0], poi.position[1], poi.position[2]]} ref={meshRef} onClick={(e) => { e.stopPropagation(); selectPoi(poi.id); }}>
             <mesh scale={[isVisible ? 1 : 0.8, isVisible ? 1 : 0.8, isVisible ? 1 : 0.8]}>
                 {poi.type === 'MARKET_STALL' && (
-                    <mesh castShadow receiveShadow>
-                        <boxGeometry args={[3, 1, 3]} />
-                        <meshStandardMaterial color={getPOIColor()} roughness={0.7} metalness={0.1} />
-                    </mesh>
+                    <group>
+                        <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[3.5, 1, 2.5]} />
+                            <meshStandardMaterial color="#8B6914" roughness={0.85} metalness={0.05} />
+                        </mesh>
+                        <mesh position={[-1.5, 1.8, 0]} castShadow>
+                            <cylinderGeometry args={[0.08, 0.08, 2.6]} />
+                            <meshStandardMaterial color="#5C4033" roughness={0.9} metalness={0} />
+                        </mesh>
+                        <mesh position={[1.5, 1.8, 0]} castShadow>
+                            <cylinderGeometry args={[0.08, 0.08, 2.6]} />
+                            <meshStandardMaterial color="#5C4033" roughness={0.9} metalness={0} />
+                        </mesh>
+                        <mesh position={[0, 3.2, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[4, 0.1, 3]} />
+                            <meshStandardMaterial color="#C41E3A" roughness={0.7} metalness={0.05} />
+                        </mesh>
+                        <mesh position={[0, 3.15, -1.5]} castShadow>
+                            <boxGeometry args={[4, 0.2, 0.08]} />
+                            <meshStandardMaterial color="#FFD700" roughness={0.3} metalness={0.6} />
+                        </mesh>
+                        <mesh position={[-0.8, 1.3, 0]} castShadow>
+                            <sphereGeometry args={[0.2, 8, 8]} />
+                            <meshStandardMaterial color="#FF6347" roughness={0.6} metalness={0.1} />
+                        </mesh>
+                        <mesh position={[0, 1.3, 0]} castShadow>
+                            <sphereGeometry args={[0.2, 8, 8]} />
+                            <meshStandardMaterial color="#FFD700" roughness={0.6} metalness={0.1} />
+                        </mesh>
+                        <mesh position={[0.8, 1.3, 0]} castShadow>
+                            <sphereGeometry args={[0.18, 8, 8]} />
+                            <meshStandardMaterial color="#32CD32" roughness={0.6} metalness={0.1} />
+                        </mesh>
+                    </group>
                 )}
                 {poi.type === 'TREE' && (
                     <group>
-                        <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
-                            <cylinderGeometry args={[0.2, 0.4, 3]} />
-                            <meshStandardMaterial color="#422006" roughness={0.9} metalness={0} />
+                        <mesh position={[0, 2, 0]} castShadow receiveShadow>
+                            <cylinderGeometry args={[0.15, 0.35, 4]} />
+                            <meshStandardMaterial color="#3B2507" roughness={0.95} metalness={0} />
                         </mesh>
-                        <mesh position={[0, 3.5, 0]} castShadow receiveShadow>
-                            <coneGeometry args={[1.5, 3, 8]} />
-                            <meshStandardMaterial color={getPOIColor()} roughness={0.8} metalness={0} />
+                        <mesh position={[0, 5, 0]} castShadow receiveShadow>
+                            <sphereGeometry args={[2.2, 8, 6]} />
+                            <meshStandardMaterial color="#1A5C1A" roughness={0.85} metalness={0} />
+                        </mesh>
+                        <mesh position={[0.8, 4.2, 0.6]} castShadow>
+                            <sphereGeometry args={[1.4, 7, 5]} />
+                            <meshStandardMaterial color="#2D7A2D" roughness={0.8} metalness={0} />
+                        </mesh>
+                        <mesh position={[-0.6, 4.5, -0.5]} castShadow>
+                            <sphereGeometry args={[1.3, 7, 5]} />
+                            <meshStandardMaterial color="#1E6B1E" roughness={0.82} metalness={0} />
                         </mesh>
                     </group>
                 )}
                 {poi.type === 'BUILDING' && (
-                    <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
-                        <boxGeometry args={[4, 5, 4]} />
-                        <meshStandardMaterial color={getPOIColor()} roughness={0.6} metalness={0.2} />
-                    </mesh>
+                    <group>
+                        <mesh position={[0, 2, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[5, 4, 4.5]} />
+                            <meshStandardMaterial color="#8B7355" roughness={0.85} metalness={0.05} />
+                        </mesh>
+                        <mesh position={[0, 4.2, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[5.4, 0.3, 4.9]} />
+                            <meshStandardMaterial color="#6B4226" roughness={0.9} metalness={0} />
+                        </mesh>
+                        <mesh position={[0, 5.5, 0]} castShadow receiveShadow rotation={[0, 0, 0]}>
+                            <coneGeometry args={[3.8, 2.5, 4]} />
+                            <meshStandardMaterial color="#8B2500" roughness={0.8} metalness={0.05} />
+                        </mesh>
+                        <mesh position={[0, 0.8, 2.26]} receiveShadow>
+                            <boxGeometry args={[1.0, 1.6, 0.08]} />
+                            <meshStandardMaterial color="#3B2507" roughness={0.9} metalness={0.1} />
+                        </mesh>
+                        <mesh position={[0.35, 0.85, 2.27]}>
+                            <sphereGeometry args={[0.06, 8, 8]} />
+                            <meshStandardMaterial color="#C5A53A" roughness={0.3} metalness={0.8} />
+                        </mesh>
+                        <mesh position={[-1.8, 2.2, 2.26]} receiveShadow>
+                            <boxGeometry args={[0.8, 0.9, 0.08]} />
+                            <meshStandardMaterial color="#87CEEB" roughness={0.2} metalness={0.1} transparent opacity={0.6} />
+                        </mesh>
+                        <mesh position={[-1.8, 2.2, 2.27]}>
+                            <boxGeometry args={[0.82, 0.92, 0.02]} />
+                            <meshStandardMaterial color="#5C4033" roughness={0.9} metalness={0} wireframe />
+                        </mesh>
+                        <mesh position={[1.8, 2.2, 2.26]} receiveShadow>
+                            <boxGeometry args={[0.8, 0.9, 0.08]} />
+                            <meshStandardMaterial color="#87CEEB" roughness={0.2} metalness={0.1} transparent opacity={0.6} />
+                        </mesh>
+                        <mesh position={[1.8, 2.2, 2.27]}>
+                            <boxGeometry args={[0.82, 0.92, 0.02]} />
+                            <meshStandardMaterial color="#5C4033" roughness={0.9} metalness={0} wireframe />
+                        </mesh>
+                        <mesh position={[2.51, 2.2, 0]} receiveShadow>
+                            <boxGeometry args={[0.08, 0.9, 0.8]} />
+                            <meshStandardMaterial color="#87CEEB" roughness={0.2} metalness={0.1} transparent opacity={0.6} />
+                        </mesh>
+                    </group>
                 )}
                 {poi.type === 'RUIN' && (
                     <mesh position={[0, 1, 0]} castShadow>
@@ -577,7 +653,7 @@ const HumanoidAgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void
     return (
         <group
             ref={groupRef}
-            position={[agent.position[0], agent.position[1], agent.position[2]]}
+            position={[agent.position[0], agent.position[1] + 0.8, agent.position[2]]}
             rotation={[0, agent.rotationY, 0]}
             onClick={(e) => { e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}
             castShadow
