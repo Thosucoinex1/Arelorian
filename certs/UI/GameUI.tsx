@@ -10,26 +10,24 @@ import { InspectorPanel } from './InspectorPanel';
 import { ChatLog } from './ChatLog';
 import { GuildPartyOverlay } from './GuildPartyOverlay';
 
+import { WindowHUD } from './WindowHUD';
+
 const GameUI = () => {
-  const showCharacterSheet = useStore(state => state.showCharacterSheet);
-  const showAdmin = useStore(state => state.showAdmin);
-  const showMap = useStore(state => state.showMap);
-  const showMarket = useStore(state => state.showMarket);
-  const showAuctionHouse = useStore(state => state.showAuctionHouse);
-  const showQuests = useStore(state => state.showQuests);
+  const windowStates = useStore(state => state.windowStates);
 
   return (
     <>
-      {showCharacterSheet && <CharacterSheet />}
-      {showAdmin && <AdminDashboard />}
-      {showMap && <WorldMap />}
-      {showMarket && <MarketOverlay />}
-      {showAuctionHouse && <AuctionHouseOverlay />}
-      {showQuests && <QuestBoardOverlay />}
+      {windowStates.CHARACTER.isOpen && !windowStates.CHARACTER.isMinimized && <CharacterSheet />}
+      {windowStates.ADMIN.isOpen && !windowStates.ADMIN.isMinimized && <AdminDashboard />}
+      {windowStates.MAP.isOpen && !windowStates.MAP.isMinimized && <WorldMap />}
+      {windowStates.MARKET.isOpen && !windowStates.MARKET.isMinimized && <MarketOverlay />}
+      {windowStates.AUCTION.isOpen && !windowStates.AUCTION.isMinimized && <AuctionHouseOverlay />}
+      {windowStates.QUESTS.isOpen && !windowStates.QUESTS.isMinimized && <QuestBoardOverlay />}
       <EventOverlay />
-      <InspectorPanel />
-      <GuildPartyOverlay />
-      <ChatLog />
+      {windowStates.INSPECTOR.isOpen && !windowStates.INSPECTOR.isMinimized && <InspectorPanel />}
+      {windowStates.GUILD_PARTY.isOpen && !windowStates.GUILD_PARTY.isMinimized && <GuildPartyOverlay />}
+      {windowStates.CHAT.isOpen && !windowStates.CHAT.isMinimized && <ChatLog />}
+      <WindowHUD />
     </>
   );
 };

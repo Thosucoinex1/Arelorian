@@ -1,7 +1,9 @@
 import { useStore } from '../../store';
-import { X } from 'lucide-react';
+import { X, Minus } from 'lucide-react';
 
 export const InspectorPanel = () => {
+  const toggleWindow = useStore(state => state.toggleWindow);
+  const minimizeWindow = useStore(state => state.minimizeWindow);
   const selectedAgentId = useStore(state => state.selectedAgentId);
   const agents = useStore(state => state.agents);
   const selectedChunkId = useStore(state => state.selectedChunkId);
@@ -22,10 +24,10 @@ export const InspectorPanel = () => {
   const isLandscapeMobile = isMobile && orientation === 'landscape';
 
   const handleClose = () => {
-    selectAgent(null);
-    setSelectedChunk(null);
-    useStore.getState().selectMonster(null);
-    useStore.getState().selectPoi(null);
+    // selectAgent(null);
+    // setSelectedChunk(null);
+    // useStore.getState().selectMonster(null);
+    // useStore.getState().selectPoi(null);
   };
 
   if (!selectedAgent && !selectedChunk && !selectedMonster && !selectedPoi) {
@@ -36,16 +38,29 @@ export const InspectorPanel = () => {
   const panelPosition = isMobile 
     ? (isLandscapeMobile ? 'top-4 right-4 translate-y-0' : 'bottom-4 left-1/2 -translate-x-1/2 translate-y-0') 
     : 'top-1/2 right-8 -translate-y-1/2';
-  const panelMaxHeight = isMobile ? (isLandscapeMobile ? screenHeight - 32 : 400) : 'none';
+  const panelMaxHeight = isMobile ? (isLandscapeMobile ? window.innerHeight - 32 : 400) : 'none';
 
   return (
     <div 
       className={`fixed ${panelPosition} z-50 bg-axiom-dark/90 backdrop-blur-md p-6 rounded-2xl border border-axiom-cyan/30 shadow-2xl ${panelWidth} animate-in fade-in slide-in-from-right-4 duration-300 overflow-y-auto custom-scrollbar`}
       style={{ maxHeight: panelMaxHeight !== 'none' ? `${panelMaxHeight}px` : 'none' }}
     >
-      <button onClick={handleClose} className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors">
-        <X size={20} />
-      </button>
+      <div className="absolute top-4 right-4 flex gap-2">
+        <button 
+          onClick={() => minimizeWindow('INSPECTOR')} 
+          className="text-gray-500 hover:text-white transition-colors"
+          title="Minimize"
+        >
+          <Minus size={18} />
+        </button>
+        <button 
+          onClick={() => toggleWindow('INSPECTOR', false)} 
+          className="text-gray-500 hover:text-white transition-colors"
+          title="Close"
+        >
+          <X size={20} />
+        </button>
+      </div>
       {selectedAgent && (
         <div className="space-y-4">
           <div>

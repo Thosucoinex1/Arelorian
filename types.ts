@@ -354,3 +354,10 @@ export interface StoreProduct {
     description: string;
     priceEUR: number;
 }
+
+export type WindowType = 'MARKET' | 'QUESTS' | 'ADMIN' | 'MAP' | 'CHARACTER' | 'AUCTION' | 'INSPECTOR' | 'CHAT' | 'GUILD_PARTY';
+
+export interface WindowState {
+  isOpen: boolean;
+  isMinimized: boolean;
+}

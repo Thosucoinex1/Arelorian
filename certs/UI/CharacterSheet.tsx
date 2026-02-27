@@ -182,11 +182,13 @@ const ActiveSetBonuses: React.FC<{ agent: Agent }> = ({ agent }) => {
     );
 };
 
+import { Minus, X } from 'lucide-react';
+
 export const CharacterSheet = () => {
     const selectedAgentId = useStore(state => state.selectedAgentId);
     const agents = useStore(state => state.agents);
-    const showCharacterSheet = useStore(state => state.showCharacterSheet);
-    const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
+    const toggleWindow = useStore(state => state.toggleWindow);
+    const minimizeWindow = useStore(state => state.minimizeWindow);
     const equipItem = useStore(state => state.equipItem);
     const unequipItem = useStore(state => state.unequipItem);
     const moveInventoryItem = useStore(state => state.moveInventoryItem);
@@ -197,7 +199,7 @@ export const CharacterSheet = () => {
     const [tooltip, setTooltip] = useState<{item: Item, pos: {x: number, y: number}} | null>(null);
     const [activeTab, setActiveTab] = useState<'GEAR' | 'MEMORY'>('GEAR');
 
-    if (!showCharacterSheet || !agent) return null;
+    if (!agent) return null;
 
     const handleEquip = (item: Item, index: number) => {
         equipItem(agent.id, item, index);
@@ -241,7 +243,22 @@ export const CharacterSheet = () => {
                             Axiom Memory
                         </button>
                     </div>
-                    <button onClick={() => toggleCharacterSheet(false)} className="text-gray-500 hover:text-white p-4">✕</button>
+                    <div className="flex items-center">
+                        <button 
+                            onClick={() => minimizeWindow('CHARACTER')} 
+                            className="text-gray-500 hover:text-white p-4 transition-colors"
+                            title="Minimize"
+                        >
+                            <Minus className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => toggleWindow('CHARACTER', false)} 
+                            className="text-gray-500 hover:text-white p-4 transition-colors"
+                            title="Close"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-hidden p-6">

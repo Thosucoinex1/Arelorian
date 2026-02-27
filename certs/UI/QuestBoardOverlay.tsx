@@ -1,20 +1,20 @@
 
 import { useStore } from '../../store';
-import { X, ScrollText, MapPin, ShieldAlert, Zap, CheckCircle2 } from 'lucide-react';
+import { X, ScrollText, MapPin, ShieldAlert, Zap, CheckCircle2, Minus } from 'lucide-react';
 
 export const QuestBoardOverlay = () => {
-  const isOpen = useStore(state => state.showQuests);
-  const toggleQuests = useStore(state => state.toggleQuests);
+  const toggleWindow = useStore(state => state.toggleWindow);
+  const minimizeWindow = useStore(state => state.minimizeWindow);
   const quests = useStore(state => state.quests);
   const acceptQuest = useStore(state => state.acceptQuest);
   const agents = useStore(state => state.agents);
   const currentUserAgent = agents.find(a => a.faction === 'PLAYER');
 
-  if (!isOpen) return null;
+  if (false) return null; // Logic handled by GameUI
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-8 pointer-events-none">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => toggleQuests(false)} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => toggleWindow('QUESTS', false)} />
       
       <div className="w-full max-w-4xl bg-axiom-dark/95 border border-axiom-purple/30 rounded-2xl shadow-[0_0_50px_rgba(168,85,247,0.2)] flex flex-col overflow-hidden pointer-events-auto animate-in zoom-in-95 duration-300">
         {/* Header */}
@@ -28,12 +28,22 @@ export const QuestBoardOverlay = () => {
               <p className="text-[10px] text-axiom-purple font-mono tracking-widest uppercase opacity-60">Logic Stabilization: Active Tasks</p>
             </div>
           </div>
-          <button 
-            onClick={() => toggleQuests(false)}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
-          >
-            <X size={24} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => minimizeWindow('QUESTS')}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+              title="Minimize"
+            >
+              <Minus size={20} />
+            </button>
+            <button 
+              onClick={() => toggleWindow('QUESTS', false)}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+              title="Close"
+            >
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}

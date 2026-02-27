@@ -9,11 +9,10 @@ export const AgentHUD = () => {
   const selectedAgentId = useStore(state => state.selectedAgentId);
   const agents = useStore(state => state.agents);
   const selectAgent = useStore(state => state.selectAgent);
-  const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
-  const toggleAuctionHouse = useStore(state => state.toggleAuctionHouse);
-  const toggleQuests = useStore(state => state.toggleQuests);
+  const toggleWindow = useStore(state => state.toggleWindow);
   const globalApiCooldown = useStore(state => state.globalApiCooldown);
-  const isOpen = useStore(state => state.showCharacterSheet);
+  const windowStates = useStore(state => state.windowStates);
+  const isOpen = windowStates.CHARACTER.isOpen;
   const { isMobile, isTablet, orientation } = useStore(state => state.device);
   const isLandscapeMobile = isMobile && orientation === 'landscape';
 
@@ -31,7 +30,7 @@ export const AgentHUD = () => {
   const hudWidth = isMobile ? (isLandscapeMobile ? 'w-56' : 'w-64') : (isTablet ? 'w-80' : 'w-72');
   const hudTop = isLandscapeMobile ? 'top-4' : (isTablet ? 'top-10' : 'top-8');
   const hudLeft = isLandscapeMobile ? 'left-4' : (isTablet ? 'left-10' : 'left-8');
-  const maxHeight = screenHeight - (isLandscapeMobile ? 32 : 128);
+  const maxHeight = window.innerHeight - (isLandscapeMobile ? 32 : 128);
 
   const SCAN_COOLDOWN = 30 * 60 * 1000;
   const timeSinceLastScan = now - agent.lastScanTime;
@@ -194,7 +193,7 @@ export const AgentHUD = () => {
                 <div className="flex flex-col gap-2">
                     <div className="flex space-x-2">
                         <button 
-                            onClick={() => toggleCharacterSheet(true)}
+                            onClick={() => toggleWindow('CHARACTER', true)}
                             className="flex-1 bg-axiom-purple/20 hover:bg-axiom-purple/40 border border-axiom-purple/50 text-axiom-purple text-[10px] font-bold py-2 rounded transition-colors uppercase tracking-wider active:scale-95"
                         >
                             Neural Matrix
@@ -208,13 +207,13 @@ export const AgentHUD = () => {
                     </div>
                     <div className="flex space-x-2">
                         <button 
-                            onClick={() => toggleAuctionHouse(true)}
+                            onClick={() => toggleWindow('AUCTION', true)}
                             className="flex-1 bg-axiom-gold/10 hover:bg-axiom-gold/20 border border-axiom-gold/30 text-axiom-gold text-[9px] font-bold py-1.5 rounded transition-colors uppercase tracking-widest active:scale-95"
                         >
                             Auction House
                         </button>
                         <button 
-                            onClick={() => toggleQuests(true)}
+                            onClick={() => toggleWindow('QUESTS', true)}
                             className="flex-1 bg-axiom-cyan/10 hover:bg-axiom-cyan/20 border border-axiom-cyan/30 text-axiom-cyan text-[9px] font-bold py-1.5 rounded transition-colors uppercase tracking-widest active:scale-95"
                         >
                             Quest Board

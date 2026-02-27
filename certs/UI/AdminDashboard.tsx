@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../store';
 import { soundManager } from '../../services/SoundManager';
-import { Brain, Zap, Database } from 'lucide-react';
+import { Brain, Zap, Database, Minus, X } from 'lucide-react';
 
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
 
@@ -11,8 +11,8 @@ const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
  * Restricted to projectouroboroscollective@gmail.com.
  */
 export const AdminDashboard = () => {
-    const showAdmin = useStore(state => state.showAdmin);
-    const toggleAdmin = useStore(state => state.toggleAdmin);
+    const toggleWindow = useStore(state => state.toggleWindow);
+    const minimizeWindow = useStore(state => state.minimizeWindow);
     const serverStats = useStore(state => state.serverStats);
     const graphicPacks = useStore(state => state.graphicPacks);
     const uploadGraphicPack = useStore(state => state.uploadGraphicPack);
@@ -31,13 +31,11 @@ export const AdminDashboard = () => {
     const [fetchDataMessage, setFetchDataMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
     useEffect(() => {
-        if (showAdmin) {
-            fetch('/api/health')
-                .then(res => res.json())
-                .then(data => setBackendStatus(data))
-                .catch(err => console.error("Failed to fetch backend status", err));
-        }
-    }, [showAdmin]);
+        fetch('/api/health')
+            .then(res => res.json())
+            .then(data => setBackendStatus(data))
+            .catch(err => console.error("Failed to fetch backend status", err));
+    }, []);
 
     // Security Gate: Memoized check for admin status
     const hasAccess = useMemo(() => {
@@ -45,7 +43,7 @@ export const AdminDashboard = () => {
     }, [user?.email, isAxiomAuthenticated]);
 
     // If visibility is off, or the user is not the authorized admin, do not render.
-    if (!showAdmin || !hasAccess) return null;
+    if (!hasAccess) return null;
 
     const handleImport = () => {
         if (!importSource) return;
@@ -81,12 +79,22 @@ export const AdminDashboard = () => {
                         <h2 className="text-2xl font-serif font-black text-white tracking-[0.2em] uppercase">Matrix Overseer</h2>
                         <p className="text-[10px] text-axiom-cyan font-mono tracking-widest mt-1">[SESSION: AUTHORIZED_ADMIN]</p>
                     </div>
-                    <button 
-                        onClick={() => toggleAdmin(false)} 
-                        className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all active:scale-90"
-                    >
-                        ✕
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => minimizeWindow('ADMIN')} 
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all active:scale-90"
+                            title="Minimize"
+                        >
+                            <Minus className="w-5 h-5" />
+                        </button>
+                        <button 
+                            onClick={() => toggleWindow('ADMIN', false)} 
+                            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all active:scale-90"
+                            title="Close"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex p-8 gap-8 h-auto overflow-y-auto">

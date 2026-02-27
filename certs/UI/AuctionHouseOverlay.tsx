@@ -1,11 +1,11 @@
 
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { X, Gavel, Timer, TrendingUp, Package } from 'lucide-react';
+import { X, Gavel, Timer, TrendingUp, Package, Minus } from 'lucide-react';
 
 export const AuctionHouseOverlay = () => {
-  const isOpen = useStore(state => state.showAuctionHouse);
-  const toggleAuctionHouse = useStore(state => state.toggleAuctionHouse);
+  const toggleWindow = useStore(state => state.toggleWindow);
+  const minimizeWindow = useStore(state => state.minimizeWindow);
   const auctionHouse = useStore(state => state.auctionHouse);
   const bidOnAuction = useStore(state => state.bidOnAuction);
   const agents = useStore(state => state.agents);
@@ -13,7 +13,7 @@ export const AuctionHouseOverlay = () => {
 
   const [bidAmounts, setBidAmounts] = useState<Record<string, number>>({});
 
-  if (!isOpen) return null;
+  if (false) return null; // Logic handled by GameUI
 
   const handleBid = (auctionId: string) => {
     const amount = bidAmounts[auctionId];
@@ -24,7 +24,7 @@ export const AuctionHouseOverlay = () => {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-8 pointer-events-none">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => toggleAuctionHouse(false)} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => toggleWindow('AUCTION', false)} />
       
       <div className="w-full max-w-4xl bg-axiom-dark/95 border border-axiom-cyan/30 rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.2)] flex flex-col overflow-hidden pointer-events-auto animate-in zoom-in-95 duration-300">
         {/* Header */}
@@ -38,17 +38,27 @@ export const AuctionHouseOverlay = () => {
               <p className="text-[10px] text-axiom-cyan font-mono tracking-widest uppercase opacity-60">Economic Layer: Active Listings</p>
             </div>
           </div>
-          <button 
-            onClick={() => toggleAuctionHouse(false)}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
-          >
-            <X size={24} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => minimizeWindow('AUCTION')}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+              title="Minimize"
+            >
+              <Minus size={20} />
+            </button>
+            <button 
+              onClick={() => toggleWindow('AUCTION', false)}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+              title="Close"
+            >
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-4 custom-scrollbar">
-          {auctionHouse.filter(a => a.status === 'ACTIVE').map((auc) => (
+          {auctionHouse.filter((a: any) => a.status === 'ACTIVE').map((auc: any) => (
             <div key={auc.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:border-axiom-cyan/40 transition-all group">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
@@ -94,7 +104,7 @@ export const AuctionHouseOverlay = () => {
             </div>
           ))}
 
-          {auctionHouse.filter(a => a.status === 'ACTIVE').length === 0 && (
+          {auctionHouse.filter((a: any) => a.status === 'ACTIVE').length === 0 && (
             <div className="col-span-full py-20 text-center">
               <Gavel className="w-12 h-12 text-gray-800 mx-auto mb-4" />
               <p className="text-gray-600 font-mono uppercase tracking-widest text-sm">No active listings in the Matrix.</p>

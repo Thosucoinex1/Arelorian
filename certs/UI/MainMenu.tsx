@@ -1,6 +1,6 @@
 
 import { useStore } from '../../store';
-import { User, Shield, Map, ShoppingCart, Github, LogOut, Settings } from 'lucide-react';
+import { User, Shield, Map, ShoppingCart, Github, Settings, Save } from 'lucide-react';
 
 export const MainMenu = () => {
   const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
@@ -9,18 +9,15 @@ export const MainMenu = () => {
   const toggleMarket = useStore(state => state.toggleMarket);
   const showAdmin = useStore(state => state.showAdmin);
   const toggleDeveloperTools = useStore(state => state.toggleDeveloperTools);
-
-  const storeUser = useStore(state => state.user);
-  const setUser = useStore(state => state.setUser);
-
-
-
-
+  const saveGame = useStore(state => state.saveGame);
 
   return (
     <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
       <button className="p-4 bg-gray-700/80 backdrop-blur-md rounded-full border border-gray-500/30 shadow-lg text-white hover:bg-gray-500 hover:text-white transition-colors">
         <Github size={24} />
+      </button>
+      <button onClick={() => saveGame()} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-gold/30 shadow-lg text-white hover:bg-axiom-gold hover:text-black transition-colors" title="Save Game">
+        <Save size={24} />
       </button>
       <button onClick={() => toggleCharacterSheet(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors">
         <User size={24} />

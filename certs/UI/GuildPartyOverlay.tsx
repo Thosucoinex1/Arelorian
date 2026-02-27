@@ -1,9 +1,11 @@
 
 import { useState } from 'react';
 import { useStore } from '../../store';
-import { Shield, Plus } from 'lucide-react';
+import { Shield, Plus, Minus, X } from 'lucide-react';
 
 export const GuildPartyOverlay = () => {
+  const toggleWindow = useStore(state => state.toggleWindow);
+  const minimizeWindow = useStore(state => state.minimizeWindow);
   const guilds = useStore(state => state.guilds);
   const parties = useStore(state => state.parties);
   const agents = useStore(state => state.agents);
@@ -23,19 +25,37 @@ export const GuildPartyOverlay = () => {
     <div 
       className="fixed top-24 right-8 w-80 bg-black/80 border border-white/10 rounded-3xl backdrop-blur-xl z-40 overflow-hidden flex flex-col max-h-[70vh]"
     >
-      <div className="flex border-b border-white/5">
-        <button 
-          onClick={() => setActiveTab('GUILDS')}
-          className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'GUILDS' ? 'text-axiom-cyan bg-white/5' : 'text-gray-500 hover:text-white'}`}
-        >
-          Guilds
-        </button>
-        <button 
-          onClick={() => setActiveTab('PARTIES')}
-          className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'PARTIES' ? 'text-axiom-gold bg-white/5' : 'text-gray-500 hover:text-white'}`}
-        >
-          Parties
-        </button>
+      <div className="flex justify-between items-center bg-white/5 border-b border-white/10 px-4">
+        <div className="flex flex-1">
+          <button 
+            onClick={() => setActiveTab('GUILDS')}
+            className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'GUILDS' ? 'text-axiom-cyan' : 'text-gray-500 hover:text-white'}`}
+          >
+            Guilds
+          </button>
+          <button 
+            onClick={() => setActiveTab('PARTIES')}
+            className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'PARTIES' ? 'text-axiom-gold' : 'text-gray-500 hover:text-white'}`}
+          >
+            Parties
+          </button>
+        </div>
+        <div className="flex gap-1 ml-2">
+          <button 
+            onClick={() => minimizeWindow('GUILD_PARTY')} 
+            className="p-1 text-gray-500 hover:text-white transition-colors"
+            title="Minimize"
+          >
+            <Minus size={14} />
+          </button>
+          <button 
+            onClick={() => toggleWindow('GUILD_PARTY', false)} 
+            className="p-1 text-gray-500 hover:text-white transition-colors"
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">

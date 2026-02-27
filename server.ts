@@ -25,7 +25,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
 const PORT = 3000;
 
 // Database configuration
-// const isMysql = process.env.DATABASE_URL?.startsWith('mysql://') || process.env.DB_PORT === '3306';
+const isMysql = process.env.DATABASE_URL?.startsWith('mysql://') || process.env.DB_PORT === '3306';
 
 let pool: any;
 let mysqlPool: any;

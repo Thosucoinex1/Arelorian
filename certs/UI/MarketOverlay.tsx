@@ -1,18 +1,18 @@
 
 import { useStore } from '../../store';
 import { ResourceType } from '../../types';
-import { TrendingUp, ShoppingCart, Package, Hammer, ArrowRight, User } from 'lucide-react';
+import { TrendingUp, ShoppingCart, Package, Hammer, ArrowRight, User, Minus, X } from 'lucide-react';
 
 export const MarketOverlay = () => {
-    const showMarket = useStore(state => state.showMarket);
-    const toggleMarket = useStore(state => state.toggleMarket);
+    const toggleWindow = useStore(state => state.toggleWindow);
+    const minimizeWindow = useStore(state => state.minimizeWindow);
     const market = useStore(state => state.market);
     const orders = useStore(state => state.craftingOrders);
     const tradeOffers = useStore(state => state.tradeOffers);
     const acceptTradeOffer = useStore(state => state.acceptTradeOffer);
     const selectedAgentId = useStore(state => state.selectedAgentId);
 
-    if (!showMarket) return null;
+    if (false) return null; // Logic handled by GameUI
 
     return (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-6 animate-in fade-in duration-300 backdrop-blur-md pointer-events-auto">
@@ -24,7 +24,22 @@ export const MarketOverlay = () => {
                         </h2>
                         <p className="text-[10px] text-axiom-cyan font-mono opacity-60 uppercase tracking-tighter">Axiomatic Trade Terminal v1.0</p>
                     </div>
-                    <button onClick={() => toggleMarket(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all">✕</button>
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => minimizeWindow('MARKET')} 
+                            className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all"
+                            title="Minimize"
+                        >
+                            <Minus className="w-5 h-5" />
+                        </button>
+                        <button 
+                            onClick={() => toggleWindow('MARKET', false)} 
+                            className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all"
+                            title="Close"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 custom-scrollbar">

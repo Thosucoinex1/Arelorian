@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
-  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier
+  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier, WindowType, WindowState, AuctionListing
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
@@ -44,6 +44,7 @@ interface GameState {
   };
   updateScreenSize: () => void;
   lastLocalThinkTime: number;
+  lastSaveTime: number;
   showMarket: boolean;
 
   showQuests: boolean;
@@ -62,6 +63,14 @@ interface GameState {
   selectedChunkId: string | null;
   selectedMonsterId: string | null;
   selectedPoiId: string | null;
+
+  windowStates: Record<WindowType, WindowState>;
+  toggleWindow: (type: WindowType, force?: boolean) => void;
+  minimizeWindow: (type: WindowType) => void;
+  restoreWindow: (type: WindowType) => void;
+
+  auctionHouse: AuctionListing[];
+  bidOnAuction: (auctionId: string, bidderId: string, amount: number) => void;
 
   initGame: () => void;
   updatePhysics: (delta: number) => void;
@@ -106,6 +115,9 @@ interface GameState {
   loadAgents: () => Promise<boolean>;
   upgradeNotary: (userId: string) => void;
   
+  saveGame: () => void;
+  loadGame: () => boolean;
+
   // Guild & Party Actions
   createGuild: (name: string, leaderId: string) => void;
   joinGuild: (guildId: string, agentId: string) => void;
@@ -182,6 +194,7 @@ export const useStore = create<GameState>((set, get) => ({
     });
   },
   lastLocalThinkTime: 0,
+  lastSaveTime: Date.now(),
   showMarket: false,
 
   showQuests: false,
@@ -199,6 +212,70 @@ export const useStore = create<GameState>((set, get) => ({
   selectedChunkId: null,
   selectedMonsterId: null,
   selectedPoiId: null,
+
+  auctionHouse: [],
+
+  windowStates: {
+    MARKET: { isOpen: false, isMinimized: false },
+    QUESTS: { isOpen: false, isMinimized: false },
+    ADMIN: { isOpen: false, isMinimized: false },
+    MAP: { isOpen: false, isMinimized: false },
+    CHARACTER: { isOpen: false, isMinimized: false },
+    AUCTION: { isOpen: false, isMinimized: false },
+    INSPECTOR: { isOpen: true, isMinimized: false },
+    CHAT: { isOpen: true, isMinimized: false },
+    GUILD_PARTY: { isOpen: false, isMinimized: false },
+  },
+
+  toggleWindow: (type, force) => {
+    set(state => {
+      const current = state.windowStates[type];
+      const nextOpen = force !== undefined ? force : !current.isOpen;
+      return {
+        windowStates: {
+          ...state.windowStates,
+          [type]: { isOpen: nextOpen, isMinimized: nextOpen ? false : current.isMinimized }
+        },
+        // Legacy toggles for backward compatibility
+        ...(type === 'MARKET' ? { showMarket: nextOpen } : {}),
+        ...(type === 'QUESTS' ? { showQuests: nextOpen } : {}),
+        ...(type === 'ADMIN' ? { showAdmin: nextOpen } : {}),
+        ...(type === 'MAP' ? { showMap: nextOpen } : {}),
+        ...(type === 'CHARACTER' ? { showCharacterSheet: nextOpen } : {}),
+        ...(type === 'AUCTION' ? { showAuctionHouse: nextOpen } : {}),
+      };
+    });
+  },
+
+  minimizeWindow: (type) => {
+    set(state => ({
+      windowStates: {
+        ...state.windowStates,
+        [type]: { ...state.windowStates[type], isMinimized: true }
+      }
+    }));
+  },
+
+  restoreWindow: (type) => {
+    set(state => ({
+      windowStates: {
+        ...state.windowStates,
+        [type]: { ...state.windowStates[type], isMinimized: false, isOpen: true }
+      }
+    }));
+  },
+
+  bidOnAuction: (auctionId, bidderId, amount) => {
+    set(state => ({
+      auctionHouse: state.auctionHouse.map(auc => {
+        if (auc.id === auctionId && amount > auc.currentBid) {
+          return { ...auc, currentBid: amount, highestBidderId: bidderId };
+        }
+        return auc;
+      })
+    }));
+  },
+
   emergenceSettings: {
     isEmergenceEnabled: true,
     useHeuristicsOnly: true, // Default to true for release as requested
@@ -208,7 +285,8 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
 
-  toggleQuests: (show) => set({ showQuests: show }),
+  toggleQuests: (show: boolean) => get().toggleWindow('QUESTS', show),
+  toggleAuctionHouse: (show: boolean) => get().toggleWindow('AUCTION', show),
 
 
 
@@ -305,12 +383,20 @@ export const useStore = create<GameState>((set, get) => ({
       data[i] = [];
       field[i] = [];
       for(let j=0; j<8; j++) {
-        // Axiomatic Data: 0 to 1, influenced by logic field
-        data[i][j] = (Math.sin(i * 0.5 + j * 0.3 + x + z + hash * 0.01) + 1) / 2;
+        const worldX = x * 80 + (i * 10 - 35);
+        const worldZ = z * 80 + (j * 10 - 35);
         
-        // Physics-based Logic Field: Vectors pointing based on axiomatic resonance
-        const vx = Math.cos(i * 0.8 + hash * 0.1 + x) * 0.15;
-        const vz = Math.sin(j * 0.8 + hash * 0.1 + z) * 0.15;
+        // Axiomatic Data: 0 to 1, influenced by logic field
+        data[i][j] = (Math.sin(worldX * 0.1) * Math.cos(worldZ * 0.1) + 1) / 2;
+        
+        // Physics-based Logic Field: Logic by Plexity
+        // Multi-layered noise/sine forces
+        const vx = Math.sin(worldX * 0.05) * Math.cos(worldZ * 0.03) * 0.15 + 
+                   Math.sin(worldZ * 0.1) * 0.05 +
+                   Math.cos(hash * 0.01) * 0.02;
+        const vz = Math.cos(worldX * 0.04) * Math.sin(worldZ * 0.06) * 0.15 + 
+                   Math.cos(worldX * 0.12) * 0.05 +
+                   Math.sin(hash * 0.01) * 0.02;
         field[i][j] = { vx, vz };
       }
     }
@@ -344,6 +430,11 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   initGame: async () => {
+    // Try to load saved game first
+    if (get().loadGame()) {
+      return;
+    }
+
     const initialChunks: Chunk[] = [
         { 
           id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0, 
@@ -425,6 +516,12 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   updatePhysics: (delta) => {
+    // Auto-save every 60 seconds
+    if (Date.now() - get().lastSaveTime > 60000) {
+      get().saveGame();
+      set({ lastSaveTime: Date.now() });
+    }
+
     set(state => {
       // Monster AI & Combat Resolution
       const newMonsters: Monster[] = state.monsters.map(m => {
@@ -442,7 +539,7 @@ export const useStore = create<GameState>((set, get) => ({
                 if (dist < 2.5 && Math.random() < 0.1) { // 10% chance per tick to attack
                     // Damage calculation
                     const armor = (targetAgent.equipment.chest?.stats.def || 0) + (targetAgent.equipment.head?.stats.def || 0) + (targetAgent.equipment.legs?.stats.def || 0);
-                    const damage: number = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
+                    // const damage: number = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
                     
                     // We'll apply damage to agent in the agent mapping
                 }
@@ -530,6 +627,20 @@ export const useStore = create<GameState>((set, get) => ({
             newGold = Math.floor(newGold * 0.8); // 20% gold penalty
             newIntegrity = Math.max(0.1, newIntegrity - 0.1);
             return { ...a, position: newPos, stats: { ...a.stats, hp: newHp }, gold: newGold, integrity: newIntegrity, state: AgentState.IDLE, targetId: null };
+        }
+
+        // Apply Physics-based Logic Field effects to Agent
+        const aChunkX = Math.floor(a.position[0] / 80);
+        const aChunkZ = Math.floor(a.position[2] / 80);
+        const aChunk = state.loadedChunks.find(c => c.x === aChunkX && c.z === aChunkZ);
+        if (aChunk && aChunk.logicField) {
+            const localX = Math.floor(((a.position[0] % 80) + 80) % 80 / 10);
+            const localZ = Math.floor(((a.position[2] % 80) + 80) % 80 / 10);
+            if (localX >= 0 && localX < 8 && localZ >= 0 && localZ < 8) {
+                const force = aChunk.logicField[localX][localZ];
+                newPos[0] += force.vx * delta * 5;
+                newPos[2] += force.vz * delta * 5;
+            }
         }
 
         // 3. XP Gain from Dead Monsters
@@ -620,7 +731,7 @@ export const useStore = create<GameState>((set, get) => ({
               const chunk = state.loadedChunks.find(c => c.id === quest.targetChunkId);
               if (chunk) {
                 // Reducing corruption
-                const reduction: number = delta * 0.05;
+                // const reduction: number = delta * 0.05;
                 if (chunk.corruptionLevel <= 0) {
                   // Quest complete
                   state.addLog(`${a.name} completed quest: ${quest.title}`, 'EVENT', a.id);
@@ -631,19 +742,6 @@ export const useStore = create<GameState>((set, get) => ({
           }
         }
 
-        // Apply Physics-based Logic Field effects to Agent
-        const aChunkX = Math.floor(a.position[0] / 80);
-        const aChunkZ = Math.floor(a.position[2] / 80);
-        const aChunk = state.loadedChunks.find(c => c.x === aChunkX && c.z === aChunkZ);
-        if (aChunk && aChunk.logicField) {
-            const localX = Math.floor(((a.position[0] % 80) + 80) % 80 / 10);
-            const localZ = Math.floor(((a.position[2] % 80) + 80) % 80 / 10);
-            if (localX >= 0 && localX < 8 && localZ >= 0 && localZ < 8) {
-                const force = aChunk.logicField[localX][localZ];
-                newPos[0] += force.vx * delta * 5;
-                newPos[2] += force.vz * delta * 5;
-            }
-        }
         if (a.state === AgentState.THINKING || a.state === AgentState.ASCENDING) {
           let newProgress = a.awakeningProgress + delta * 5;
           let newLevel = a.consciousnessLevel;
@@ -972,10 +1070,10 @@ export const useStore = create<GameState>((set, get) => ({
 
   selectAgent: (id) => set({ selectedAgentId: id }),
   setCameraTarget: (target) => set({ cameraTarget: target }),
-  toggleMarket: (show) => set({ showMarket: show }),
-  toggleAdmin: (show) => set({ showAdmin: show }),
-  toggleMap: (show) => set({ showMap: show }),
-  toggleCharacterSheet: (show) => set({ showCharacterSheet: show }),
+  toggleMarket: (show: boolean) => get().toggleWindow('MARKET', show),
+  toggleAdmin: (show: boolean) => get().toggleWindow('ADMIN', show),
+  toggleMap: (show: boolean) => get().toggleWindow('MAP', show),
+  toggleCharacterSheet: (show: boolean) => get().toggleWindow('CHARACTER', show),
   toggleDebugger: (show) => set({ showDebugger: show }),
   toggleDeveloperTools: (show) => set({ showDeveloperTools: show }),
   runDiagnostics: async (errorLog) => {
@@ -1153,6 +1251,67 @@ export const useStore = create<GameState>((set, get) => ({
       } : n)
     }));
     get().addLog(`Notary ${userId} upgraded.`, 'SYSTEM', 'NOTAR');
+  },
+
+  saveGame: () => {
+    const state = get();
+    const saveData = {
+      agents: state.agents,
+      monsters: state.monsters,
+      resourceNodes: state.resourceNodes,
+      pois: state.pois,
+      loadedChunks: state.loadedChunks,
+      market: state.market,
+      quests: state.quests,
+      landParcels: state.landParcels,
+      notaries: state.notaries,
+      guilds: state.guilds,
+      parties: state.parties,
+      matrixEnergy: state.matrixEnergy,
+      threatLevel: state.serverStats.threatLevel,
+      timestamp: Date.now()
+    };
+    try {
+      localStorage.setItem('ouroboros_save_v1', JSON.stringify(saveData));
+      get().addLog('Game state saved to local storage.', 'SYSTEM', 'WATCHDOG');
+    } catch (e) {
+      console.error('Failed to save game:', e);
+      get().addLog('Failed to save game state.', 'ERROR', 'WATCHDOG');
+    }
+  },
+
+  loadGame: () => {
+    try {
+      const saved = localStorage.getItem('ouroboros_save_v1');
+      if (!saved) return false;
+      const data = JSON.parse(saved);
+      
+      set(state => ({
+        agents: data.agents || state.agents,
+        monsters: data.monsters || state.monsters,
+        resourceNodes: data.resourceNodes || state.resourceNodes,
+        pois: data.pois || state.pois,
+        loadedChunks: data.loadedChunks || state.loadedChunks,
+        market: data.market || state.market,
+        quests: data.quests || state.quests,
+        landParcels: data.landParcels || state.landParcels,
+        notaries: data.notaries || state.notaries,
+        guilds: data.guilds || state.guilds,
+        parties: data.parties || state.parties,
+        matrixEnergy: data.matrixEnergy ?? state.matrixEnergy,
+        serverStats: {
+          ...state.serverStats,
+          threatLevel: data.threatLevel ?? state.serverStats.threatLevel
+        }
+      }));
+      
+      get().addLog('Game state restored from local storage.', 'SYSTEM', 'WATCHDOG');
+      return true;
+    } catch (e) {
+      console.error('Failed to load game:', e);
+      get().addLog('Failed to load game state.', 'ERROR', 'WATCHDOG');
+      return false;
+    }
   },
 
   // Guild & Party Implementations
