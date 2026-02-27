@@ -22,7 +22,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
 }
 
 // const { Pool } = pg;
-const PORT = 3000;
+const PORT = 5000;
 
 // Database configuration
 const isMysql = process.env.DATABASE_URL?.startsWith('mysql://') || process.env.DB_PORT === '3306';
