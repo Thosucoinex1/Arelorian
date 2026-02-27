@@ -1,6 +1,6 @@
 
 import { useStore } from '../../store';
-import { User, Shield, Map, ShoppingCart, Github, Settings, Save, UserPlus, Zap } from 'lucide-react';
+import { User, Shield, Map, ShoppingCart, LogOut, Settings, Save, UserPlus, Zap } from 'lucide-react';
 
 export const MainMenu = () => {
   const toggleWindow = useStore(state => state.toggleWindow);
@@ -15,8 +15,17 @@ export const MainMenu = () => {
 
   return (
     <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
-      <button className="p-4 bg-gray-700/80 backdrop-blur-md rounded-full border border-gray-500/30 shadow-lg text-white hover:bg-gray-500 hover:text-white transition-colors">
-        <Github size={24} />
+      <button
+        onClick={() => {
+          localStorage.removeItem('ouroboros_user_token');
+          localStorage.removeItem('ouroboros_game_phase');
+          localStorage.removeItem('ouroboros_has_character');
+          window.location.href = '/';
+        }}
+        className="p-4 bg-red-900/60 backdrop-blur-md rounded-full border border-red-500/30 shadow-lg text-red-300 hover:bg-red-600 hover:text-white transition-colors"
+        title="Sign Out"
+      >
+        <LogOut size={24} />
       </button>
       <button onClick={() => saveGame()} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-gold/30 shadow-lg text-white hover:bg-axiom-gold hover:text-black transition-colors" title="Save Game">
         <Save size={24} />

@@ -12,11 +12,14 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 
 ## Game Flow
 
-- **Landing Page** (`certs/UI/LandingPage.tsx`): Cinematic entry with WebGL terrain preview, world status, "Enter the Matrix" button
+- **Landing Page** (`certs/UI/LandingPage.tsx`): Cinematic entry with WebGL terrain preview, world status, account creation / sign-in form (tabbed)
+- **User Auth**: Email + password registration/login via `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me` (JWT, 30-day expiry, separate user secret, rate-limited)
 - **Character Creation** (`certs/UI/CharacterCreation.tsx`): Skin tone, hair style, body type, body scale, name input with 3D humanoid preview
 - **Game World** (`GameApp` in `App.tsx`): Full 3D MMO with HUD, skill bars, agent control
-- **OSCC** (`/oscc`): Admin console (separate route)
+- **OSCC** (`/oscc`): Admin console (separate route, admin-specific auth)
 - Phase tracking via `localStorage('ouroboros_game_phase')`: landing → character_creation → game
+- User token stored in `localStorage('ouroboros_user_token')`, auto-verified on return visits
+- Logout button in MainMenu clears token and returns to landing page
 
 ## Graphics System (WebGL Overhaul)
 

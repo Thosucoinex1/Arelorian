@@ -86,6 +86,7 @@ const getInitialPhase = (): GamePhase => {
 
 const AppRouter = () => {
   const [phase, setPhase] = useState<GamePhase>(getInitialPhase);
+  const setUser = useStore(state => state.setUser);
 
   const handlePhaseChange = (newPhase: GamePhase) => {
     setPhase(newPhase);
@@ -98,7 +99,8 @@ const AppRouter = () => {
 
   if (phase === 'landing') {
     return (
-      <LandingPage onEnterGame={() => {
+      <LandingPage onAuthenticated={(userData) => {
+        setUser({ id: userData.uid, name: userData.username, email: userData.email });
         const hasCharacter = localStorage.getItem('ouroboros_has_character');
         if (hasCharacter) {
           handlePhaseChange('game');
@@ -170,9 +172,26 @@ const GameApp = () => {
     };
     checkApiKey();
 
-    // Set initial guest user if not authenticated
     if (!storeUser) {
-      setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
+      const token = localStorage.getItem('ouroboros_user_token');
+      if (token) {
+        fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.success && data.user) {
+              setUser({ id: data.user.uid, name: data.user.username, email: data.user.email });
+            } else {
+              setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
+            }
+          })
+          .catch(() => {
+            setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
+          });
+      } else {
+        setUser({ id: 'guest', name: 'Guest', email: 'guest@example.com' });
+      }
     }
 
     const keysPressed = new Set<string>();

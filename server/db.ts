@@ -104,7 +104,7 @@ export async function ensureSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS users (
       uid UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       username VARCHAR(100) UNIQUE NOT NULL,
-      email VARCHAR(255),
+      email VARCHAR(255) UNIQUE,
       password_hash VARCHAR(255),
       selected_agent_uid UUID,
       matrix_energy FLOAT DEFAULT 100.0,

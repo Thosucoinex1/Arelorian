@@ -12,6 +12,25 @@ import { getHierarchyEntities, createHierarchyEntity, addMember, validateHierarc
 import { getAllTransactions, getTransactionHistory, getBalance, transferEnergy } from './matrix-accounting.js';
 import { getTickState, getCurrentTick, isTickRunning } from './tick-engine.js';
 import { KAPPA, CHUNK_SIZE, TICK_INTERVAL_MS } from './math-engine.js';
+import { hashPassword, verifyPassword } from './admin-security.js';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
+
+function getUserJwtSecret(): string {
+  const secret = process.env.ADMIN_JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT secret not configured');
+  }
+  return 'USER_' + secret;
+}
+
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'RATE_LIMIT', message: 'Too many attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 export function registerRoutes(app: Express, wss: WebSocketServer): void {
 
@@ -368,5 +387,198 @@ export function registerRoutes(app: Express, wss: WebSocketServer): void {
       overallStatus: allCompliant ? 'COMPLIANT' : 'PARTIAL',
       matrix
     });
+  });
+
+
+  app.use('/api/auth', authRateLimit);
+
+  app.post('/api/auth/register', async (req, res) => {
+    const { email, password, username } = req.body;
+
+    if (!email || !password || !username) {
+      res.status(400).json({ error: 'MISSING_FIELDS', message: 'Email, username, and password are required.' });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      res.status(400).json({ error: 'INVALID_EMAIL', message: 'Please enter a valid email address.' });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ error: 'WEAK_PASSWORD', message: 'Password must be at least 6 characters.' });
+      return;
+    }
+
+    if (username.length < 2 || username.length > 30) {
+      res.status(400).json({ error: 'INVALID_USERNAME', message: 'Username must be 2-30 characters.' });
+      return;
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_\- ]+$/;
+    if (!usernameRegex.test(username)) {
+      res.status(400).json({ error: 'INVALID_USERNAME', message: 'Username can only contain letters, numbers, spaces, hyphens and underscores.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanUsername = username.trim();
+
+    if (!isDbAvailable()) {
+      res.status(503).json({ error: 'DB_UNAVAILABLE', message: 'Database not available.' });
+      return;
+    }
+
+    try {
+      const existingEmail = await queryDb('SELECT uid FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+      if (existingEmail.rows && existingEmail.rows.length > 0) {
+        res.status(409).json({ error: 'EMAIL_EXISTS', message: 'An account with this email already exists.' });
+        return;
+      }
+
+      const existingUsername = await queryDb('SELECT uid FROM users WHERE LOWER(username) = $1', [cleanUsername.toLowerCase()]);
+      if (existingUsername.rows && existingUsername.rows.length > 0) {
+        res.status(409).json({ error: 'USERNAME_EXISTS', message: 'This username is already taken.' });
+        return;
+      }
+
+      const hashedPw = await hashPassword(password);
+      const result = await queryDb(
+        `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING uid, username, email, matrix_energy, subscription_tier, created_at`,
+        [cleanUsername, cleanEmail, hashedPw]
+      );
+
+      const user = result.rows[0];
+
+      const token = jwt.sign(
+        { userId: user.uid, email: user.email, username: user.username, type: 'user' },
+        getUserJwtSecret(),
+        { expiresIn: '30d' }
+      );
+
+      res.json({
+        success: true,
+        token,
+        user: {
+          uid: user.uid,
+          username: user.username,
+          email: user.email,
+          matrixEnergy: user.matrix_energy,
+          tier: user.subscription_tier,
+        }
+      });
+    } catch (err: any) {
+      console.error('Registration error:', err.message);
+      res.status(500).json({ error: 'SERVER_ERROR', message: 'Registration failed.' });
+    }
+  });
+
+
+  app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'MISSING_FIELDS', message: 'Email and password are required.' });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!isDbAvailable()) {
+      res.status(503).json({ error: 'DB_UNAVAILABLE', message: 'Database not available.' });
+      return;
+    }
+
+    try {
+      const result = await queryDb(
+        'SELECT uid, username, email, password_hash, matrix_energy, subscription_tier FROM users WHERE LOWER(email) = $1',
+        [cleanEmail]
+      );
+
+      if (!result.rows || result.rows.length === 0) {
+        res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
+        return;
+      }
+
+      const user = result.rows[0];
+
+      if (!user.password_hash) {
+        res.status(401).json({ error: 'NO_PASSWORD', message: 'This account has no password set. Please register again.' });
+        return;
+      }
+
+      const valid = await verifyPassword(password, user.password_hash);
+      if (!valid) {
+        res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
+        return;
+      }
+
+      await queryDb('UPDATE users SET last_login = NOW() WHERE uid = $1', [user.uid]);
+
+      const token = jwt.sign(
+        { userId: user.uid, email: user.email, username: user.username, type: 'user' },
+        getUserJwtSecret(),
+        { expiresIn: '30d' }
+      );
+
+      res.json({
+        success: true,
+        token,
+        user: {
+          uid: user.uid,
+          username: user.username,
+          email: user.email,
+          matrixEnergy: user.matrix_energy,
+          tier: user.subscription_tier,
+        }
+      });
+    } catch (err: any) {
+      console.error('Login error:', err.message);
+      res.status(500).json({ error: 'SERVER_ERROR', message: 'Login failed.' });
+    }
+  });
+
+
+  app.get('/api/auth/me', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'NO_TOKEN', message: 'Not authenticated.' });
+      return;
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, getUserJwtSecret()) as any;
+
+      if (decoded.type !== 'user') {
+        res.status(401).json({ error: 'INVALID_TOKEN', message: 'Invalid token type.' });
+        return;
+      }
+
+      const result = await queryDb(
+        'SELECT uid, username, email, matrix_energy, subscription_tier FROM users WHERE uid = $1',
+        [decoded.userId]
+      );
+
+      if (!result.rows || result.rows.length === 0) {
+        res.status(404).json({ error: 'USER_NOT_FOUND', message: 'User not found.' });
+        return;
+      }
+
+      const user = result.rows[0];
+      res.json({
+        success: true,
+        user: {
+          uid: user.uid,
+          username: user.username,
+          email: user.email,
+          matrixEnergy: user.matrix_energy,
+          tier: user.subscription_tier,
+        }
+      });
+    } catch {
+      res.status(401).json({ error: 'INVALID_TOKEN', message: 'Token expired or invalid.' });
+    }
   });
 }

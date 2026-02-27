@@ -124,7 +124,7 @@ function WorldStatus({ health }: { health: HealthData | null }) {
 
   const items = [
     { label: 'STATUS', value: health.status || 'UNKNOWN', color: health.status === 'CONNECTED' ? '#4eaa60' : '#e8921a' },
-    { label: 'TICK', value: health.tickEngine?.currentTick?.toString() || '—', color: '#c9a227' },
+    { label: 'TICK', value: health.tickEngine?.currentTick?.toString() || '\u2014', color: '#c9a227' },
     { label: 'AGENTS ONLINE', value: health.playerCount?.toString() || '0', color: '#1fb8b8' },
     { label: 'ENGINE', value: health.tickEngine?.running ? 'ACTIVE' : 'PAUSED', color: health.tickEngine?.running ? '#4eaa60' : '#c0392b' },
   ];
@@ -164,13 +164,42 @@ function WorldStatus({ health }: { health: HealthData | null }) {
   );
 }
 
-export default function LandingPage({ onEnterGame }: { onEnterGame: (mode: 'guest' | 'login') => void }) {
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '12px 14px',
+  background: 'rgba(6,8,16,0.8)',
+  border: '1px solid rgba(201,162,39,0.15)',
+  color: '#e8dfc8',
+  fontFamily: "'JetBrains Mono', monospace",
+  fontSize: 13,
+  borderRadius: 4,
+  outline: 'none',
+  boxSizing: 'border-box',
+  transition: 'border-color 0.3s',
+};
+
+const labelStyle: React.CSSProperties = {
+  fontFamily: "'JetBrains Mono', monospace",
+  fontSize: 10,
+  letterSpacing: 2,
+  color: '#4a5570',
+  display: 'block',
+  marginBottom: 6,
+  textTransform: 'uppercase',
+};
+
+interface LandingPageProps {
+  onAuthenticated: (userData: { uid: string; username: string; email: string; token: string }) => void;
+}
+
+export default function LandingPage({ onAuthenticated }: LandingPageProps) {
   const [health, setHealth] = useState<HealthData | null>(null);
-  const [showLogin, setShowLogin] = useState(false);
+  const [authMode, setAuthMode] = useState<'create' | 'login'>('create');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
+  const [username, setUsername] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
 
   useEffect(() => {
@@ -189,29 +218,80 @@ export default function LandingPage({ onEnterGame }: { onEnterGame: (mode: 'gues
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const token = localStorage.getItem('ouroboros_user_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success && data.user) {
+            onAuthenticated({
+              uid: data.user.uid,
+              username: data.user.username,
+              email: data.user.email,
+              token,
+            });
+          } else {
+            localStorage.removeItem('ouroboros_user_token');
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('ouroboros_user_token');
+        });
+    }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginLoading(true);
-    setLoginError('');
+    setLoading(true);
+    setError('');
+
+    const endpoint = authMode === 'create' ? '/api/auth/register' : '/api/auth/login';
+    const body = authMode === 'create'
+      ? { email, password, username }
+      : { email, password };
+
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
+
       if (!res.ok) {
-        setLoginError(data.message || 'Authentication failed.');
-        setLoginLoading(false);
+        setError(data.message || 'Something went wrong.');
+        setLoading(false);
         return;
       }
-      localStorage.setItem('oscc_access_token', data.accessToken);
-      localStorage.setItem('oscc_refresh_token', data.refreshToken);
-      onEnterGame('login');
+
+      localStorage.setItem('ouroboros_user_token', data.token);
+
+      onAuthenticated({
+        uid: data.user.uid,
+        username: data.user.username,
+        email: data.user.email,
+        token: data.token,
+      });
     } catch {
-      setLoginError('Network error.');
+      setError('Network error. Please try again.');
     }
-    setLoginLoading(false);
+    setLoading(false);
+  };
+
+  const tabBase: React.CSSProperties = {
+    flex: 1,
+    padding: '10px 0',
+    border: 'none',
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    letterSpacing: 3,
+    cursor: 'pointer',
+    transition: 'all 0.3s',
+    textTransform: 'uppercase',
+    borderRadius: 0,
   };
 
   return (
@@ -220,7 +300,7 @@ export default function LandingPage({ onEnterGame }: { onEnterGame: (mode: 'gues
       inset: 0,
       background: '#060810',
       zIndex: 200,
-      overflow: 'hidden',
+      overflow: 'auto',
       opacity: fadeIn ? 1 : 0,
       transition: 'opacity 1.2s ease',
     }}>
@@ -286,199 +366,134 @@ export default function LandingPage({ onEnterGame }: { onEnterGame: (mode: 'gues
         }} />
 
         <div style={{
-          maxWidth: 560,
+          maxWidth: 500,
           fontFamily: "'Crimson Pro', serif",
-          fontSize: 'clamp(14px, 1.5vw, 18px)',
+          fontSize: 'clamp(14px, 1.5vw, 17px)',
           color: '#8a9bb8',
           lineHeight: 1.8,
           fontStyle: 'italic',
-          marginBottom: 32,
+          marginBottom: 24,
           opacity: fadeIn ? 1 : 0,
           transform: fadeIn ? 'translateY(0)' : 'translateY(20px)',
           transition: 'all 1.5s ease 1s',
         }}>
           In the lattice of infinite recursion, emergent minds awaken.
-          Agents evolve, economies breathe, and the world reshapes itself
-          through the eternal cycle of creation and entropy.
           The Matrix awaits your consciousness.
         </div>
 
         <div style={{
           opacity: fadeIn ? 1 : 0,
           transition: 'opacity 1.5s ease 1.3s',
-          marginBottom: 32,
+          marginBottom: 24,
         }}>
           <WorldStatus health={health} />
         </div>
 
-        {!showLogin ? (
+        <div style={{
+          maxWidth: 380,
+          width: '100%',
+          opacity: fadeIn ? 1 : 0,
+          transform: fadeIn ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'all 1.5s ease 1.5s',
+        }}>
           <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            alignItems: 'center',
-            opacity: fadeIn ? 1 : 0,
-            transform: fadeIn ? 'translateY(0)' : 'translateY(20px)',
-            transition: 'all 1.5s ease 1.5s',
+            background: 'rgba(10,13,26,0.92)',
+            border: '1px solid rgba(201,162,39,0.2)',
+            borderRadius: 8,
+            overflow: 'hidden',
+            backdropFilter: 'blur(10px)',
           }}>
-            <button
-              onClick={() => onEnterGame('guest')}
-              style={{
-                fontFamily: "'Cinzel', serif",
-                fontSize: 16,
-                fontWeight: 700,
-                letterSpacing: 6,
-                padding: '18px 48px',
-                background: 'linear-gradient(135deg, rgba(201,162,39,0.15), rgba(201,162,39,0.05))',
-                border: '1px solid rgba(201,162,39,0.4)',
-                color: '#c9a227',
-                cursor: 'pointer',
-                borderRadius: 4,
-                transition: 'all 0.3s ease',
-                textTransform: 'uppercase',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-              onMouseEnter={e => {
-                (e.target as HTMLElement).style.background = 'linear-gradient(135deg, rgba(201,162,39,0.3), rgba(201,162,39,0.1))';
-                (e.target as HTMLElement).style.boxShadow = '0 0 30px rgba(201,162,39,0.3), inset 0 0 30px rgba(201,162,39,0.05)';
-                (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.7)';
-              }}
-              onMouseLeave={e => {
-                (e.target as HTMLElement).style.background = 'linear-gradient(135deg, rgba(201,162,39,0.15), rgba(201,162,39,0.05))';
-                (e.target as HTMLElement).style.boxShadow = 'none';
-                (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.4)';
-              }}
-            >
-              Enter the Matrix
-            </button>
+            <div style={{ display: 'flex', borderBottom: '1px solid rgba(201,162,39,0.1)' }}>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('create'); setError(''); }}
+                style={{
+                  ...tabBase,
+                  background: authMode === 'create' ? 'rgba(201,162,39,0.08)' : 'transparent',
+                  color: authMode === 'create' ? '#c9a227' : '#4a5570',
+                  borderBottom: authMode === 'create' ? '2px solid #c9a227' : '2px solid transparent',
+                }}
+              >
+                Create Account
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthMode('login'); setError(''); }}
+                style={{
+                  ...tabBase,
+                  background: authMode === 'login' ? 'rgba(201,162,39,0.08)' : 'transparent',
+                  color: authMode === 'login' ? '#c9a227' : '#4a5570',
+                  borderBottom: authMode === 'login' ? '2px solid #c9a227' : '2px solid transparent',
+                }}
+              >
+                Sign In
+              </button>
+            </div>
 
-            <button
-              onClick={() => setShowLogin(true)}
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 11,
-                letterSpacing: 3,
-                padding: '10px 24px',
-                background: 'transparent',
-                border: '1px solid rgba(138,155,184,0.2)',
-                color: '#4a5570',
-                cursor: 'pointer',
-                borderRadius: 4,
-                transition: 'all 0.3s ease',
-                textTransform: 'uppercase',
-              }}
-              onMouseEnter={e => {
-                (e.target as HTMLElement).style.color = '#8a9bb8';
-                (e.target as HTMLElement).style.borderColor = 'rgba(138,155,184,0.4)';
-              }}
-              onMouseLeave={e => {
-                (e.target as HTMLElement).style.color = '#4a5570';
-                (e.target as HTMLElement).style.borderColor = 'rgba(138,155,184,0.2)';
-              }}
-            >
-              Admin Login
-            </button>
-          </div>
-        ) : (
-          <div style={{
-            maxWidth: 360,
-            width: '100%',
-            opacity: fadeIn ? 1 : 0,
-            transition: 'opacity 0.5s ease',
-          }}>
-            <form onSubmit={handleLogin} style={{
-              background: 'rgba(10,13,26,0.9)',
-              border: '1px solid rgba(201,162,39,0.2)',
-              borderRadius: 8,
-              padding: 32,
-              backdropFilter: 'blur(10px)',
-            }}>
-              <div style={{
-                fontFamily: "'Cinzel', serif",
-                fontSize: 14,
-                letterSpacing: 4,
-                color: '#c9a227',
-                textAlign: 'center',
-                marginBottom: 24,
-                textTransform: 'uppercase',
-              }}>
-                Authenticate
-              </div>
+            <form onSubmit={handleSubmit} style={{ padding: '28px 28px 24px' }}>
+              {authMode === 'create' && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={labelStyle}>Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    style={inputStyle}
+                    onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.4)'}
+                    onBlur={e => (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.15)'}
+                    placeholder="Choose a username"
+                    autoComplete="username"
+                    required
+                    minLength={2}
+                    maxLength={30}
+                  />
+                </div>
+              )}
 
               <div style={{ marginBottom: 16 }}>
-                <label style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10,
-                  letterSpacing: 2,
-                  color: '#4a5570',
-                  display: 'block',
-                  marginBottom: 6,
-                  textTransform: 'uppercase',
-                }}>
-                  Email
-                </label>
+                <label style={labelStyle}>Email</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: 'rgba(6,8,16,0.8)',
-                    border: '1px solid rgba(201,162,39,0.15)',
-                    color: '#e8dfc8',
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 13,
-                    borderRadius: 4,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'border-color 0.3s',
-                  }}
+                  style={inputStyle}
                   onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.4)'}
                   onBlur={e => (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.15)'}
-                  placeholder="operator@ouroboros.io"
+                  placeholder="your@email.com"
                   autoComplete="email"
+                  required
                 />
               </div>
 
-              <div style={{ marginBottom: 24 }}>
-                <label style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10,
-                  letterSpacing: 2,
-                  color: '#4a5570',
-                  display: 'block',
-                  marginBottom: 6,
-                  textTransform: 'uppercase',
-                }}>
-                  Access Key
-                </label>
+              <div style={{ marginBottom: authMode === 'create' ? 16 : 24 }}>
+                <label style={labelStyle}>Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: 'rgba(6,8,16,0.8)',
-                    border: '1px solid rgba(201,162,39,0.15)',
-                    color: '#e8dfc8',
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 13,
-                    borderRadius: 4,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'border-color 0.3s',
-                  }}
+                  style={inputStyle}
                   onFocus={e => (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.4)'}
                   onBlur={e => (e.target as HTMLElement).style.borderColor = 'rgba(201,162,39,0.15)'}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
+                  placeholder={authMode === 'create' ? 'Min. 6 characters' : 'Your password'}
+                  autoComplete={authMode === 'create' ? 'new-password' : 'current-password'}
+                  required
+                  minLength={6}
                 />
               </div>
 
-              {loginError && (
+              {authMode === 'create' && (
+                <div style={{
+                  fontSize: 10,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: '#3a4560',
+                  marginBottom: 20,
+                  lineHeight: 1.6,
+                }}>
+                  By creating an account you agree to the terms of the Ouroboros Neural Emergence protocol.
+                </div>
+              )}
+
+              {error && (
                 <div style={{
                   color: '#c0392b',
                   fontSize: 12,
@@ -489,53 +504,84 @@ export default function LandingPage({ onEnterGame }: { onEnterGame: (mode: 'gues
                   borderRadius: 4,
                   fontFamily: "'JetBrains Mono', monospace",
                 }}>
-                  {loginError}
+                  {error}
                 </div>
               )}
 
               <button
                 type="submit"
-                disabled={loginLoading}
+                disabled={loading}
                 style={{
                   width: '100%',
                   padding: 14,
-                  background: loginLoading ? 'rgba(201,162,39,0.05)' : 'linear-gradient(135deg, rgba(201,162,39,0.2), rgba(201,162,39,0.05))',
+                  background: loading
+                    ? 'rgba(201,162,39,0.05)'
+                    : 'linear-gradient(135deg, rgba(201,162,39,0.2), rgba(201,162,39,0.05))',
                   border: '1px solid rgba(201,162,39,0.4)',
                   color: '#c9a227',
                   fontFamily: "'Cinzel', serif",
-                  fontSize: 13,
+                  fontSize: 14,
+                  fontWeight: 700,
                   letterSpacing: 4,
-                  cursor: loginLoading ? 'wait' : 'pointer',
+                  cursor: loading ? 'wait' : 'pointer',
                   borderRadius: 4,
                   transition: 'all 0.3s',
                   textTransform: 'uppercase',
                 }}
-              >
-                {loginLoading ? 'Verifying...' : 'Initiate Session'}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setShowLogin(false); setLoginError(''); }}
-                style={{
-                  width: '100%',
-                  marginTop: 12,
-                  padding: 10,
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#4a5570',
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10,
-                  letterSpacing: 2,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
+                onMouseEnter={e => {
+                  if (!loading) {
+                    (e.target as HTMLElement).style.background = 'linear-gradient(135deg, rgba(201,162,39,0.3), rgba(201,162,39,0.1))';
+                    (e.target as HTMLElement).style.boxShadow = '0 0 20px rgba(201,162,39,0.2)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  (e.target as HTMLElement).style.background = loading
+                    ? 'rgba(201,162,39,0.05)'
+                    : 'linear-gradient(135deg, rgba(201,162,39,0.2), rgba(201,162,39,0.05))';
+                  (e.target as HTMLElement).style.boxShadow = 'none';
                 }}
               >
-                ← Back
+                {loading
+                  ? 'Processing...'
+                  : authMode === 'create'
+                    ? 'Enter the Matrix'
+                    : 'Initiate Session'
+                }
               </button>
             </form>
           </div>
-        )}
+
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = '/oscc';
+            }}
+            style={{
+              marginTop: 16,
+              padding: '8px 20px',
+              background: 'transparent',
+              border: '1px solid rgba(138,155,184,0.15)',
+              color: '#2a3550',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 9,
+              letterSpacing: 3,
+              cursor: 'pointer',
+              borderRadius: 4,
+              transition: 'all 0.3s ease',
+              textTransform: 'uppercase',
+            }}
+            onMouseEnter={e => {
+              (e.target as HTMLElement).style.color = '#8a9bb8';
+              (e.target as HTMLElement).style.borderColor = 'rgba(138,155,184,0.4)';
+            }}
+            onMouseLeave={e => {
+              (e.target as HTMLElement).style.color = '#2a3550';
+              (e.target as HTMLElement).style.borderColor = 'rgba(138,155,184,0.15)';
+            }}
+          >
+            Admin Console
+          </button>
+        </div>
 
         <div style={{
           position: 'absolute',
