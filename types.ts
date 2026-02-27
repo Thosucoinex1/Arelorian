@@ -115,10 +115,11 @@ export interface Item {
   id: string;
   name: string;
   type: ItemType;
-  subtype: string;
+  subtype?: string;
   rarity: ItemRarity;
   stats: ItemStats;
   description: string;
+  value?: number;
   setName?: string;
 }
 

@@ -6,10 +6,20 @@ import { ChevronUp, ChevronDown } from 'lucide-react';
 
 export const ChatConsole = () => {
     const messages = useStore(state => state.chatMessages);
+    const clearChat = useStore(state => state.clearChat);
     const { isMobile, orientation } = useStore(state => state.device);
     const [activeTab, setActiveTab] = useState<ChatChannel | 'ALL' | 'THOUGHT'>('ALL');
     const [isExpanded, setIsExpanded] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            clearChat();
+            console.log('Chat logs cleared automatically (1h interval)');
+        }, 3600000); // 1 hour in milliseconds
+
+        return () => clearInterval(interval);
+    }, [clearChat]);
 
     const isLandscapeMobile = isMobile && orientation === 'landscape';
     const consoleWidth = isMobile ? (isLandscapeMobile ? 'w-full max-w-md' : 'w-full max-w-sm') : 'w-[580px]';

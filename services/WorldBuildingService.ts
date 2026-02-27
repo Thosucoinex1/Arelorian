@@ -3,7 +3,8 @@ import { Chunk, POI, Monster, ResourceNode, MONSTER_TEMPLATES } from '../types';
 
 /**
  * WorldBuildingService
- * Implements the 5 Axiomatic Rules for procedural world generation.
+ * Implements the 5 Axiomatic Rules for procedural world emergence.
+ * Grounded in Field Theory and Logic with Plexity (Kappa 1.000).
  */
 export class WorldBuildingService {
   
@@ -24,8 +25,8 @@ export class WorldBuildingService {
     const chunkWorldX = chunk.x * 80;
     const chunkWorldZ = chunk.z * 80;
 
-    // Rule 1: Logic must persist
-    // We use the logicField to determine "stable" points for structures
+    // Rule 1: Logic must persist (Field Theory Continuity)
+    // We use the logicField strings to determine "stable" points for structures
     for (let i = 0; i < 8; i++) {
       for (let j = 0; j < 8; j++) {
         const force = chunk.logicField[i][j];
@@ -106,7 +107,7 @@ export class WorldBuildingService {
           });
         }
         
-        // Rule 5: Emergence is the goal
+        // Rule 5: Emergence is the goal (Hawking's Singularity)
         // Random chance for unique structures like Ruins or Dungeons in Wilderness
         if (chunk.cellType === 'WILDERNESS' && Math.random() < 0.01) {
            pois.push({

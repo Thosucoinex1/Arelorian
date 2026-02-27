@@ -1,7 +1,8 @@
 
-import { Agent, AgentState, ResourceNode, LandParcel, POI, POIType, Monster } from './types';
+import { Agent, AgentState, ResourceNode, POI, POIType, Monster, Item, ItemRarity, ItemType, ItemStats } from './types';
 
 // --- AXIOMATIC UTILITY ENGINE (AUE) ---
+export const KAPPA = 1.000; // The universal constant for Logic with Plexity
 
 export interface AxiomaticSummary {
     choice: AgentState;
@@ -140,13 +141,12 @@ export const calculateAxiomaticWeightWithReason = (
     action: AgentState, 
     nearbyAgents: Agent[], 
     nearbyResources: ResourceNode[],
-    allParcels: LandParcel[] = [],
     nearbyPOIs: POI[] = [],
     nearbyMonsters: Monster[] = []
 ): { utility: number, reason: string } => {
     const K_ENERGY = agent.energy / (agent.maxEnergy || 100);
     const K_INTEGRITY = agent.integrity || 1.0;
-    const K_RECURSION = (Math.sin(Date.now() * 0.0005 + agent.position[0] * 0.1) + 1.2) * 0.5;
+    const K_RECURSION = (Math.sin(Date.now() * 0.0005 + agent.position[0] * 0.1) + 1.2) * 0.5 * KAPPA;
     
     // Personality modifiers
     const sociability = agent.thinkingMatrix.sociability ?? 0.5;
@@ -296,7 +296,6 @@ export const summarizeNeurologicChoice = (
     agent: Agent,
     nearbyAgents: Agent[],
     nearbyResources: ResourceNode[],
-    allParcels: LandParcel[] = [],
     nearbyPOIs: POI[] = [],
     nearbyMonsters: Monster[] = []
 ): AxiomaticSummary => {
@@ -313,7 +312,7 @@ export const summarizeNeurologicChoice = (
     ];
 
     const results = choices.map(c => {
-        const { utility, reason } = calculateAxiomaticWeightWithReason(agent, c, nearbyAgents, nearbyResources, allParcels, nearbyPOIs, nearbyMonsters);
+        const { utility, reason } = calculateAxiomaticWeightWithReason(agent, c, nearbyAgents, nearbyResources, nearbyPOIs, nearbyMonsters);
         return { choice: c, utility, reason };
     }).sort((a, b) => b.utility - a.utility);
 
@@ -336,4 +335,34 @@ export const MONSTER_TEMPLATES: Record<string, { hp: number; maxHp: number; atk:
     GOBLIN: { hp: 40, maxHp: 40, atk: 8, def: 4, speed: 3 },
     ORC: { hp: 80, maxHp: 80, atk: 15, def: 8, speed: 2.5 },
     DRAGON: { hp: 500, maxHp: 500, atk: 50, def: 30, speed: 5 }
+};
+
+export const generateLoot = (monsterType: string): Item | null => {
+    const roll = Math.random() * 100;
+    let rarity: ItemRarity = 'COMMON';
+    if (roll > 99.9) rarity = 'AXIOMATIC';
+    else if (roll > 99) rarity = 'LEGENDARY';
+    else if (roll > 95) rarity = 'EPIC';
+    else if (roll > 85) rarity = 'RARE';
+    else if (roll > 60) rarity = 'UNCOMMON';
+
+    const types: ItemType[] = ['WEAPON', 'HELM', 'CHEST', 'LEGS', 'RELIC'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    
+    const stats: ItemStats = {};
+    const multiplier = rarity === 'AXIOMATIC' ? 10 : rarity === 'LEGENDARY' ? 5 : rarity === 'EPIC' ? 3 : rarity === 'RARE' ? 2 : rarity === 'UNCOMMON' ? 1.5 : 1;
+    
+    if (type === 'WEAPON') stats.atk = Math.floor((Math.random() * 10 + 5) * multiplier);
+    else stats.def = Math.floor((Math.random() * 5 + 2) * multiplier);
+
+    return {
+        id: `item-${Date.now()}-${Math.random()}`,
+        name: `${rarity} ${type}`,
+        type,
+        subtype: 'LOOT',
+        rarity,
+        stats,
+        value: Math.floor(10 * multiplier),
+        description: `A ${rarity} item dropped from a ${monsterType}.`
+    };
 };

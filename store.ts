@@ -2,10 +2,10 @@
 import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
-  Monster, ChatChannel, ResourceType, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
+  Monster, ChatChannel, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
   TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier, WindowType, WindowState, AuctionListing
 } from './types';
-import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES } from './utils';
+import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES, KAPPA, generateLoot } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
 import { WorldBuildingService } from './services/WorldBuildingService';
 
@@ -136,6 +136,7 @@ interface GameState {
   setSelectedChunk: (id: string | null) => void;
   selectMonster: (id: string | null) => void;
   selectPoi: (id: string | null) => void;
+  clearChat: () => void;
 }
 
 export const useStore = create<GameState>((set, get) => ({
@@ -387,16 +388,16 @@ export const useStore = create<GameState>((set, get) => ({
         const worldZ = z * 80 + (j * 10 - 35);
         
         // Axiomatic Data: 0 to 1, influenced by logic field
-        data[i][j] = (Math.sin(worldX * 0.1) * Math.cos(worldZ * 0.1) + 1) / 2;
+        data[i][j] = (Math.sin(worldX * 0.1 * KAPPA) * Math.cos(worldZ * 0.1 * KAPPA) + 1) / 2;
         
         // Physics-based Logic Field: Logic by Plexity
         // Multi-layered noise/sine forces
-        const vx = Math.sin(worldX * 0.05) * Math.cos(worldZ * 0.03) * 0.15 + 
-                   Math.sin(worldZ * 0.1) * 0.05 +
-                   Math.cos(hash * 0.01) * 0.02;
-        const vz = Math.cos(worldX * 0.04) * Math.sin(worldZ * 0.06) * 0.15 + 
-                   Math.cos(worldX * 0.12) * 0.05 +
-                   Math.sin(hash * 0.01) * 0.02;
+        const vx = Math.sin(worldX * 0.05 * KAPPA) * Math.cos(worldZ * 0.03 * KAPPA) * 0.15 + 
+                   Math.sin(worldZ * 0.1 * KAPPA) * 0.05 +
+                   Math.cos(hash * 0.01 * KAPPA) * 0.02;
+        const vz = Math.cos(worldX * 0.04 * KAPPA) * Math.sin(worldZ * 0.06 * KAPPA) * 0.15 + 
+                   Math.cos(worldX * 0.12 * KAPPA) * 0.05 +
+                   Math.sin(hash * 0.01 * KAPPA) * 0.02;
         field[i][j] = { vx, vz };
       }
     }
@@ -435,22 +436,16 @@ export const useStore = create<GameState>((set, get) => ({
       return;
     }
 
-    const initialChunks: Chunk[] = [
-        { 
-          id: 'c00', x: 0, z: 0, biome: 'CITY', entropy: 0.1, explorationLevel: 1.0, 
-          stabilityIndex: 1.0, corruptionLevel: 0.0, cellType: 'SANCTUARY',
-          logicField: Array(8).fill(0).map(() => Array(8).fill({ vx: 0, vz: 0 }))
-        },
-        { 
-          id: 'c10', x: 1, z: 0, biome: getBiomeForChunk(1,0), entropy: 0.2, explorationLevel: 0.1,
-          stabilityIndex: 0.8, corruptionLevel: 0.1, cellType: 'WILDERNESS',
-          logicField: Array(8).fill(0).map(() => Array(8).fill({ vx: 0.05, vz: -0.05 }))
-        },
-    ];
+    // Generate initial 3x3 grid around center
+    for (let x = -1; x <= 1; x++) {
+      for (let z = -1; z <= 1; z++) {
+        get().generateAxiomaticChunk(x, z);
+      }
+    }
 
     const initialAgents: Agent[] = [
         {
-            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
+            id: 'a1', name: 'Aurelius', classType: 'Scribe', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 25, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
             thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8, curiosity: 0.9, frugality: 0.7 },
             relationships: {},
             skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 1, xp: 0 } }, 
@@ -468,7 +463,7 @@ export const useStore = create<GameState>((set, get) => ({
             emergentBehaviorLog: []
         },
         {
-          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 15, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
+          id: 'a2', name: 'Vulcan', classType: 'Blacksmith', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
           thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4, curiosity: 0.3, frugality: 0.5 },
           relationships: {},
           skills: { mining: { level: 2, xp: 0 }, crafting: { level: 8, xp: 0 }, combat: { level: 4, xp: 0 } }, 
@@ -484,19 +479,29 @@ export const useStore = create<GameState>((set, get) => ({
             tradeFrequency: 0.6
           },
           emergentBehaviorLog: []
+        },
+        {
+          id: 'a3', name: 'Lyra', classType: 'Explorer', faction: 'NPC', position: [10, 0, -10], rotationY: 0, level: 2, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 30, state: AgentState.IDLE, soulDensity: 0.9, gold: 200, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x3', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.15, awakeningProgress: 0, 
+          thinkingMatrix: { personality: 'Curious', currentLongTermGoal: 'Map the Void', alignment: 0.8, languagePreference: 'EN', sociability: 0.9, curiosity: 1.0, frugality: 0.3 },
+          relationships: {},
+          skills: { mining: { level: 1, xp: 0 }, crafting: { level: 1, xp: 0 }, combat: { level: 2, xp: 0 } }, 
+          resources: { WOOD: 0, STONE: 0, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 10 },
+          inventory: Array(10).fill(null), bank: Array(50).fill(null), equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null }, stats: { str: 8, agi: 14, int: 12, vit: 8, hp: 90, maxHp: 90 }, lastScanTime: 0, isAwakened: false, isAdvancedIntel: false,
+          economicDesires: { 
+            targetGold: 2000, 
+            preferredResources: ['DIAMOND', 'ANCIENT_RELIC'], 
+            greedLevel: 0.4,
+            riskAppetite: 0.8,
+            frugality: 0.2,
+            marketRole: 'EXPLORER',
+            tradeFrequency: 0.4
+          },
+          emergentBehaviorLog: []
         }
     ];
 
-    const initialMonsters: Monster[] = [
-      { id: 'm1', type: 'SLIME', name: 'Void Slime', position: [25, 0, 25], rotationY: 0, stats: { ...MONSTER_TEMPLATES.SLIME, maxHp: 30 }, xpReward: 15, state: 'IDLE', targetId: null, color: '#22c55e', scale: 0.5 },
-      { id: 'm2', type: 'GOBLIN', name: 'Scavenger', position: [-30, 0, 40], rotationY: 0, stats: { ...MONSTER_TEMPLATES.GOBLIN, maxHp: 60 }, xpReward: 40, state: 'IDLE', targetId: null, color: '#84cc16', scale: 0.8 }
-    ];
-
     set({ 
-      loadedChunks: initialChunks, 
       agents: initialAgents, 
-      monsters: initialMonsters.map(m => ({ ...m, stats: { ...MONSTER_TEMPLATES[m.type], maxHp: m.stats.maxHp } })), 
-      pois: generateProceduralPOIs(10),
       landParcels: [
         { id: 'parcel_1', name: 'Axiom Lot Alpha', ownerId: 'u1', isCertified: true, structures: [] }
       ]
@@ -536,9 +541,9 @@ export const useStore = create<GameState>((set, get) => ({
             const targetAgent = state.agents.find(a => a.id === m.targetId);
             if (targetAgent) {
                 const dist = Math.hypot(targetAgent.position[0] - m.position[0], targetAgent.position[2] - m.position[2]);
-                if (dist < 2.5 && Math.random() < 0.1) { // 10% chance per tick to attack
+                if (dist < 2.5 && Math.random() < 0.1) {
                     // Damage calculation
-                    const armor = (targetAgent.equipment.chest?.stats.def || 0) + (targetAgent.equipment.head?.stats.def || 0) + (targetAgent.equipment.legs?.stats.def || 0);
+                    // const armor = (targetAgent.equipment.chest?.stats.def || 0) + (targetAgent.equipment.head?.stats.def || 0) + (targetAgent.equipment.legs?.stats.def || 0);
                     // const damage: number = Math.max(1, m.stats.atk - (targetAgent.stats.vit * 0.5 + armor));
                     
                     // We'll apply damage to agent in the agent mapping
@@ -643,11 +648,22 @@ export const useStore = create<GameState>((set, get) => ({
             }
         }
 
-        // 3. XP Gain from Dead Monsters
+        // 3. XP Gain & Loot from Dead Monsters
         newMonsters.forEach(m => {
             if (m.state === 'DEAD' && state.monsters.find(oldM => oldM.id === m.id)?.state !== 'DEAD') {
                 if (a.state === AgentState.COMBAT && a.targetId === m.id) {
                     newXp += m.xpReward;
+                    
+                    // Loot Drop (Diablo 2 style)
+                    const loot = generateLoot(m.type);
+                    if (loot) {
+                        const emptySlot = a.inventory.findIndex(slot => slot === null);
+                        if (emptySlot !== -1) {
+                            a.inventory[emptySlot] = loot;
+                            state.addLog(`${a.name} hat ${loot.name} (${loot.rarity}) erbeutet!`, 'EVENT', a.id);
+                        }
+                    }
+
                     if (newXp >= getXPForNextLevel(newLevel)) {
                         newXp -= getXPForNextLevel(newLevel);
                         newLevel++;
@@ -872,7 +888,6 @@ export const useStore = create<GameState>((set, get) => ({
           agent, 
           state.agents.filter(a => a.id !== agent.id), 
           state.resourceNodes, 
-          state.landParcels, 
           state.pois,
           state.monsters.filter(m => m.state !== 'DEAD')
         );
@@ -1145,6 +1160,7 @@ export const useStore = create<GameState>((set, get) => ({
   setSelectedChunk: (id) => set({ selectedChunkId: id }),
   selectMonster: (id) => set({ selectedMonsterId: id }),
   selectPoi: (id) => set({ selectedPoiId: id }),
+  clearChat: () => set({ chatMessages: [] }),
   sendSignal: (msg) => {
     get().addLog(`Signal: ${msg}`, 'AXIOM', 'OVERSEER');
   },
@@ -1570,5 +1586,8 @@ export const useStore = create<GameState>((set, get) => ({
       get().addLog(`Manifestation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'SYSTEM', 'AXIOM');
     }
   },
-  setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => {}
+  setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => {
+    // side and axis are used for joystick control logic
+    console.log(`Joystick ${side} moved:`, axis);
+  }
 }));

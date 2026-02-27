@@ -375,9 +375,8 @@ const WorldScene = () => {
 
         const interval = setInterval(() => {
             for (const agent of agents) {
-                if (agent.faction !== 'PLAYER') continue;
-                
-                // Check surrounding chunks
+                // Check surrounding chunks for all agents, not just player
+                // This ensures the world expands as any agent explores
                 const currentChunkX = Math.floor((agent.position[0] + 40) / 80);
                 const currentChunkZ = Math.floor((agent.position[2] + 40) / 80);
 
