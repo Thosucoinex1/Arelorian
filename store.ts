@@ -457,8 +457,8 @@ export const useStore = create<GameState>((set, get) => ({
     const newChunk: Chunk = {
       id, x, z, 
       biome: getBiomeForChunk(x, z),
-      entropy: Math.random() * 0.5,
-      explorationLevel: 0.1,
+      entropy: isSanctuary ? 0 : Math.random() * 0.5,
+      explorationLevel: isSanctuary ? 1.0 : 0.5,
       logicString,
       axiomaticData: data,
       logicField: field,
@@ -606,8 +606,20 @@ export const useStore = create<GameState>((set, get) => ({
             }
         }
 
-        // 2. Monster Movement
-        const closestAgent = state.agents.find(a => Math.hypot(a.position[0]-m.position[0], a.position[2]-m.position[2]) < 15);
+        // 2. Monster Movement — Skip aggro if monster is in a sanctuary chunk
+        const mSancChunkX = Math.floor((m.position[0] + 40) / 80);
+        const mSancChunkZ = Math.floor((m.position[2] + 40) / 80);
+        const mSancChunk = state.loadedChunks.find(c => c.x === mSancChunkX && c.z === mSancChunkZ);
+        const monsterInSanctuary = mSancChunk?.biome === 'CITY' || mSancChunk?.cellType === 'SANCTUARY';
+
+        const closestAgent = monsterInSanctuary ? undefined : state.agents.find(a => {
+            const aChunkX = Math.floor((a.position[0] + 40) / 80);
+            const aChunkZ = Math.floor((a.position[2] + 40) / 80);
+            const aChunk = state.loadedChunks.find(c => c.x === aChunkX && c.z === aChunkZ);
+            const agentInSanctuary = aChunk?.biome === 'CITY' || aChunk?.cellType === 'SANCTUARY';
+            if (agentInSanctuary) return false;
+            return Math.hypot(a.position[0]-m.position[0], a.position[2]-m.position[2]) < 15;
+        });
         if (closestAgent && closestAgent.stats.hp > 0) {
           newState = 'COMBAT';
           newTargetId = closestAgent.id;

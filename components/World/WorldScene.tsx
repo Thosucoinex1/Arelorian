@@ -19,7 +19,7 @@ const isPosInSanctuary = (pos: [number, number, number], chunks: Chunk[]) => {
     const chunkX = Math.floor((pos[0] + 40) / 80);
     const chunkZ = Math.floor((pos[2] + 40) / 80);
     const chunk = chunks.find(c => c.x === chunkX && c.z === chunkZ);
-    return chunk?.biome === 'CITY';
+    return chunk?.biome === 'CITY' || chunk?.cellType === 'SANCTUARY';
 };
 
 const DynamicSky = () => {
@@ -42,6 +42,35 @@ const DynamicSky = () => {
             mieCoefficient={0.005 + threat * 0.05}
             mieDirectionalG={0.8}
         />
+    );
+};
+
+const DungeonPortalRing: React.FC<{ position: [number, number, number] }> = ({ position }) => {
+    const ringRef = useRef<THREE.Mesh>(null);
+    const glowRef = useRef<THREE.PointLight>(null);
+
+    useFrame((state) => {
+        const time = state.clock.getElapsedTime();
+        if (ringRef.current) {
+            ringRef.current.rotation.z = time * 0.8;
+        }
+        if (glowRef.current) {
+            glowRef.current.intensity = 1.5 + Math.sin(time * 2) * 0.8;
+        }
+    });
+
+    return (
+        <group position={position}>
+            <mesh ref={ringRef} rotation={[0, 0, 0]}>
+                <torusGeometry args={[1.8, 0.12, 16, 32]} />
+                <meshStandardMaterial color="#8b5cf6" emissive="#8b5cf6" emissiveIntensity={2.5} transparent opacity={0.9} />
+            </mesh>
+            <mesh rotation={[0, 0, 0]}>
+                <torusGeometry args={[1.5, 0.06, 16, 32]} />
+                <meshStandardMaterial color="#c084fc" emissive="#c084fc" emissiveIntensity={1.5} transparent opacity={0.6} />
+            </mesh>
+            <pointLight ref={glowRef} color="#8b5cf6" intensity={2} distance={12} />
+        </group>
     );
 };
 
@@ -124,6 +153,27 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
                         <meshStandardMaterial color={getPOIColor()} emissive={getPOIColor()} emissiveIntensity={isVisible ? 1.5 : 0.5} wireframe metalness={0.8} roughness={0.2} />
                     </mesh>
                 )}
+                {poi.type === 'DUNGEON' && (
+                    <group>
+                        <mesh position={[-2, 2, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[0.8, 4, 1.5]} />
+                            <meshStandardMaterial color="#3a3a3a" roughness={0.95} metalness={0.1} />
+                        </mesh>
+                        <mesh position={[2, 2, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[0.8, 4, 1.5]} />
+                            <meshStandardMaterial color="#3a3a3a" roughness={0.95} metalness={0.1} />
+                        </mesh>
+                        <mesh position={[0, 4.2, 0]} castShadow receiveShadow>
+                            <boxGeometry args={[4.8, 0.8, 1.5]} />
+                            <meshStandardMaterial color="#4a4a4a" roughness={0.9} metalness={0.1} />
+                        </mesh>
+                        <mesh position={[0, 2, 0.5]}>
+                            <planeGeometry args={[3.2, 4]} />
+                            <meshStandardMaterial color="#050510" roughness={1} metalness={0} side={2} />
+                        </mesh>
+                        <DungeonPortalRing position={[0, 2, -0.2]} />
+                    </group>
+                )}
                 <Html position={[0, 3, 0]} center distanceFactor={20}>
                     <div className={`px-2 py-0.5 rounded border ${discovered ? 'bg-axiom-dark/60 border-white/20 text-gray-400' : 'bg-axiom-gold border-axiom-gold text-black animate-pulse'} text-[8px] font-black uppercase tracking-widest ${isVisible ? 'opacity-100' : 'opacity-40'}`}>
                         {discovered ? String(poi.type) : 'SIGNAL DETECTED'}
@@ -134,33 +184,186 @@ const POIMesh: React.FC<{ poi: POI }> = ({ poi }) => {
     );
 };
 
+const SlimeBody: React.FC<{ color: string; scale: number }> = ({ color, scale }) => (
+    <group scale={[scale, scale, scale]}>
+        <mesh castShadow receiveShadow position={[0, 0.6, 0]} scale={[1, 0.7, 1]}>
+            <sphereGeometry args={[1, 16, 12]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} transparent opacity={0.75} roughness={0.1} metalness={0.2} />
+        </mesh>
+        <mesh position={[0.25, 1.0, 0.4]} scale={[0.2, 0.25, 0.15]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshStandardMaterial color="#111111" roughness={0.1} metalness={0.8} />
+        </mesh>
+        <mesh position={[-0.25, 1.0, 0.4]} scale={[0.2, 0.25, 0.15]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshStandardMaterial color="#111111" roughness={0.1} metalness={0.8} />
+        </mesh>
+    </group>
+);
+
+const GoblinBody: React.FC<{ color: string; scale: number }> = ({ color, scale }) => (
+    <group scale={[scale, scale, scale]}>
+        <mesh castShadow receiveShadow position={[0, 0.5, 0]}>
+            <sphereGeometry args={[0.5, 10, 10]} />
+            <meshStandardMaterial color={color} roughness={0.6} metalness={0.2} />
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, 1.2, 0]}>
+            <sphereGeometry args={[0.45, 10, 10]} />
+            <meshStandardMaterial color={color} roughness={0.6} metalness={0.2} />
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, 1.9, 0]}>
+            <sphereGeometry args={[0.4, 10, 10]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.15} roughness={0.5} metalness={0.2} />
+        </mesh>
+        <mesh castShadow position={[0, 2.5, 0]} rotation={[0, 0, 0]}>
+            <coneGeometry args={[0.35, 0.7, 6]} />
+            <meshStandardMaterial color="#8B0000" roughness={0.7} metalness={0.1} />
+        </mesh>
+        <mesh position={[0.15, 2.05, 0.3]} scale={[0.12, 0.15, 0.1]}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial color="#ffcc00" emissive="#ffcc00" emissiveIntensity={0.8} />
+        </mesh>
+        <mesh position={[-0.15, 2.05, 0.3]} scale={[0.12, 0.15, 0.1]}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial color="#ffcc00" emissive="#ffcc00" emissiveIntensity={0.8} />
+        </mesh>
+    </group>
+);
+
+const OrcBody: React.FC<{ color: string; scale: number }> = ({ color, scale }) => (
+    <group scale={[scale, scale, scale]}>
+        <mesh castShadow receiveShadow position={[0, 0.8, 0]} scale={[0.8, 1.0, 0.6]}>
+            <sphereGeometry args={[1, 12, 12]} />
+            <meshStandardMaterial color={color} roughness={0.7} metalness={0.3} />
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, 1.9, 0]} scale={[0.55, 0.6, 0.5]}>
+            <sphereGeometry args={[1, 10, 10]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.2} roughness={0.6} metalness={0.3} />
+        </mesh>
+        <mesh castShadow position={[0.7, 0.6, 0]} scale={[0.3, 0.7, 0.3]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.7} metalness={0.3} />
+        </mesh>
+        <mesh castShadow position={[-0.7, 0.6, 0]} scale={[0.3, 0.7, 0.3]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.7} metalness={0.3} />
+        </mesh>
+        <mesh position={[0.2, 2.1, 0.35]} scale={[0.1, 0.12, 0.08]}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial color="#ff3300" emissive="#ff3300" emissiveIntensity={1.0} />
+        </mesh>
+        <mesh position={[-0.2, 2.1, 0.35]} scale={[0.1, 0.12, 0.08]}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial color="#ff3300" emissive="#ff3300" emissiveIntensity={1.0} />
+        </mesh>
+    </group>
+);
+
+const DragonBody: React.FC<{ color: string; scale: number }> = ({ color, scale }) => (
+    <group scale={[scale, scale, scale]}>
+        <mesh castShadow receiveShadow position={[0, 0.8, 0]} scale={[0.6, 0.7, 1.2]}>
+            <sphereGeometry args={[1, 12, 12]} />
+            <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+        </mesh>
+        <mesh castShadow receiveShadow position={[0, 1.3, -1.0]} scale={[0.35, 0.4, 0.35]}>
+            <sphereGeometry args={[1, 10, 10]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} roughness={0.4} metalness={0.5} />
+        </mesh>
+        <mesh castShadow position={[0, 1.4, -1.4]} rotation={[0.4, 0, 0]}>
+            <coneGeometry args={[0.12, 0.4, 4]} />
+            <meshStandardMaterial color={color} roughness={0.5} metalness={0.4} />
+        </mesh>
+        <mesh position={[0.15, 1.55, -1.05]} scale={[0.08, 0.1, 0.06]}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial color="#ffaa00" emissive="#ffaa00" emissiveIntensity={2.0} />
+        </mesh>
+        <mesh position={[-0.15, 1.55, -1.05]} scale={[0.08, 0.1, 0.06]}>
+            <sphereGeometry args={[1, 6, 6]} />
+            <meshStandardMaterial color="#ffaa00" emissive="#ffaa00" emissiveIntensity={2.0} />
+        </mesh>
+        <mesh castShadow position={[0, 0.6, 1.2]} rotation={[-0.3, 0, 0]} scale={[0.15, 0.15, 0.8]}>
+            <cylinderGeometry args={[1, 0.1, 1, 6]} />
+            <meshStandardMaterial color={color} roughness={0.6} metalness={0.4} />
+        </mesh>
+        <mesh castShadow position={[0.9, 1.1, 0]} rotation={[0, 0, -0.6]} scale={[0.6, 0.05, 0.4]}>
+            <planeGeometry args={[2, 1.5]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.15} side={THREE.DoubleSide} transparent opacity={0.85} roughness={0.3} metalness={0.4} />
+        </mesh>
+        <mesh castShadow position={[-0.9, 1.1, 0]} rotation={[0, 0, 0.6]} scale={[0.6, 0.05, 0.4]}>
+            <planeGeometry args={[2, 1.5]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.15} side={THREE.DoubleSide} transparent opacity={0.85} roughness={0.3} metalness={0.4} />
+        </mesh>
+    </group>
+);
+
 const MonsterMesh: React.FC<{ monster: Monster }> = ({ monster }) => {
     const selectMonster = useStore(state => state.selectMonster);
     const agents = useStore(state => state.agents);
     const chunks = useStore(state => state.loadedChunks);
     const [isVisible, setIsVisible] = useState(false);
+    const groupRef = useRef<THREE.Group>(null);
+    const bobOffset = useRef(Math.random() * Math.PI * 2);
 
-    useFrame(() => {
+    useFrame((state) => {
         if (monster.state === 'DEAD') return;
-        if (isPosInSanctuary(monster.position, chunks)) { setIsVisible(true); return; }
-        let visible = false;
-        for (const a of agents) {
-            const dist = Math.hypot(a.position[0] - monster.position[0], a.position[2] - monster.position[2]);
-            if (dist < a.visionRange) { visible = true; break; }
+        if (isPosInSanctuary(monster.position, chunks)) { setIsVisible(true); }
+        else {
+            let visible = false;
+            for (const a of agents) {
+                const dist = Math.hypot(a.position[0] - monster.position[0], a.position[2] - monster.position[2]);
+                if (dist < a.visionRange) { visible = true; break; }
+            }
+            if (visible !== isVisible) setIsVisible(visible);
         }
-        if (visible !== isVisible) setIsVisible(visible);
+
+        if (groupRef.current && isVisible) {
+            const time = state.clock.getElapsedTime();
+            const bobSpeed = monster.type === 'SLIME' ? 3.0 : 1.5;
+            const bobHeight = monster.type === 'SLIME' ? 0.4 : 0.15;
+            groupRef.current.position.y = monster.position[1] + Math.sin(time * bobSpeed + bobOffset.current) * bobHeight;
+
+            if (monster.type === 'SLIME') {
+                const squish = 1.0 + Math.sin(time * bobSpeed + bobOffset.current) * 0.15;
+                groupRef.current.scale.set(1.0 / squish, squish, 1.0 / squish);
+            }
+        }
     });
 
     if (!isVisible || monster.state === 'DEAD') return null;
 
+    const renderMonsterBody = () => {
+        switch (monster.type) {
+            case 'SLIME':
+                return <SlimeBody color={monster.color} scale={monster.scale} />;
+            case 'GOBLIN':
+                return <GoblinBody color={monster.color} scale={monster.scale} />;
+            case 'ORC':
+                return <OrcBody color={monster.color} scale={monster.scale} />;
+            case 'DRAGON':
+                return <DragonBody color={monster.color} scale={monster.scale} />;
+            default:
+                return (
+                    <mesh castShadow receiveShadow scale={[monster.scale, monster.scale, monster.scale]} position={[0, monster.scale, 0]}>
+                        <icosahedronGeometry args={[1, 1]} />
+                        <meshStandardMaterial color={monster.color} emissive={monster.color} emissiveIntensity={0.4} roughness={0.3} metalness={0.6} />
+                    </mesh>
+                );
+        }
+    };
+
+    const labelHeight = monster.type === 'DRAGON' ? monster.scale * 2.5 + 1 : monster.type === 'ORC' ? monster.scale * 2.8 + 0.5 : monster.type === 'GOBLIN' ? monster.scale * 3.5 + 0.5 : monster.scale * 2 + 1;
+
     return (
         <group position={[monster.position[0], monster.position[1], monster.position[2]]} onClick={(e) => { e.stopPropagation(); selectMonster(monster.id); }}>
-            <mesh castShadow receiveShadow scale={[monster.scale, monster.scale, monster.scale]} position={[0, monster.scale, 0]}>
-                <icosahedronGeometry args={[1, 1]} />
-                <meshStandardMaterial color={monster.color} emissive={monster.color} emissiveIntensity={0.4} roughness={0.3} metalness={0.6} />
+            <group ref={groupRef}>
+                {renderMonsterBody()}
+                <pointLight position={[0, monster.scale + 0.5, 0]} color={monster.color} intensity={0.5} distance={5} />
+            </group>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+                <circleGeometry args={[monster.scale * 0.8, 16]} />
+                <meshBasicMaterial color="#000000" transparent opacity={0.35} />
             </mesh>
-            <pointLight position={[0, monster.scale + 0.5, 0]} color={monster.color} intensity={0.5} distance={5} />
-            <Html position={[0, monster.scale * 2 + 1, 0]} center distanceFactor={15}>
+            <Html position={[0, labelHeight, 0]} center distanceFactor={15}>
                 <div className="flex flex-col items-center gap-1 pointer-events-none">
                     <div className="w-10 h-1 bg-gray-900 rounded overflow-hidden">
                         <div className="h-full bg-red-500 transition-all duration-300" style={{ width: `${(monster.stats.hp / monster.stats.maxHp * 100).toFixed(0)}%` }} />
@@ -187,10 +390,10 @@ const TerrainChunk: React.FC<{ chunk: Chunk, stability: number }> = ({ chunk, st
     const uniforms = useMemo(() => ({
         uTime: { value: 0 },
         uAwakeningDensity: { value: 1.0 - chunk.stabilityIndex },
-        uBiome: { value: debugBiomeEnabled ? debugBiome : chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : 3.0 },
-        uFogColor: { value: new THREE.Color('#0a0f1a') },
-        uFogNear: { value: 100 },
-        uFogFar: { value: 500 },
+        uBiome: { value: debugBiomeEnabled ? debugBiome : chunk.biome === 'CITY' ? 0.0 : chunk.biome === 'FOREST' ? 1.0 : chunk.biome === 'MOUNTAIN' ? 2.0 : chunk.biome === 'DESERT' ? 4.0 : chunk.biome === 'SWAMP' ? 5.0 : 3.0 },
+        uFogColor: { value: new THREE.Color('#8ba4c4') },
+        uFogNear: { value: 150 },
+        uFogFar: { value: 600 },
         uAgentPositions: { value: new Array(10).fill(new THREE.Vector3()) },
         uAgentVisionRanges: { value: new Float32Array(10) },
         uExplorationLevel: { value: chunk.explorationLevel || 0.0 },
@@ -466,16 +669,16 @@ const SceneLighting = () => {
 
     return (
         <>
-            <ambientLight intensity={0.3} color="#b0c4de" />
-            <hemisphereLight args={['#87CEEB', '#362312', 0.4]} />
+            <ambientLight intensity={0.5} color="#c8d8f0" />
+            <hemisphereLight args={['#87CEEB', '#4a6741', 0.6]} />
             <directionalLight
                 ref={directionalRef}
                 position={[100, 150, 100]}
-                intensity={1.8}
+                intensity={2.2}
                 castShadow
                 color="#fff5e6"
             />
-            <fog attach="fog" args={['#0a0f1a', 100, 500]} />
+            <fog attach="fog" args={['#8ba4c4', 150, 600]} />
         </>
     );
 };
@@ -527,7 +730,7 @@ const WorldScene = () => {
         >
             <Suspense fallback={null}>
                 <SceneManager />
-                <color attach="background" args={['#0a0f1a']} />
+                <color attach="background" args={['#6b8cb5']} />
                 <ThirdPersonCamera />
                 <SceneLighting />
                 <DynamicSky />

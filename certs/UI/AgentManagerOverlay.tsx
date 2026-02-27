@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useStore, skinHashToColors } from '../../store';
 import { MAX_IMPORTED_AGENTS } from '../../types';
 import { soundManager } from '../../services/SoundManager';
-import { X, Minus, Plus, Trash2, UserPlus, Zap, Globe, FileJson } from 'lucide-react';
+import { X, Minus, Plus, Trash2, UserPlus, Zap, Globe, FileJson, PlusCircle } from 'lucide-react';
+
+const CharacterCreation = lazy(() => import('./CharacterCreation'));
 
 export const AgentManagerOverlay = () => {
   const toggleWindow = useStore(state => state.toggleWindow);
@@ -16,6 +18,7 @@ export const AgentManagerOverlay = () => {
   const [importSource, setImportSource] = useState('');
   const [importType, setImportType] = useState<'URL' | 'JSON'>('URL');
   const [isImporting, setIsImporting] = useState(false);
+  const [showCharacterCreation, setShowCharacterCreation] = useState(false);
 
   const importedAgentData = importedAgents.map(meta => {
     const agent = agents.find(a => a.id === meta.agentId);
@@ -32,6 +35,21 @@ export const AgentManagerOverlay = () => {
   };
 
   const slotsRemaining = MAX_IMPORTED_AGENTS - importedAgents.length;
+
+  if (showCharacterCreation) {
+    return (
+      <Suspense fallback={
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="text-cyan-400 text-sm font-mono animate-pulse">Loading Character Creator...</div>
+        </div>
+      }>
+        <CharacterCreation onComplete={() => {
+          setShowCharacterCreation(false);
+          soundManager.playUI('CLICK');
+        }} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4">
@@ -92,6 +110,14 @@ export const AgentManagerOverlay = () => {
               );
             })}
           </div>
+
+          <button
+            onClick={() => { setShowCharacterCreation(true); soundManager.playUI('CLICK'); }}
+            className="w-full py-4 rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-900/20 to-emerald-800/10 hover:border-emerald-400/50 hover:from-emerald-900/30 hover:to-emerald-800/20 transition-all flex items-center justify-center gap-3 group"
+          >
+            <PlusCircle size={18} className="text-emerald-400 group-hover:text-emerald-300 transition-colors" />
+            <span className="text-emerald-300 text-xs font-black uppercase tracking-[0.2em] group-hover:text-emerald-200 transition-colors">Create New Character</span>
+          </button>
 
           {importedAgentData.length > 0 && (
             <div className="space-y-3">

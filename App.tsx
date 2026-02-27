@@ -15,6 +15,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import OsccDashboard from './certs/UI/OsccDashboard';
 import LandingPage from './certs/UI/LandingPage';
 import CharacterCreation from './certs/UI/CharacterCreation';
+import TutorialOverlay from './certs/UI/TutorialOverlay';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
@@ -285,6 +286,8 @@ const GameApp = () => {
       <ErrorBoundary name="Axiomatic Overlay">
         <AxiomaticOverlay />
       </ErrorBoundary>
+      
+      <TutorialOverlay />
       
       {showDeveloperTools && (
         <ErrorBoundary name="Developer Tools">

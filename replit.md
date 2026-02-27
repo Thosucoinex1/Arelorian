@@ -39,14 +39,34 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
   - Equipment types: helmet (head), chest armor (chest), leg armor (legs), weapon (right hand), shield (left hand)
   - Rarity-based PBR materials (COMMON→gray, UNCOMMON→green, RARE→blue, EPIC→purple, LEGENDARY→orange, AXIOMATIC→pink)
 
+### Terrain Shader
+- `components/World/AxiomShader.ts` — Rich procedural biome texturing
+  - CITY: Cobblestone brick patterns with road networks and grass edges
+  - FOREST: Multi-layer ground cover (soil, moss, grass, leaf litter, dappled light)
+  - MOUNTAIN: Stratified rock with cliff faces, moss, snow at elevation
+  - PLAINS: Grass with wildflowers (pink/yellow/white), dry patches, dirt paths
+  - DESERT: Sand dunes with ripples and sparkle
+  - SWAMP: Mud/moss with water pools and shimmer
+  - Neural fog-of-war with sanctuary override (CITY always fully visible)
+  - Minimum visibility floor (0.15) so terrain is never pitch black
+
+### Monster Visuals
+- 4 distinct procedural monster body types:
+  - Slime: Translucent squashed sphere with eyes, bouncing animation
+  - Goblin: Stacked spheres with cone hat, humanoid silhouette
+  - Orc: Beefy body with muscular arms, glowing red eyes
+  - Dragon: Multi-part with snout, wings, tail, amber eyes
+- Ground shadow circles beneath all monsters
+- Floating/bobbing animation per type
+
 ### Enhanced WorldScene
 - `components/World/WorldScene.tsx` — PBR rendering pipeline
   - HumanoidAgentMesh replaces old box/sphere AgentMesh
-  - Hemisphere light (sky=#87CEEB, ground=#362312)
-  - Directional light with 2048px shadow maps
-  - Linear fog (near=100, far=500)
+  - Hemisphere light (sky=#87CEEB, ground=#4a6741)
+  - Directional light with 2048px shadow maps, intensity 2.2
+  - Linear fog (near=150, far=600, color=#8ba4c4)
   - ACES Filmic tone mapping, sRGB color space
-  - Monster meshes: icosahedron with emissive glow + point light
+  - Dungeon entrances: Stone arch pillars with glowing purple portal ring
   - WebGL error boundaries for graceful degradation
 
 ## Frontend Components
@@ -68,7 +88,8 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 - `certs/UI/QuestBoardOverlay.tsx` — Quest tracking and acceptance
 - `certs/UI/GuildPartyOverlay.tsx` — Guild/party management
 - `certs/UI/AdminDashboard.tsx` — Admin-only: emergence settings, import agents, diagnostics
-- `certs/UI/AgentManagerOverlay.tsx` — User agent manager: 5-slot import system
+- `certs/UI/AgentManagerOverlay.tsx` — User agent manager: 5-slot import system + "Create New Character" manual path
+- `certs/UI/TutorialOverlay.tsx` — 5-step new player tutorial (movement, skills, world, combat, safe zone)
 - `certs/UI/EnergyShopOverlay.tsx` — Matrix Energy purchase shop
 - `certs/UI/PayPalModal.tsx` — PayPal checkout modal
 - `certs/UI/WindowHUD.tsx` — Minimized window restore bar
@@ -118,7 +139,7 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 
 - `services/geminiService.ts` — Gemini AI integration for autonomous agent decisions
 - `services/webSocketService.ts` — Real-time WebSocket client with auto-reconnection
-- `services/WorldBuildingService.ts` — Procedural content generation
+- `services/WorldBuildingService.ts` — Procedural content generation (sanctuary city POIs, biome-specific dungeons, monster variety)
 - `services/SoundManager.ts` — WebAudio procedural sound effects
 - `services/CharacterImporter.ts` — External character data import
 
