@@ -1,67 +1,89 @@
 # Ouroboros: Neural Emergence
 
-A real-time, AI-driven MMO world simulation built with React, Three.js, Express, and WebSockets.
+A real-time, AI-driven MMO world simulation built with React, Three.js, Express, and WebSockets. Features a deterministic tick engine, procedural world generation, and axiomatic feedback loops.
 
 ## Architecture
 
 - **Frontend**: React 18, Three.js (@react-three/fiber), Tailwind CSS v4, Zustand
-- **Backend**: Express 5 + HTTP server with WebSocket (ws) support
-- **Database**: Replit PostgreSQL (Neon-backed), schema v32.0
-- **Dev Server**: Both frontend and backend run together via `tsx server.ts` on port 5000
-- **Build System**: Vite 6 with TypeScript
+- **Backend**: Express 5 + WebSocket (ws) + modular engine in `server/`
+- **Database**: Replit PostgreSQL (Neon-backed), schema v32.0 — 13 tables
+- **Tick Engine**: 600ms deterministic cycle, κ=1000
+- **Dev Server**: `tsx server.ts` on port 5000 (Vite middleware in dev)
 
-## Database Schema
+## Database Schema (13 tables)
 
-- `agents` — Game agents/NPCs with UUID PKs, stats (hp, level, exp), position (pos_x/y/z), JSONB inventory/dna_history/memory_cache
-- `duden_register` — Notary event log (Petra Markgraf), tracks quests/system/emanation events
-- `chronicles` — Archive/hörbuch chapters with notary seals
-- `world_state` — System monitoring: stability index, active players, Vertex AI status
+- `agents` — UUID PK, stats, position, JSONB inventory/dna/memory
+- `users` — Player accounts with subscription tier
+- `chunks` — 16x16m procedural world chunks with biome, resources, logic field
+- `combat_logs` — Server-authoritative combat records
+- `loot_table` — Item templates with rarity/stats
+- `marketplace` — Active market listings with dynamic pricing
+- `hierarchy_entities` — Guilds/factions with infrastructure unlocks
+- `matrix_transactions` — Energy/currency ledger
+- `economic_summary` — Per-tick economic snapshots (GDP, inflation, trade volume)
+- `tick_state` — Tick engine execution logs
+- `world_state` — Global stability/player monitoring
+- `duden_register` — Notary event log
+- `chronicles` — Narrative archive
 
-Initial agents: Aurelius (Enterprise Paladin) and Vulcan (Meister-Schmied).
+## Backend Modules (`server/`)
+
+- `db.ts` — Pool initialization, connection management, queryDb helper
+- `transaction-wrapper.ts` — ACID transaction wrapper (BEGIN/COMMIT/ROLLBACK)
+- `math-engine.ts` — 7 core equations (terrain, biome, resource decay, dungeon probability, market price, trust, decision function), κ=1000
+- `chunk-engine.ts` — Procedural chunk generation, resource extraction, biome shift
+- `tick-engine.ts` — 600ms deterministic tick loop processing agents
+- `combat-system.ts` — Server-authoritative combat resolution
+- `loot-generator.ts` — Seed-based deterministic loot generation (6 rarity tiers)
+- `economic-aggregator.ts` — Dynamic pricing, supply/demand tracking, war impact
+- `hierarchy-validator.ts` — Guild/faction leveling, infrastructure unlocks
+- `matrix-accounting.ts` — Energy balance, transfers, rewards
+- `routes.ts` — All API endpoints
 
 ## API Endpoints
 
-- `GET /api/health` — Server status, DB status, world state, player count
-- `GET /api/agents` — List all agents
-- `GET /api/sync/agents` — List agents (sync endpoint)
-- `POST /api/sync/agents` — Upsert agents (body: `{ agents: [...] }`)
-- `GET /api/chronicles` — List chronicles
-- `GET /api/duden` — List duden register entries (last 100)
-- `GET /api/world-state` — Current world state
-- `GET /api/data` — DB connectivity test
+- `GET /api/health` — Status, DB, tick engine, world state
+- `GET /api/agents` — All agents
+- `GET/POST /api/sync/agents` — Agent CRUD (transactional upsert)
+- `GET /api/chunks?x=&z=&radius=` — Chunk grid
+- `GET /api/chunks/:x/:z` — Single chunk
+- `POST /api/chunks/extract` — Resource extraction
+- `GET /api/combat-logs` — Combat history
+- `POST /api/combat` — Trigger combat
+- `GET /api/marketplace` — Listings + dynamic prices
+- `POST /api/marketplace` — Create listing
+- `GET /api/economic-summary` — Economic snapshots
+- `GET /api/hierarchy` — Guilds/factions
+- `POST /api/hierarchy` — Create entity
+- `POST /api/hierarchy/:id/join` — Join + validation
+- `GET /api/matrix/transactions` — Transaction ledger
+- `GET /api/matrix/balance/:uid` — Energy balance
+- `POST /api/matrix/transfer` — Energy transfer
+- `GET /api/tick-state` — Tick engine logs
+- `GET /api/world-state` — World monitoring
+- `GET /api/chronicles` — Archive
+- `GET /api/duden` — Notary log
+- `GET /api/loot/generate` — Loot preview
+- `GET /api/axiom-compliance` — Self-evaluation matrix
 
-## Project Structure
+## Axiom Compliance
 
-- `server.ts` — Express + WebSocket server; serves Vite middleware in dev, static `dist/` in production
-- `App.tsx` — Root React component
-- `index.tsx` — App entry point
-- `vite.config.ts` — Vite configuration (port 5000, allowedHosts: true for Replit proxy)
-- `store.ts` — Zustand global state store
-- `types.ts` — Shared TypeScript types
-- `utils.ts` — Utility functions
-- `geminiService.ts` — Gemini AI service
-- `components/` — React components (World scene, etc.)
-- `certs/UI/` — Game UI components (HUD, overlays, panels, etc.)
-- `services/` — Backend/shared services (Firebase, WebSocket, Sound, etc.)
-- `src/services/` — Client-side services (Firebase, Genkit)
+All subsystems enforce:
+- **Energy (I)**: Deterministic formulas, indexed queries, O(n) tick processing
+- **Erosion (II)**: SQL transactions with COMMIT/ROLLBACK on all mutations
+- **Punctuation (III)**: Every tick ends in deterministic committed state
+- **Recursion (IV)**: Mining→resource decay→biome shift→price change→demand shift
+- **Duality (V)**: Mind layer (AI/heuristics in utils.ts) separate from Matter layer (PostgreSQL state)
 
 ## Environment Variables
 
-- `DATABASE_URL` — Replit-managed PostgreSQL connection string (auto-set)
+- `DATABASE_URL` — Replit-managed PostgreSQL (auto-set)
 - `GEMINI_API_KEY` — Required for AI features
 - `VITE_FIREBASE_*` — Firebase client configuration
 - `FIREBASE_SERVICE_ACCOUNT_JSON` — Firebase Admin (server-side)
-- `GOOGLE_CLOUD_PROJECT` / `GOOGLE_APPLICATION_CREDENTIALS` — For Genkit/Vertex AI
-
-## Development
-
-The `npm run dev` script runs `tsx server.ts` which:
-1. Starts an Express server with WebSocket support on port 5000
-2. In dev mode, injects Vite middleware for hot module replacement
-3. In production, serves the built `dist/` directory
 
 ## Deployment
 
-- Target: VM (always-running, needed for WebSocket persistence)
-- Build: `npm run build` (Vite builds frontend to `dist/`)
-- Run: `npx tsx server.ts` (serves built frontend + API)
+- Target: VM (always-running for tick engine + WebSocket)
+- Build: `npm run build`
+- Run: `npx tsx server.ts`
