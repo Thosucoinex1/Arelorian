@@ -5,7 +5,8 @@ import {
   Monster, ChatChannel, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
   TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier, WindowType, WindowState, AuctionListing,
   ImportedAgentMeta, MAX_IMPORTED_AGENTS, STRUCTURE_COSTS, StoreProduct,
-  StatName, GAME_SKILLS, SKILL_ACTIONS, getDefaultSkills, getUnlockedActions, SkillAction
+  StatName, GAME_SKILLS, SKILL_ACTIONS, getDefaultSkills, getUnlockedActions, SkillAction,
+  AppearanceConfig
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES, KAPPA, generateLoot } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
@@ -159,6 +160,7 @@ interface GameState {
   loadAgents: () => Promise<boolean>;
   upgradeNotary: (userId: string) => void;
   
+  createPlayerAgent: (name: string, appearance: AppearanceConfig) => void;
   saveGame: () => void;
   loadGame: () => boolean;
 
@@ -498,7 +500,7 @@ export const useStore = create<GameState>((set, get) => ({
 
     const initialAgents: Agent[] = [
         {
-            id: 'a1', name: 'Aurelius', faction: 'PLAYER', position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 25, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
+            id: 'a1', name: 'Aurelius', faction: 'PLAYER', appearance_json: { skinTone: '#c68642', hairStyle: 'short', bodyScale: 1.0, baseModel: 'humanoid' }, position: [0, 0, 0], rotationY: 0, level: 1, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 25, state: AgentState.IDLE, soulDensity: 1, gold: 100, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x1', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.1, awakeningProgress: 0, 
             thinkingMatrix: { personality: 'Wise', currentLongTermGoal: 'Archive', alignment: 0.5, languagePreference: 'DE', sociability: 0.8, curiosity: 0.9, frugality: 0.7 },
             relationships: {},
             skills: getDefaultSkills(), 
@@ -516,7 +518,7 @@ export const useStore = create<GameState>((set, get) => ({
             emergentBehaviorLog: []
         },
         {
-          id: 'a2', name: 'Vulcan', faction: 'NPC', position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
+          id: 'a2', name: 'Vulcan', faction: 'NPC', appearance_json: { skinTone: '#8d5524', hairStyle: 'bald', bodyScale: 1.2, baseModel: 'bulky' }, position: [-5, 0, 5], rotationY: 0, level: 3, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 20, state: AgentState.IDLE, soulDensity: 0.8, gold: 50, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x2', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.05, awakeningProgress: 0, 
           thinkingMatrix: { personality: 'Gruff', currentLongTermGoal: 'Forge Perfection', alignment: 0.1, languagePreference: 'EN', aggression: 0.4, curiosity: 0.3, frugality: 0.5 },
           relationships: {},
           skills: { ...getDefaultSkills(), mining: { level: 2, xp: 0 }, smithing: { level: 8, xp: 0 }, melee: { level: 4, xp: 0 } }, 
@@ -534,7 +536,7 @@ export const useStore = create<GameState>((set, get) => ({
           emergentBehaviorLog: []
         },
         {
-          id: 'a3', name: 'Lyra', faction: 'NPC', position: [10, 0, -10], rotationY: 0, level: 2, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 30, state: AgentState.IDLE, soulDensity: 0.9, gold: 200, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x3', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.15, awakeningProgress: 0, 
+          id: 'a3', name: 'Lyra', faction: 'NPC', appearance_json: { skinTone: '#e0ac69', hairStyle: 'ponytail', bodyScale: 0.9, baseModel: 'slim' }, position: [10, 0, -10], rotationY: 0, level: 2, xp: 0, insightPoints: 0, visionLevel: 1, visionRange: 30, state: AgentState.IDLE, soulDensity: 0.9, gold: 200, integrity: 1, energy: 100, maxEnergy: 100, dna: { hash: '0x3', generation: 1, corruption: 0 }, memoryCache: [], consciousnessLevel: 0.15, awakeningProgress: 0, 
           thinkingMatrix: { personality: 'Curious', currentLongTermGoal: 'Map the Void', alignment: 0.8, languagePreference: 'EN', sociability: 0.9, curiosity: 1.0, frugality: 0.3 },
           relationships: {},
           skills: { ...getDefaultSkills(), ranged: { level: 3, xp: 0 }, agility_skill: { level: 5, xp: 0 }, herbalism: { level: 2, xp: 0 } }, 
@@ -1403,6 +1405,75 @@ export const useStore = create<GameState>((set, get) => ({
       } : n)
     }));
     get().addLog(`Notary ${userId} upgraded.`, 'SYSTEM', 'NOTAR');
+  },
+
+  createPlayerAgent: (name, appearance) => {
+    const state = get();
+    const id = `player-${Date.now()}`;
+    const newAgent: Agent = {
+      id,
+      name,
+      faction: 'PLAYER',
+      appearance_json: appearance,
+      position: [0, 0, 0],
+      rotationY: 0,
+      level: 1,
+      xp: 0,
+      insightPoints: 0,
+      visionLevel: 1,
+      visionRange: 25,
+      state: AgentState.IDLE,
+      soulDensity: 1,
+      gold: 100,
+      integrity: 1,
+      energy: 100,
+      maxEnergy: 100,
+      dna: { hash: generateSkinHash(name), generation: 1, corruption: 0 },
+      memoryCache: [],
+      consciousnessLevel: 0.1,
+      awakeningProgress: 0,
+      thinkingMatrix: {
+        personality: 'Adventurous',
+        currentLongTermGoal: 'Explore the Matrix',
+        alignment: 0.5,
+        languagePreference: 'EN',
+        sociability: 0.5,
+        curiosity: 0.5,
+        frugality: 0.5,
+      },
+      relationships: {},
+      skills: getDefaultSkills(),
+      resources: { WOOD: 10, STONE: 5, IRON_ORE: 0, SILVER_ORE: 0, GOLD_ORE: 0, DIAMOND: 0, ANCIENT_RELIC: 0, SUNLEAF_HERB: 2 },
+      inventory: Array(10).fill(null),
+      bank: Array(50).fill(null),
+      equipment: { mainHand: null, offHand: null, head: null, chest: null, legs: null },
+      stats: {
+        str: 10, agi: 10, int: 10, vit: 10, hp: 150, maxHp: 150,
+        strength: 10, dexterity: 10, agility: 10, stamina: 10, health: 10, mana: 100, maxMana: 100, intelligence: 10,
+      },
+      unspentStatPoints: 0,
+      lastScanTime: 0,
+      isAwakened: true,
+      isAdvancedIntel: false,
+      economicDesires: {
+        targetGold: 1000,
+        preferredResources: ['GOLD_ORE', 'SILVER_ORE'],
+        greedLevel: 0.3,
+        riskAppetite: 0.5,
+        frugality: 0.5,
+        marketRole: 'EXPLORER',
+        tradeFrequency: 0.3,
+      },
+      emergentBehaviorLog: [],
+    };
+
+    set(s => ({
+      agents: [newAgent, ...s.agents],
+      selectedAgentId: id,
+      controlledAgentId: id,
+    }));
+
+    get().addLog(`Player agent "${name}" created.`, 'SYSTEM', 'SYSTEM');
   },
 
   saveGame: () => {

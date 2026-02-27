@@ -6,7 +6,6 @@ import { ShieldCheck, Key, BrainCircuit, Lock, AlertTriangle } from 'lucide-reac
 import { useStore } from './store';
 import { webSocketService } from './services/webSocketService';
 
-// UI Component Imports
 import GameUI from './certs/UI/GameUI';
 import { MainMenu } from './certs/UI/MainMenu';
 import WorldScene from './components/World/WorldScene';
@@ -14,6 +13,8 @@ import { DeveloperTools } from './components/DeveloperTools';
 import { AxiomaticOverlay } from './certs/UI/AxiomaticOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import OsccDashboard from './certs/UI/OsccDashboard';
+import LandingPage from './certs/UI/LandingPage';
+import CharacterCreation from './certs/UI/CharacterCreation';
 
 const UNIVERSAL_KEY = 'GENER4T1V33ALLACCESSNT1TYNPLU21P1P1K4TZE4I';
 const ADMIN_EMAIL = 'projectouroboroscollective@gmail.com';
@@ -72,10 +73,49 @@ const AxiomHandshakeModal = ({ onClose, storeUser }: { onClose: () => void; stor
   );
 };
 
+type GamePhase = 'landing' | 'character_creation' | 'game' | 'oscc';
+
+const getInitialPhase = (): GamePhase => {
+  if (window.location.pathname === '/oscc') return 'oscc';
+  const stored = localStorage.getItem('ouroboros_game_phase');
+  if (stored === 'game' || stored === 'character_creation') return stored as GamePhase;
+  return 'landing';
+};
+
 const AppRouter = () => {
-  if (window.location.pathname === '/oscc') {
-    return <OsccDashboard />;
+  const [phase, setPhase] = useState<GamePhase>(getInitialPhase);
+
+  const handlePhaseChange = (newPhase: GamePhase) => {
+    setPhase(newPhase);
+    if (newPhase !== 'oscc') {
+      localStorage.setItem('ouroboros_game_phase', newPhase);
+    }
+  };
+
+  if (phase === 'oscc') return <OsccDashboard />;
+
+  if (phase === 'landing') {
+    return (
+      <LandingPage onEnterGame={() => {
+        const hasCharacter = localStorage.getItem('ouroboros_has_character');
+        if (hasCharacter) {
+          handlePhaseChange('game');
+        } else {
+          handlePhaseChange('character_creation');
+        }
+      }} />
+    );
   }
+
+  if (phase === 'character_creation') {
+    return (
+      <CharacterCreation onComplete={() => {
+        localStorage.setItem('ouroboros_has_character', 'true');
+        handlePhaseChange('game');
+      }} />
+    );
+  }
+
   return <GameApp />;
 };
 

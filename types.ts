@@ -297,10 +297,25 @@ export function getUnlockedActions(skillName: string, level: number): SkillActio
   return actions.filter(a => level >= a.levelRequired);
 }
 
+export interface AppearanceConfig {
+  skinTone: string;
+  hairStyle: 'short' | 'long' | 'mohawk' | 'bald' | 'ponytail';
+  bodyScale: number;
+  baseModel: 'humanoid' | 'slim' | 'bulky';
+}
+
+export const DEFAULT_APPEARANCE: AppearanceConfig = {
+  skinTone: '#c68642',
+  hairStyle: 'short',
+  bodyScale: 1.0,
+  baseModel: 'humanoid',
+};
+
 export interface Agent {
   id: string;
   name: string;
   classType?: string;
+  appearance_json?: AppearanceConfig;
   faction: 'PLAYER' | 'ANOMALY' | 'CREATURE' | 'SYSTEM' | 'NPC';
   position: [number, number, number];
   rotationY: number;
