@@ -9,6 +9,8 @@ import { MarketOverlay } from './MarketOverlay';
 import { InspectorPanel } from './InspectorPanel';
 import { ChatLog } from './ChatLog';
 import { GuildPartyOverlay } from './GuildPartyOverlay';
+import { AgentManagerOverlay } from './AgentManagerOverlay';
+import { EnergyShopOverlay } from './EnergyShopOverlay';
 
 import { WindowHUD } from './WindowHUD';
 
@@ -27,6 +29,8 @@ const GameUI = () => {
       {windowStates.INSPECTOR.isOpen && !windowStates.INSPECTOR.isMinimized && <InspectorPanel />}
       {windowStates.GUILD_PARTY.isOpen && !windowStates.GUILD_PARTY.isMinimized && <GuildPartyOverlay />}
       {windowStates.CHAT.isOpen && !windowStates.CHAT.isMinimized && <ChatLog />}
+      {windowStates.AGENT_MANAGER.isOpen && !windowStates.AGENT_MANAGER.isMinimized && <AgentManagerOverlay />}
+      {windowStates.ENERGY_SHOP.isOpen && !windowStates.ENERGY_SHOP.isMinimized && <EnergyShopOverlay />}
       <WindowHUD />
     </>
   );

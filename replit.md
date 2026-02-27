@@ -28,6 +28,9 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 - `certs/UI/QuestBoardOverlay.tsx` — Quest tracking and acceptance
 - `certs/UI/GuildPartyOverlay.tsx` — Guild/party management
 - `certs/UI/AdminDashboard.tsx` — Admin-only: emergence settings, import agents, diagnostics
+- `certs/UI/AgentManagerOverlay.tsx` — User agent manager: 5-slot import system, JanitorAI/CharacterAI/JSON import
+- `certs/UI/EnergyShopOverlay.tsx` — Matrix Energy purchase shop with PayPal checkout
+- `certs/UI/PayPalModal.tsx` — PayPal checkout modal (sandbox, supports onSuccess callback)
 - `certs/UI/WindowHUD.tsx` — Minimized window restore bar
 
 ## Database Schema (13 tables)
@@ -108,6 +111,12 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
 - Agent sync maps frontend `id` → DB `uid`, merges DB data into existing agents preserving full state
 - Tick engine resumes from last committed tick_number on restart (no duplicate key errors)
 - WebSocket auto-reconnects on unexpected disconnection (3s delay), suppressed on intentional disconnect
+- Max 5 imported agents per user (ImportedAgentMeta tracked in store.importedAgents)
+- Agent import: JanitorAI/CharacterAI URLs + raw JSON supported, Gemini AI extracts personality→game agent
+- Procedural skin generation: FNV-1a hash of source URL → deterministic HSL→hex colors (primary/secondary/accent + pattern)
+- Building costs: HOUSE=50ME, BANK=150ME, FORGE=100ME, MARKET_STALL=75ME, DATA_HUB=200ME (Matrix Energy)
+- PayPal modal supports `onSuccess` callback for caller-controlled purchase flow
+- WindowTypes: MARKET, QUESTS, ADMIN, MAP, CHARACTER, AUCTION, INSPECTOR, CHAT, GUILD_PARTY, AGENT_MANAGER, ENERGY_SHOP
 
 ## Deployment
 

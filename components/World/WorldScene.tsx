@@ -10,6 +10,8 @@ import { useStore } from '../../store';
 import { Agent, AgentState, Chunk, Monster, POI } from '../../types';
 import { axiomFragmentShader, axiomVertexShader } from './AxiomShader';
 
+import { skinHashToColors as skinHashToColorsLocal } from '../../store';
+
 const isPosInSanctuary = (pos: [number, number, number], chunks: Chunk[]) => {
     const chunkX = Math.floor((pos[0] + 40) / 80);
     const chunkZ = Math.floor((pos[2] + 40) / 80);
@@ -299,6 +301,13 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
     const chunks = useStore(state => state.loadedChunks);
     const [isVisible, setIsVisible] = useState(false);
 
+    const skinColors = useMemo(() => {
+        if (agent.id.startsWith('imported_') && agent.dna?.hash) {
+            return skinHashToColorsLocal(agent.dna.hash);
+        }
+        return null;
+    }, [agent.id, agent.dna?.hash]);
+
     useFrame(() => {
         if (agent.faction === 'PLAYER') {
             setIsVisible(true);
@@ -322,15 +331,35 @@ const AgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({
 
     if (!isVisible) return null;
 
+    const isImported = agent.id.startsWith('imported_');
+    const bodyColor = skinColors ? skinColors.primary : (agent.faction === 'PLAYER' ? '#06b6d4' : '#ef4444');
+    const accentColor = skinColors ? skinColors.accent : bodyColor;
+
     return (
         <group position={[agent.position[0], agent.position[1], agent.position[2]]} rotation={[0, agent.rotationY, 0]} onClick={(e) => { e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}>
-            <mesh castShadow position={[0, 0.9, 0]}>
-                <boxGeometry args={[0.7, 1.8, 0.7]} />
-                <meshStandardMaterial color={agent.faction === 'PLAYER' ? '#06b6d4' : '#ef4444'} roughness={0.7} />
+            <mesh castShadow position={[0, 0.55, 0]}>
+                <boxGeometry args={[0.7, 1.1, 0.5]} />
+                <meshStandardMaterial color={bodyColor} roughness={0.6} />
             </mesh>
-            <Html position={[0, 2.5, 0]} center distanceFactor={20}>
+            <mesh castShadow position={[0, 1.35, 0]}>
+                <sphereGeometry args={[0.3, 8, 8]} />
+                <meshStandardMaterial color={bodyColor} roughness={0.5} />
+            </mesh>
+            {isImported && skinColors && (
+                <>
+                  <mesh position={[0, 0.55, 0.26]}>
+                    <boxGeometry args={[0.5, 0.6, 0.02]} />
+                    <meshStandardMaterial color={accentColor} roughness={0.4} emissive={accentColor} emissiveIntensity={0.15} />
+                  </mesh>
+                  <mesh position={[0, 0.9, 0]}>
+                    <boxGeometry args={[0.9, 0.08, 0.6]} />
+                    <meshStandardMaterial color={skinColors.secondary} roughness={0.5} />
+                  </mesh>
+                </>
+            )}
+            <Html position={[0, 2.2, 0]} center distanceFactor={20}>
                  <div className="flex flex-col items-center pointer-events-none">
-                    <div className="text-white text-[8px] bg-black/60 px-1.5 py-0.5 rounded uppercase font-black tracking-widest border border-white/10 shadow-lg">
+                    <div className={`text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest border shadow-lg ${isImported ? 'bg-purple-900/70 border-purple-500/30' : 'bg-black/60 border-white/10'}`}>
                         {String(agent.name)}
                     </div>
                     {agent.state === AgentState.COMBAT && (

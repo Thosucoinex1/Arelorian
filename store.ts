@@ -3,11 +3,44 @@ import { create } from 'zustand';
 import { 
   Agent, AgentState, ResourceNode, LogEntry, ChatMessage, Chunk, Item, 
   Monster, ChatChannel, POI, CraftingOrder, MarketState, Quest, LandParcel, StructureType,
-  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier, WindowType, WindowState, AuctionListing
+  TradeOffer, EmergenceSettings, Notary, AxiomEvent, Guild, Party, NotaryTier, WindowType, WindowState, AuctionListing,
+  ImportedAgentMeta, MAX_IMPORTED_AGENTS, STRUCTURE_COSTS, StoreProduct
 } from './types';
 import { getBiomeForChunk, generateProceduralPOIs, summarizeNeurologicChoice, calculateCombatHeuristics, getXPForNextLevel, MONSTER_TEMPLATES, KAPPA, generateLoot } from './utils';
 import { generateAutonomousDecision, importAgentFromSource } from './services/geminiService';
 import { WorldBuildingService } from './services/WorldBuildingService';
+
+function generateSkinHash(source: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < source.length; i++) {
+    h ^= source.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `0x${(h >>> 0).toString(16).padStart(8, '0')}${Date.now().toString(16)}`;
+}
+
+export function skinHashToColors(hash: string): { primary: string; secondary: string; accent: string; pattern: number } {
+  const hex = hash.replace('0x', '');
+  const v = (off: number) => parseInt(hex.slice(off, off + 2) || '80', 16);
+  const hue1 = (v(0) / 255) * 360;
+  const hue2 = (hue1 + 60 + (v(2) / 255) * 120) % 360;
+  const hue3 = (hue1 + 180 + (v(4) / 255) * 60) % 360;
+  const sat = 50 + (v(6) / 255) * 40;
+  const light = 35 + (v(1) / 255) * 25;
+  const hslToHex = (h: number, s: number, l: number) => {
+    const sn = Math.max(0, Math.min(100, s)) / 100;
+    const ln = Math.max(0, Math.min(100, l)) / 100;
+    const a = sn * Math.min(ln, 1 - ln);
+    const f = (n: number) => { const k = (n + h / 30) % 12; return ln - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); };
+    return `#${[f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('')}`;
+  };
+  return {
+    primary: hslToHex(hue1, sat, light),
+    secondary: hslToHex(hue2, sat - 10, light + 10),
+    accent: hslToHex(hue3, sat + 10, light + 20),
+    pattern: v(3) % 5
+  };
+}
 
 interface GameState {
   agents: Agent[];
@@ -102,7 +135,10 @@ interface GameState {
   reflectOnMemory: (agentId: string) => Promise<void>;
   reflectOnAxioms: (agentId: string) => Promise<void>;
   uploadGraphicPack: (name: string) => void;
+  importedAgents: ImportedAgentMeta[];
   importAgent: (source: string, type: 'URL' | 'JSON') => void;
+  removeImportedAgent: (agentId: string) => void;
+  purchaseEnergy: (product: StoreProduct) => void;
   setJoystick: (side: 'left' | 'right', axis: { x: number, y: number }) => void;
   setUserApiKey: (key: string | null) => void;
   consumeEnergy: (amount: number) => boolean;
@@ -215,6 +251,7 @@ export const useStore = create<GameState>((set, get) => ({
   selectedPoiId: null,
 
   auctionHouse: [],
+  importedAgents: [],
 
   windowStates: {
     MARKET: { isOpen: false, isMinimized: false },
@@ -226,6 +263,8 @@ export const useStore = create<GameState>((set, get) => ({
     INSPECTOR: { isOpen: true, isMinimized: false },
     CHAT: { isOpen: true, isMinimized: false },
     GUILD_PARTY: { isOpen: false, isMinimized: false },
+    AGENT_MANAGER: { isOpen: false, isMinimized: false },
+    ENERGY_SHOP: { isOpen: false, isMinimized: false },
   },
 
   toggleWindow: (type, force) => {
@@ -1166,17 +1205,40 @@ export const useStore = create<GameState>((set, get) => ({
   },
   purchaseProduct: (id) => {
     if (id === 'MATRIX_ENERGY_REFILL') get().refillEnergy(500);
+    if (id === 'ENERGY_100') get().refillEnergy(100);
+    if (id === 'ENERGY_500') get().refillEnergy(500);
+    if (id === 'ENERGY_2000') get().refillEnergy(2000);
+  },
+
+  purchaseEnergy: (product: StoreProduct) => {
+    get().purchaseProduct(product.id);
+    get().addLog(`Purchased ${product.name} (+${product.id.replace('ENERGY_', '')} ME).`, 'TRADE');
+  },
+
+  removeImportedAgent: (agentId: string) => {
+    set(s => ({
+      agents: s.agents.filter(a => a.id !== agentId),
+      importedAgents: s.importedAgents.filter(m => m.agentId !== agentId)
+    }));
+    get().addLog(`Imported agent removed from Matrix.`, 'SYSTEM');
   },
 
   buildStructureOnParcel: (parcelId: string, type: StructureType) => {
     const s = get();
     if (!s.user) {
-      console.warn('Cannot build structure: User not authenticated.');
+      get().addLog('Cannot build: User not authenticated.', 'ERROR');
+      return;
+    }
+    const cost = STRUCTURE_COSTS[type];
+    if (s.matrixEnergy < cost) {
+      get().addLog(`Insufficient Matrix Energy. ${type} costs ${cost} ME, you have ${s.matrixEnergy}.`, 'ERROR');
       return;
     }
     set(s => ({
+      matrixEnergy: s.matrixEnergy - cost,
       landParcels: s.landParcels.map(p => p.id === parcelId ? { ...p, structures: [...p.structures, { id: `struct_${Date.now()}`, type, ownerId: s.user?.id || 'unknown' }] } : p)
     }));
+    get().addLog(`Built ${type} for ${cost} Matrix Energy.`, 'SYSTEM');
   },
 
   stabilizeChunk: (chunkId) => {
@@ -1546,16 +1608,26 @@ export const useStore = create<GameState>((set, get) => ({
   },
   uploadGraphicPack: (name) => set(s => ({ graphicPacks: [...s.graphicPacks, name] })),
   importAgent: async (source, type) => {
+    const currentImported = get().importedAgents;
+    if (currentImported.length >= MAX_IMPORTED_AGENTS) {
+      get().addLog(`Cannot import: Maximum ${MAX_IMPORTED_AGENTS} imported agents reached. Remove one first.`, 'ERROR');
+      return;
+    }
     get().addLog(`Initiating entity manifestation from ${type}...`, 'SYSTEM', 'AXIOM');
     try {
       const partialAgent = await importAgentFromSource(source, type, get().userApiKey || undefined);
-      
+
+      const skinHash = generateSkinHash(source);
+      const agentId = `imported_${Date.now()}`;
+      const spawnAngle = Math.random() * Math.PI * 2;
+      const spawnRadius = 5 + Math.random() * 10;
+
       const newAgent: Agent = {
-        id: `imported_${Date.now()}`,
+        id: agentId,
         name: partialAgent.name || 'Unknown Entity',
         classType: partialAgent.classType || 'SCHOLAR',
         faction: (partialAgent.faction as any) || 'NPC',
-        position: [0, 0, 0],
+        position: [Math.cos(spawnAngle) * spawnRadius, 0, Math.sin(spawnAngle) * spawnRadius],
         rotationY: 0,
         level: 1,
         xp: 0,
@@ -1568,7 +1640,7 @@ export const useStore = create<GameState>((set, get) => ({
         integrity: 1.0,
         energy: 100,
         maxEnergy: 100,
-        dna: { hash: `0x${Math.random().toString(16).slice(2)}`, generation: 1, corruption: 0 },
+        dna: { hash: skinHash, generation: 1, corruption: 0 },
         memoryCache: [`MANIFESTED: Imported from ${source}`],
         consciousnessLevel: 0.1,
         awakeningProgress: 0,
@@ -1608,10 +1680,10 @@ export const useStore = create<GameState>((set, get) => ({
           crafting: { level: 1, xp: 0 }
         },
         stats: {
-          str: partialAgent.stats?.str || 10,
-          agi: partialAgent.stats?.agi || 10,
-          int: partialAgent.stats?.int || 10,
-          vit: partialAgent.stats?.vit || 10,
+          str: partialAgent.stats?.str ?? 10,
+          agi: partialAgent.stats?.agi ?? 10,
+          int: partialAgent.stats?.int ?? 10,
+          vit: partialAgent.stats?.vit ?? 10,
           hp: 100,
           maxHp: 100
         },
@@ -1620,8 +1692,19 @@ export const useStore = create<GameState>((set, get) => ({
         emergentBehaviorLog: []
       };
 
-      set(s => ({ agents: [...s.agents, newAgent] }));
-      get().addLog(`Entity ${newAgent.name} successfully manifested in the Matrix.`, 'SYSTEM', 'AXIOM');
+      const meta: ImportedAgentMeta = {
+        agentId,
+        sourceUrl: source,
+        sourceType: type,
+        importedAt: Date.now(),
+        skinHash
+      };
+
+      set(s => ({
+        agents: [...s.agents, newAgent],
+        importedAgents: [...s.importedAgents, meta]
+      }));
+      get().addLog(`Entity ${newAgent.name} successfully manifested in the Matrix with unique skin hash ${skinHash.slice(0, 10)}...`, 'SYSTEM', 'AXIOM');
     } catch (error) {
       console.error("Import failed", error);
       get().addLog(`Manifestation failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'SYSTEM', 'AXIOM');

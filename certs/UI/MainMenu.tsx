@@ -1,8 +1,9 @@
 
 import { useStore } from '../../store';
-import { User, Shield, Map, ShoppingCart, Github, Settings, Save } from 'lucide-react';
+import { User, Shield, Map, ShoppingCart, Github, Settings, Save, UserPlus, Zap } from 'lucide-react';
 
 export const MainMenu = () => {
+  const toggleWindow = useStore(state => state.toggleWindow);
   const toggleCharacterSheet = useStore(state => state.toggleCharacterSheet);
   const toggleAdmin = useStore(state => state.toggleAdmin);
   const toggleMap = useStore(state => state.toggleMap);
@@ -10,6 +11,7 @@ export const MainMenu = () => {
   const showAdmin = useStore(state => state.showAdmin);
   const toggleDeveloperTools = useStore(state => state.toggleDeveloperTools);
   const saveGame = useStore(state => state.saveGame);
+  const matrixEnergy = useStore(state => state.matrixEnergy);
 
   return (
     <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
@@ -19,13 +21,20 @@ export const MainMenu = () => {
       <button onClick={() => saveGame()} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-gold/30 shadow-lg text-white hover:bg-axiom-gold hover:text-black transition-colors" title="Save Game">
         <Save size={24} />
       </button>
-      <button onClick={() => toggleCharacterSheet(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors">
+      <button onClick={() => toggleCharacterSheet(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors" title="Character">
         <User size={24} />
       </button>
-      <button onClick={() => toggleMap(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors">
+      <button onClick={() => toggleWindow('AGENT_MANAGER', true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-cyan-500/30 shadow-lg text-white hover:bg-cyan-500 hover:text-black transition-colors" title="Agent Manager">
+        <UserPlus size={24} />
+      </button>
+      <button onClick={() => toggleWindow('ENERGY_SHOP', true)} className="relative p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-yellow-500/30 shadow-lg text-white hover:bg-yellow-500 hover:text-black transition-colors" title="Matrix Energy Shop">
+        <Zap size={24} />
+        <span className="absolute -top-1 -right-1 text-[8px] bg-yellow-500 text-black font-black rounded-full px-1.5 py-0.5 min-w-[20px] text-center">{matrixEnergy}</span>
+      </button>
+      <button onClick={() => toggleMap(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors" title="World Map">
         <Map size={24} />
       </button>
-      <button onClick={() => toggleMarket(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors">
+      <button onClick={() => toggleMarket(true)} className="p-4 bg-axiom-dark/80 backdrop-blur-md rounded-full border border-axiom-cyan/30 shadow-lg text-white hover:bg-axiom-cyan hover:text-black transition-colors" title="Market">
         <ShoppingCart size={24} />
       </button>
       {showAdmin && (

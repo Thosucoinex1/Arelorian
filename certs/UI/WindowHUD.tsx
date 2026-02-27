@@ -10,7 +10,9 @@ import {
   Gavel,
   MessageSquare,
   Search,
-  Users
+  Users,
+  UserPlus,
+  Zap
 } from 'lucide-react';
 
 const WINDOW_ICONS: Record<WindowType, any> = {
@@ -22,7 +24,9 @@ const WINDOW_ICONS: Record<WindowType, any> = {
   AUCTION: Gavel,
   CHAT: MessageSquare,
   INSPECTOR: Search,
-  GUILD_PARTY: Users
+  GUILD_PARTY: Users,
+  AGENT_MANAGER: UserPlus,
+  ENERGY_SHOP: Zap
 };
 
 export const WindowHUD = () => {

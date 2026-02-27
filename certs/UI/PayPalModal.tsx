@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useStore } from '../../store';
 import { StoreProduct } from '../../types';
 
-export const PayPalModal = ({ isOpen, onClose, product }: { isOpen: boolean; onClose: () => void; product: StoreProduct | null }) => {
+export const PayPalModal = ({ isOpen, onClose, product, onSuccess }: { isOpen: boolean; onClose: () => void; product: StoreProduct | null; onSuccess?: (product: StoreProduct) => void }) => {
     const [loading, setLoading] = useState(false);
     const purchaseProduct = useStore(state => state.purchaseProduct);
 
@@ -14,7 +14,11 @@ export const PayPalModal = ({ isOpen, onClose, product }: { isOpen: boolean; onC
         setTimeout(() => {
             setLoading(false);
             if (product) {
-                purchaseProduct(product.id);
+                if (onSuccess) {
+                    onSuccess(product);
+                } else {
+                    purchaseProduct(product.id);
+                }
             }
             onClose();
         }, 1500);

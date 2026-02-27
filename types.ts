@@ -309,11 +309,35 @@ export interface LandParcel {
 
 export type StructureType = 'HOUSE' | 'BANK' | 'FORGE' | 'MARKET_STALL' | 'DATA_HUB';
 
+export const STRUCTURE_COSTS: Record<StructureType, number> = {
+  HOUSE: 50,
+  BANK: 150,
+  FORGE: 100,
+  MARKET_STALL: 75,
+  DATA_HUB: 200,
+};
+
 export interface Structure {
   id: string;
   type: StructureType;
   ownerId?: string;
 }
+
+export const MAX_IMPORTED_AGENTS = 5;
+
+export interface ImportedAgentMeta {
+  agentId: string;
+  sourceUrl: string;
+  sourceType: 'URL' | 'JSON';
+  importedAt: number;
+  skinHash: string;
+}
+
+export const MATRIX_ENERGY_PRODUCTS: StoreProduct[] = [
+  { id: 'ENERGY_100', name: '100 Matrix Energy', description: 'Small energy infusion', priceEUR: 0.99 },
+  { id: 'ENERGY_500', name: '500 Matrix Energy', description: 'Standard energy pack', priceEUR: 3.99 },
+  { id: 'ENERGY_2000', name: '2000 Matrix Energy', description: 'Mega energy surge', priceEUR: 9.99 },
+];
 
 export const AXIOMS = [
   "Logic must persist.",
@@ -356,7 +380,7 @@ export interface StoreProduct {
     priceEUR: number;
 }
 
-export type WindowType = 'MARKET' | 'QUESTS' | 'ADMIN' | 'MAP' | 'CHARACTER' | 'AUCTION' | 'INSPECTOR' | 'CHAT' | 'GUILD_PARTY';
+export type WindowType = 'MARKET' | 'QUESTS' | 'ADMIN' | 'MAP' | 'CHARACTER' | 'AUCTION' | 'INSPECTOR' | 'CHAT' | 'GUILD_PARTY' | 'AGENT_MANAGER' | 'ENERGY_SHOP';
 
 export interface WindowState {
   isOpen: boolean;
