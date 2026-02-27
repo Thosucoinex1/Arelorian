@@ -22,26 +22,137 @@ const isPosInSanctuary = (pos: [number, number, number], chunks: Chunk[]) => {
     return chunk?.biome === 'CITY' || chunk?.cellType === 'SANCTUARY';
 };
 
-const DynamicSky = () => {
+const DayNightSky = () => {
     const serverStats = useStore(state => state.serverStats);
-    const threat = serverStats.threatLevel || 0.05;
     const uptime = serverStats.uptime || 0;
-    const dayCycle = (uptime % 300) / 300;
-    const sunPos = new THREE.Vector3().setFromSphericalCoords(
-        1,
-        Math.PI * (0.1 + dayCycle * 0.8),
-        Math.PI * 0.5
-    );
+
+    const dayLength = 600;
+    const cycle = (uptime % dayLength) / dayLength;
+
+    const sunAngle = cycle * Math.PI * 2 - Math.PI * 0.5;
+    const sunHeight = Math.sin(sunAngle);
+    const sunX = Math.cos(sunAngle) * 0.8;
+    const sunY = Math.max(sunHeight, -0.3);
+    const sunZ = 0.3;
+
+    const isDawn = sunHeight > -0.1 && sunHeight < 0.15;
+    const isNight = sunHeight <= -0.1;
+
+    const dayFactor = THREE.MathUtils.clamp((sunHeight + 0.1) / 0.3, 0, 1);
+
+    const dayAmbient = 0.5;
+    const nightAmbient = 0.08;
+    const ambientIntensity = THREE.MathUtils.lerp(nightAmbient, dayAmbient, dayFactor);
+
+    const daySunIntensity = 2.0;
+    const nightSunIntensity = 0.05;
+    const sunIntensity = THREE.MathUtils.lerp(nightSunIntensity, daySunIntensity, dayFactor);
+
+    const dayFogColor = new THREE.Color('#8ba4c4');
+    const dawnFogColor = new THREE.Color('#c4856b');
+    const nightFogColor = new THREE.Color('#0a0e1a');
+
+    let fogColor: THREE.Color;
+    if (isDawn) {
+        const dawnT = THREE.MathUtils.clamp((sunHeight + 0.1) / 0.25, 0, 1);
+        fogColor = nightFogColor.clone().lerp(dawnFogColor, dawnT);
+    } else if (isNight) {
+        fogColor = nightFogColor.clone();
+    } else {
+        fogColor = dawnFogColor.clone().lerp(dayFogColor, THREE.MathUtils.clamp((sunHeight - 0.15) / 0.3, 0, 1));
+    }
+
+    const daySunColor = new THREE.Color('#fff5e6');
+    const dawnSunColor = new THREE.Color('#ff8844');
+    const nightSunColor = new THREE.Color('#223366');
+    let sunColor: THREE.Color;
+    if (isDawn) {
+        sunColor = nightSunColor.clone().lerp(dawnSunColor, dayFactor);
+    } else if (isNight) {
+        sunColor = nightSunColor.clone();
+    } else {
+        sunColor = dawnSunColor.clone().lerp(daySunColor, THREE.MathUtils.clamp((sunHeight - 0.15) / 0.3, 0, 1));
+    }
+
+    const dayHemiSky = new THREE.Color('#87CEEB');
+    const nightHemiSky = new THREE.Color('#0a0e2a');
+    const hemiSky = nightHemiSky.clone().lerp(dayHemiSky, dayFactor);
+
+    const dayHemiGround = new THREE.Color('#4a6741');
+    const nightHemiGround = new THREE.Color('#0a1008');
+    const hemiGround = nightHemiGround.clone().lerp(dayHemiGround, dayFactor);
+
+    const hemiIntensity = THREE.MathUtils.lerp(0.1, 0.6, dayFactor);
 
     return (
-        <Sky
-            distance={450000}
-            sunPosition={sunPos}
-            turbidity={8 + threat * 20}
-            rayleigh={3 + threat * 10}
-            mieCoefficient={0.005 + threat * 0.05}
-            mieDirectionalG={0.8}
-        />
+        <>
+            <Sky
+                distance={450000}
+                sunPosition={[sunX * 100, sunY * 100, sunZ * 100]}
+                turbidity={isNight ? 20 : isDawn ? 6 : 2}
+                rayleigh={isNight ? 0.1 : isDawn ? 1.5 : 1}
+                mieCoefficient={isDawn ? 0.02 : 0.005}
+                mieDirectionalG={0.8}
+            />
+            <ambientLight intensity={ambientIntensity} color={fogColor} />
+            <hemisphereLight args={[hemiSky, hemiGround, hemiIntensity]} />
+            <directionalLight
+                position={[sunX * 100, Math.max(sunY * 150, 5), sunZ * 100]}
+                intensity={sunIntensity}
+                castShadow
+                color={sunColor}
+                shadow-mapSize-width={2048}
+                shadow-mapSize-height={2048}
+                shadow-camera-near={0.5}
+                shadow-camera-far={500}
+                shadow-camera-left={-100}
+                shadow-camera-right={100}
+                shadow-camera-top={100}
+                shadow-camera-bottom={-100}
+                shadow-bias={-0.001}
+                shadow-normalBias={0.02}
+            />
+            <fog attach="fog" args={[fogColor, 120, 500]} />
+
+            {isNight && (
+                <>
+                    <pointLight position={[0, 50, 0]} intensity={0.15} color="#334488" distance={300} />
+                    <Stars />
+                </>
+            )}
+        </>
+    );
+};
+
+const Stars = () => {
+    const starsRef = useRef<THREE.Points>(null);
+    const { positions, count } = useMemo(() => {
+        const count = 500;
+        const positions = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(Math.random() * 0.8 + 0.2);
+            const r = 400;
+            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+            positions[i * 3 + 1] = r * Math.cos(phi);
+            positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+        }
+        return { positions, count };
+    }, []);
+
+    useFrame((state) => {
+        if (starsRef.current) {
+            starsRef.current.rotation.y = state.clock.getElapsedTime() * 0.005;
+        }
+    });
+
+    return (
+        <points ref={starsRef}>
+            <bufferGeometry>
+                <bufferAttribute attach="attributes-position" args={[positions, 3]} count={count} />
+            </bufferGeometry>
+            <pointsMaterial color="#ffffff" size={1.5} transparent opacity={0.8} sizeAttenuation={false} />
+        </points>
     );
 };
 
@@ -561,10 +672,10 @@ const AxiomaticDataField: React.FC<{ chunk: Chunk }> = ({ chunk }) => {
 const HumanoidAgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void }> = ({ agent, onSelect }) => {
     const agents = useStore(state => state.agents);
     const chunks = useStore(state => state.loadedChunks);
-    const [isVisible, setIsVisible] = useState(false);
+    const visibleRef = useRef(true);
+    const [renderVisible, setRenderVisible] = useState(true);
     const groupRef = useRef<THREE.Group>(null);
     const modelRef = useRef<{ group: THREE.Group; controller: AnimationController | null; lastState: AgentState | null }>({ group: null as any, controller: null, lastState: null });
-    const [modelReady, setModelReady] = useState(false);
 
     const skinColors = useMemo(() => {
         if (agent.id.startsWith('imported_') && agent.dna?.hash) {
@@ -603,8 +714,6 @@ const HumanoidAgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void
                 } catch (e) {}
             }
 
-            setModelReady(true);
-
             return () => {
                 controller.dispose();
                 if (groupRef.current && model.group.parent === groupRef.current) {
@@ -624,16 +733,24 @@ const HumanoidAgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void
     }, [agent.id, appearance.skinTone, appearance.hairStyle, appearance.bodyScale]);
 
     useFrame((_state, delta) => {
-        if (agent.faction === 'PLAYER') { setIsVisible(true); }
-        else if (isPosInSanctuary(agent.position, chunks)) { setIsVisible(true); }
-        else {
-            let visible = false;
+        let shouldBeVisible = true;
+
+        if (agent.faction === 'PLAYER') {
+            shouldBeVisible = true;
+        } else if (isPosInSanctuary(agent.position, chunks)) {
+            shouldBeVisible = true;
+        } else {
+            shouldBeVisible = false;
             for (const a of agents) {
                 if (a.id === agent.id) continue;
                 const dist = Math.hypot(a.position[0] - agent.position[0], a.position[2] - agent.position[2]);
-                if (dist < a.visionRange) { visible = true; break; }
+                if (dist < a.visionRange) { shouldBeVisible = true; break; }
             }
-            if (visible !== isVisible) setIsVisible(visible);
+        }
+
+        if (shouldBeVisible !== visibleRef.current) {
+            visibleRef.current = shouldBeVisible;
+            setRenderVisible(shouldBeVisible);
         }
 
         if (modelRef.current.controller) {
@@ -646,28 +763,47 @@ const HumanoidAgentMesh: React.FC<{ agent: Agent; onSelect: (id: string) => void
         }
     });
 
-    if (!isVisible) return null;
-
     const isImported = agent.id.startsWith('imported_');
+
+    const bodyColor = appearance.skinTone || '#c9a26b';
+    const isPlayer = agent.faction === 'PLAYER';
 
     return (
         <group
             ref={groupRef}
             position={[agent.position[0], agent.position[1] + 0.8, agent.position[2]]}
             rotation={[0, agent.rotationY, 0]}
-            onClick={(e) => { e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}
+            visible={renderVisible}
+            onClick={(e) => { if (!renderVisible) return; e.stopPropagation(); onSelect(agent.id); soundManager.playUI('CLICK'); }}
             castShadow
         >
-            <Html position={[0, 2.4, 0]} center distanceFactor={20}>
-                <div className="flex flex-col items-center pointer-events-none">
-                    <div className={`text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest border shadow-lg ${isImported ? 'bg-purple-900/70 border-purple-500/30' : 'bg-black/60 border-white/10'}`}>
-                        {String(agent.name)}
+            <mesh position={[0, 0.9, 0]} castShadow>
+                <capsuleGeometry args={[0.25, 0.8, 4, 8]} />
+                <meshStandardMaterial color={bodyColor} roughness={0.7} metalness={0.05} />
+            </mesh>
+            <mesh position={[0, 1.65, 0]} castShadow>
+                <sphereGeometry args={[0.22, 8, 8]} />
+                <meshStandardMaterial color={bodyColor} roughness={0.7} metalness={0.05} />
+            </mesh>
+            {isPlayer && (
+                <pointLight position={[0, 2, 0]} intensity={0.5} distance={8} color="#c9a227" />
+            )}
+            <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.5, 16]} />
+                <meshBasicMaterial color="#000000" transparent opacity={0.3} />
+            </mesh>
+            {renderVisible && (
+                <Html position={[0, 2.4, 0]} center distanceFactor={20}>
+                    <div className="flex flex-col items-center pointer-events-none">
+                        <div className={`text-white text-[8px] px-1.5 py-0.5 rounded uppercase font-black tracking-widest border shadow-lg ${isImported ? 'bg-purple-900/70 border-purple-500/30' : 'bg-black/60 border-white/10'}`}>
+                            {String(agent.name)}
+                        </div>
+                        {agent.state === AgentState.COMBAT && (
+                            <div className="text-[6px] text-red-500 font-black animate-pulse mt-0.5 uppercase tracking-tighter bg-black/40 px-1 rounded">COMBAT</div>
+                        )}
                     </div>
-                    {agent.state === AgentState.COMBAT && (
-                        <div className="text-[6px] text-red-500 font-black animate-pulse mt-0.5 uppercase tracking-tighter bg-black/40 px-1 rounded">COMBAT</div>
-                    )}
-                </div>
-            </Html>
+                </Html>
+            )}
         </group>
     );
 };
@@ -724,40 +860,7 @@ const ThirdPersonCamera = () => {
     );
 };
 
-const SceneLighting = () => {
-    const directionalRef = useRef<THREE.DirectionalLight>(null);
-
-    useEffect(() => {
-        if (directionalRef.current) {
-            const light = directionalRef.current;
-            light.shadow.mapSize.width = 2048;
-            light.shadow.mapSize.height = 2048;
-            light.shadow.camera.near = 0.5;
-            light.shadow.camera.far = 500;
-            light.shadow.camera.left = -100;
-            light.shadow.camera.right = 100;
-            light.shadow.camera.top = 100;
-            light.shadow.camera.bottom = -100;
-            light.shadow.bias = -0.001;
-            light.shadow.normalBias = 0.02;
-        }
-    }, []);
-
-    return (
-        <>
-            <ambientLight intensity={0.5} color="#c8d8f0" />
-            <hemisphereLight args={['#87CEEB', '#4a6741', 0.6]} />
-            <directionalLight
-                ref={directionalRef}
-                position={[100, 150, 100]}
-                intensity={2.2}
-                castShadow
-                color="#fff5e6"
-            />
-            <fog attach="fog" args={['#8ba4c4', 150, 600]} />
-        </>
-    );
-};
+const SceneLighting = () => null;
 
 const WorldScene = () => {
     const agents = useStore(state => state.agents);
@@ -809,7 +912,7 @@ const WorldScene = () => {
                 <color attach="background" args={['#6b8cb5']} />
                 <ThirdPersonCamera />
                 <SceneLighting />
-                <DynamicSky />
+                <DayNightSky />
                 <group>
                     {chunks.map(c => (
                         <React.Fragment key={c.id}>

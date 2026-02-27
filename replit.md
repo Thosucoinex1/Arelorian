@@ -53,6 +53,22 @@ A real-time, AI-driven MMO world simulation built with React, Three.js, Express,
   - Neural fog-of-war with sanctuary override (CITY always fully visible)
   - Minimum visibility floor (0.15) so terrain is never pitch black
 
+### Day/Night Cycle
+- `DayNightSky` component in WorldScene.tsx manages full day/night cycle
+- 600-second cycle based on server uptime: dawn (orange), day (blue), dusk (orange), night (dark blue)
+- Sun position calculated from spherical coordinates, drives directional light
+- Fog color transitions: day (#8ba4c4) → dawn (#c4856b) → night (#0a0e1a)
+- Hemisphere light sky/ground colors transition with dayFactor
+- Stars component renders 500 points during nighttime
+- All lighting (ambient, hemisphere, directional, fog) managed in DayNightSky, SceneLighting is a no-op
+
+### Character Visibility Fix
+- HumanoidAgentMesh always renders its group (never returns null)
+- Uses `visible` prop on the group instead of conditional rendering
+- This fixed the chicken-and-egg bug: useFrame only runs when mounted in Three.js tree
+- Fallback capsule + sphere body ensures characters are always visible even if SkinnedMesh fails
+- Player characters get a point light for extra visibility
+
 ### Monster Visuals
 - 4 distinct procedural monster body types:
   - Slime: Translucent squashed sphere with eyes, bouncing animation
