@@ -2,9 +2,11 @@ import { useStore } from '../store';
 
 class WebSocketService {
   private ws: WebSocket | null = null;
+  private intentionalClose = false;
 
   connect() {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+    this.intentionalClose = false;
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
@@ -39,7 +41,10 @@ class WebSocketService {
     this.ws.onclose = () => {
       console.log('Disconnected from WebSocket server');
       useStore.getState().addLog('Real-time connection lost.', 'SYSTEM');
-      // Optional: implement reconnection logic here
+      this.ws = null;
+      if (!this.intentionalClose) {
+        setTimeout(() => this.connect(), 3000);
+      }
     };
 
     this.ws.onerror = (error) => {
@@ -58,6 +63,7 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.intentionalClose = true;
     if (this.ws) {
       this.ws.close();
     }

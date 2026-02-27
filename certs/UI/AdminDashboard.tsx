@@ -54,7 +54,7 @@ export const AdminDashboard = () => {
 
     const handleFetchData = async () => {
         try {
-            const res = await fetch('/api/data');
+            const res = await fetch('/api/axiom-compliance');
             if (!res.ok) throw new Error('Network response was not ok');
             await res.json();
             setFetchDataMessage({ type: 'success', text: 'Data fetched successfully!' });

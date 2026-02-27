@@ -103,11 +103,19 @@ const App = () => {
     window.addEventListener('orientationchange', handleResize);
 
     const checkApiKey = async () => {
-      const keySelected = await window.aistudio.hasSelectedApiKey();
-      setHasApiKey(keySelected);
-      if (keySelected) {
-        // Assuming process.env.GEMINI_API_KEY is updated after selection
-        setUserApiKey(process.env.GEMINI_API_KEY || null);
+      if (process.env.GEMINI_API_KEY) {
+        setHasApiKey(true);
+        setUserApiKey(process.env.GEMINI_API_KEY);
+        return;
+      }
+      try {
+        const keySelected = await window.aistudio?.hasSelectedApiKey();
+        setHasApiKey(!!keySelected);
+        if (keySelected) {
+          setUserApiKey(process.env.GEMINI_API_KEY || null);
+        }
+      } catch {
+        setHasApiKey(false);
       }
     };
     checkApiKey();

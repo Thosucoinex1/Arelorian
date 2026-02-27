@@ -166,7 +166,7 @@ export const useStore = create<GameState>((set, get) => ({
   selectedAgentId: null,
   cameraTarget: null,
   serverStats: { uptime: 0, tickRate: 60, memoryUsage: 128, threatLevel: 0.05 },
-  user: { id: 'u1', name: 'Admin', email: 'projectouroboroscollective@gmail.com' },
+  user: null,
   device: {
     isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
     isTablet: /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/i.test(navigator.userAgent),
@@ -1231,11 +1231,27 @@ export const useStore = create<GameState>((set, get) => ({
 
   syncAgents: async () => {
     const { agents } = get();
+    const mapped = agents.map(a => ({
+      uid: a.id,
+      name: a.name,
+      npc_class: a.classType,
+      level: a.level,
+      hp: a.stats.hp,
+      max_hp: a.stats.maxHp,
+      exp: a.xp,
+      pos_x: a.position[0],
+      pos_y: a.position[1],
+      pos_z: a.position[2],
+      inventory: a.inventory.filter(Boolean),
+      dna_history: a.dna ? [a.dna] : [],
+      memory_cache: a.memoryCache || [],
+      awakened: a.isAwakened || false
+    }));
     try {
       const res = await fetch('/api/sync/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agents })
+        body: JSON.stringify({ agents: mapped })
       });
       if (!res.ok) throw new Error(`Sync failed: ${res.statusText}`);
     } catch (e) {
@@ -1249,7 +1265,22 @@ export const useStore = create<GameState>((set, get) => ({
       if (!res.ok) return false;
       const data = await res.json();
       if (data.success && data.agents && data.agents.length > 0) {
-        set({ agents: data.agents });
+        const currentAgents = get().agents;
+        const mergedAgents = currentAgents.map(agent => {
+          const dbAgent = data.agents.find((db: any) => db.name === agent.name);
+          if (dbAgent) {
+            return {
+              ...agent,
+              level: dbAgent.level ?? agent.level,
+              xp: parseInt(dbAgent.exp) ?? agent.xp,
+              stats: { ...agent.stats, hp: dbAgent.hp ?? agent.stats.hp, maxHp: dbAgent.max_hp ?? agent.stats.maxHp },
+              position: [dbAgent.pos_x ?? agent.position[0], dbAgent.pos_y ?? agent.position[1], dbAgent.pos_z ?? agent.position[2]] as [number, number, number],
+              isAwakened: dbAgent.awakened ?? agent.isAwakened
+            };
+          }
+          return agent;
+        });
+        set({ agents: mergedAgents });
         return true;
       }
     } catch (e) {
@@ -1456,21 +1487,31 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   equipItem: (agentId, item, index) => {
+    const slotMap: Record<string, string> = {
+      'WEAPON': 'mainHand', 'OFFHAND': 'offHand', 'HELM': 'head', 'CHEST': 'chest', 'LEGS': 'legs'
+    };
+    const slot = slotMap[item.type];
+    if (!slot) return;
     set(s => ({
       agents: s.agents.map(a => a.id === agentId ? {
         ...a,
-        equipment: { ...a.equipment, [item.type.toLowerCase()]: item },
+        equipment: { ...a.equipment, [slot]: item },
         inventory: a.inventory.map((inv, i) => i === index ? null : inv)
       } : a)
     }));
   },
   unequipItem: (agentId, slot) => {
     set(s => ({
-      agents: s.agents.map(a => a.id === agentId ? {
-        ...a,
-        inventory: [...a.inventory.filter(i => i), a.equipment[slot]],
-        equipment: { ...a.equipment, [slot]: null }
-      } : a)
+      agents: s.agents.map(a => {
+        if (a.id !== agentId || !a.equipment[slot]) return a;
+        const emptyIdx = a.inventory.findIndex(i => i === null);
+        if (emptyIdx === -1) return a;
+        return {
+          ...a,
+          inventory: a.inventory.map((inv, i) => i === emptyIdx ? a.equipment[slot] : inv),
+          equipment: { ...a.equipment, [slot]: null }
+        };
+      })
     }));
   },
   moveInventoryItem: (agentId, from, to) => {
